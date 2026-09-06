@@ -195,6 +195,16 @@
       transition: transform 0.15s, filter 0.15s;
     }
 
+    /* 標語變長之後，18px 字加 4px 字距在手機上會撐到 436px、超出畫面寬度，
+       膠囊兩端會被切掉。窄螢幕改小一號並收緊字距。 */
+    @media (max-width: 600px) {
+      .nav-btn {
+        padding: 12px 22px;
+        font-size: 15px;
+        letter-spacing: 1px;
+      }
+    }
+
     @keyframes glow {
       0%, 100% { box-shadow: 0 0 6px rgba(212,175,55,.5); }
       50%      { box-shadow: 0 0 22px rgba(212,175,55,.95),
@@ -1749,7 +1759,7 @@
     <!-- Navigation buttons -->
     <div class="nav">
       <div class="btn-row">
-        <button class="nav-btn" onclick="openAttendanceView()">江湖不問來處，落雨只待歸人</button>
+        <button class="nav-btn" onclick="openAttendanceView()">梨花雨落影友情，相伴共行共此生。</button>
       </div>
       <div class="btn-row">
         <button class="nav-btn" onclick="openVideoView()">影片上傳</button>
