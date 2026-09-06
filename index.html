@@ -170,12 +170,35 @@
       display: flex;
       flex-direction: row;
       flex-wrap: wrap;
-      justify-content: center;
+      justify-content: flex-end;
       align-items: baseline;
-      column-gap: 28px;
+      column-gap: 12px;
       row-gap: 6px;
+      /* 不貼齊右邊緣，留一段距離看起來才不會像被擠出去 */
+      padding-right: clamp(14px, 6vw, 76px);
     }
     .nav .btn-row { width: auto; }
+
+    /* 首頁的導覽列脫離 .container 的 680px 限制，跨滿整個畫面寬度。
+       不這樣做的話三個功能加上分隔點會超過 680px 而換行，而且「靠右」
+       也只是靠在那個 680px 方塊的右邊、看起來還是偏中間。
+       扣掉 body 左右各 16px 的 padding，避免多出橫向捲軸。 */
+    #main-view .nav {
+      width: calc(100vw - 32px);
+      max-width: calc(100vw - 32px);
+      margin-left: calc(50% - 50vw + 16px);
+    }
+
+    /* 功能之間的分隔點。.btn-row 本身是 flex 容器，
+       所以這個 ::before 會變成它的第一個項目，剛好落在按鈕左邊。 */
+    .nav .btn-row + .btn-row::before {
+      content: '‧';
+      align-self: center;
+      margin-right: 12px;
+      color: rgba(255,255,255,.85);
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.8);
+      font-size: 20px;
+    }
 
     .btn-row {
       display: flex;
@@ -193,7 +216,7 @@
       font-family: inherit; /* 跟全站內文一樣用 Noto Sans TC（body 的 font-family） */
       font-weight: 700;
       letter-spacing: 3px;
-      color: #f0d97a;
+      color: #ffffff;
       background: none;
       border: none;
       cursor: pointer;
@@ -213,8 +236,10 @@
       }
       /* 標語比另外兩個長很多，窄螢幕讓它自己佔一行，
          「影片上傳」「戰績」才會乾淨地並排在第二行 */
-      .nav .btn-row:first-child { width: 100%; }
-      .nav { column-gap: 22px; }
+      .nav .btn-row:first-child { width: 100%; justify-content: flex-end; }
+      .nav { column-gap: 8px; padding-right: 12px; }
+      /* 換行之後第二行的開頭會是分隔點，看起來像多打了一個字，拿掉 */
+      .nav .btn-row:nth-child(2)::before { content: none; margin-right: 0; }
     }
 
     @keyframes glow {
@@ -224,11 +249,11 @@
     }
 
     .nav-btn:hover {
-      color: #fff3c4;
-      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 18px rgba(240,217,122,.75);
+      color: #ffffff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 18px rgba(255,255,255,.8);
     }
 
-    .nav-btn:active { color: #d4af37; }
+    .nav-btn:active { color: #d9d9d9; }
 
     /* ── View switcher (inline sections, no popup) ── */
     .view {
