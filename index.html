@@ -1849,6 +1849,17 @@
     }
     .bt-jrow.bt-head { border-bottom: 1px solid #6B1023; font-weight: 700; color: #d4af37; }
 
+    .bt-jrow-avg { cursor: pointer; }
+    .bt-jrow-avg:hover { background: rgba(212,175,55,.06); }
+    .bt-jrow-avg.on { background: rgba(212,175,55,.09); }
+    /* 展開的成員列往內縮一格，跟平均那排區分開 */
+    .bt-jrow-member {
+      background: #070707;
+      border-left: 2px solid #6B1023;
+      font-size: 12px;
+    }
+    .bt-jm-name { padding-left: 10px; display: flex; align-items: center; gap: 4px; }
+
     /* 自選對比 */
     .bt-pick { display: flex; flex-direction: column; gap: 4px; color: #FFFFEF; font-size: 12px; }
     .bt-pick select { min-width: 200px; max-width: 260px; }
@@ -6003,7 +6014,11 @@
     // 用事件委派開個人視窗：名字放在 data 屬性裡，
     // 不必把它塞進 onclick 字串，也就沒有跳脫問題。
     document.addEventListener('click', function (e) {
-      var row = e.target.closest ? e.target.closest('.bt-clickable') : null;
+      if (!e.target.closest) return;
+      // 職業列要先判斷：它跟成員列都在同一張表裡
+      var jr = e.target.closest('[data-jobrow]');
+      if (jr) { setJobAvgOpen(jr.dataset.jobrow); return; }
+      var row = e.target.closest('.bt-clickable');
       if (row && row.dataset.name) openPlayerModal(row.dataset.side, row.dataset.name);
     });
 
@@ -6057,10 +6072,18 @@
 
     /* ── 分頁：各職業平均 ── */
 
+    var jobAvgOpen = '';
+    function setJobAvgOpen(j) {
+      jobAvgOpen = (jobAvgOpen === j ? '' : j);   // 再點一次收合
+      renderBattleDetail();
+    }
+
     function renderJobAvg(b) {
       var list = battleFiltered(battleSide);
       var jobs = JOB_ORDER.filter(function (j) { return list.some(function (p) { return p.job === j; }); });
       if (!jobs.length) return '<div class="access-admin-empty">這一邊沒有資料</div>';
+
+      // 熱力底色的滿格基準取所有職業的平均值最大者，跨列才可比
       var max = {};
       BATTLE_KEYS.forEach(function (f) {
         max[f.k] = Math.max.apply(null, jobs.map(function (j) {
@@ -6068,20 +6091,45 @@
           return battleSum(ps, f.k) / ps.length;
         })) || 1;
       });
-      return '<div class="bt-sec-title">✦ 各職業平均（每人）</div>' +
-        '<div class="bt-table"><div class="bt-jrow bt-head"><span>職業</span><span>人數</span>' +
-        BATTLE_KEYS.map(function (f) { return '<span>' + f.zh + '</span>'; }).join('') + '</div>' +
-        jobs.map(function (j) {
-          var ps = list.filter(function (p) { return p.job === j; });
-          return '<div class="bt-jrow"><span>' + jobChip(j) + '</span><span>' + ps.length + '</span>' +
-            BATTLE_KEYS.map(function (f) {
-              var v = battleSum(ps, f.k) / ps.length;
-              return '<span class="bt-cell" style="background:rgba(212,175,55,' +
-                (v / max[f.k] * 0.6).toFixed(3) + ')">' + battleFmt(v, f.k) + '</span>';
-            }).join('') + '</div>';
-        }).join('') + '</div>';
-    }
 
+      var head = '<div class="bt-jrow bt-head"><span>職業</span><span>人數</span>' +
+        BATTLE_KEYS.map(function (f) { return '<span>' + f.zh + '</span>'; }).join('') + '</div>';
+
+      var body = jobs.map(function (j) {
+        var ps = list.filter(function (p) { return p.job === j; });
+        var open = jobAvgOpen === j;
+
+        // 平均那一排
+        var avgRow = '<div class="bt-jrow bt-jrow-avg' + (open ? ' on' : '') + '" data-jobrow="' +
+          escapeBattleHtml(j) + '" title="點開看這個職業每個人的數據">' +
+          '<span>' + (open ? '▾ ' : '▸ ') + jobChip(j) + '</span><span>' + ps.length + ' 人</span>' +
+          BATTLE_KEYS.map(function (f) {
+            var v = battleSum(ps, f.k) / ps.length;
+            return '<span class="bt-cell" style="background:rgba(212,175,55,' +
+              (v / max[f.k] * 0.6).toFixed(3) + ')">' + battleFmt(v, f.k) + '</span>';
+          }).join('') + '</div>';
+
+        if (!open) return avgRow;
+
+        // 展開後：該職業每個人，玩傷高的排前面
+        var members = ps.slice().sort(function (x, y) {
+          return (Number(y.pvp) || 0) - (Number(x.pvp) || 0);
+        }).map(function (x, i) {
+          return '<div class="bt-jrow bt-jrow-member bt-clickable" data-side="' + x.side +
+            '" data-name="' + escapeBattleHtml(x.name) + '">' +
+            '<span class="bt-jm-name">' + rankBadge(i) + ' ' + escapeBattleHtml(x.name) +
+              (x.side === 'my' ? rosterTag(x.rosterCategory) : '') + '</span><span></span>' +
+            BATTLE_KEYS.map(function (f) { return '<span>' + battleFmt(x[f.k], f.k) + '</span>'; }).join('') +
+          '</div>';
+        }).join('');
+
+        return avgRow + members;
+      }).join('');
+
+      return '<div class="bt-sec-title">✦ 各職業平均（每人）</div>' +
+        '<p class="password-hint">點任一個職業可以展開，看那個職業每個人的數據；再點一次收合。</p>' +
+        '<div class="bt-table">' + head + body + '</div>';
+    }
     /* ── 分頁：自選對比 ──
        挑兩個人（可跨陣營）並排看，含衍生指標。 */
 
