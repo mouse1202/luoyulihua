@@ -1762,6 +1762,40 @@
     .bt-radar-grid-line { fill: none; stroke: #3a3a3a; stroke-width: .5; }
     .bt-radar-axis { fill: #9a9a9a; font-size: 5px; text-anchor: middle; }
 
+    .bt-radar-card { cursor: pointer; transition: border-color .15s, transform .15s; }
+    .bt-radar-card:hover { border-color: #d4af37; transform: translateY(-2px); }
+    .bt-radar-axis-lg { font-size: 4.6px; }
+
+    /* 放大檢視：疊在原本畫面上，底下用 backdrop-filter 霧化 */
+    .bt-radar-modal {
+      background: rgba(0, 0, 0, .45);
+      backdrop-filter: blur(7px);
+      -webkit-backdrop-filter: blur(7px);
+    }
+    .bt-radar-box {
+      max-width: 460px;
+      border-color: #6B1023;
+      background: rgba(8, 4, 6, .96);
+    }
+    .bt-rm-head {
+      display: flex; align-items: center; gap: 10px;
+      color: #FFFFEF; margin-bottom: 6px;
+    }
+    .bt-rm-close {
+      margin-left: auto; background: transparent; border: 0;
+      color: #cfcfcf; font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px;
+    }
+    .bt-rm-close:hover { color: #fff; }
+    .bt-rm-svg { width: 100%; max-width: 330px; height: auto; display: block; margin: 0 auto 10px; }
+    .bt-rm-list { display: flex; flex-direction: column; gap: 5px; }
+    .bt-rm-row {
+      display: grid; grid-template-columns: 48px 1fr 88px; gap: 8px;
+      align-items: center; color: #FFFFEF; font-size: 12.5px;
+    }
+    .bt-rm-row > span:last-child { text-align: right; }
+    .bt-rm-bar { display: block; height: 7px; border-radius: 999px; background: #1a0409; overflow: hidden; }
+    .bt-rm-bar > i { display: block; height: 100%; }
+
     @media (max-width: 700px) {
       .bt-cmp-row { grid-template-columns: 66px 1fr 60px 66px; font-size: 12px; }
       .bt-cmp-head { font-size: 12px; }
@@ -5945,10 +5979,46 @@
         max[f.k] = Math.max.apply(null, allJobs.map(function (j) { return avg[j][f.k]; })) || 1;
       });
 
-      var jobs = allJobs.filter(function (j) {
-        return battleJobFilter === 'all' || j === battleJobFilter;
-      });
-      if (!jobs.length) return '<div class="access-admin-empty">這一邊沒有這個職業</div>';
+      // 雷達分頁永遠把八個職業都排出來；選單一職業是「放大看」，用彈窗疊上去
+      var jobs = allJobs;
+
+      function radarModal(avgAll, maxAll) {
+        var j = battleJobFilter;
+        if (j === 'all' || allJobs.indexOf(j) < 0) return '';
+        var clr = JOB_CLR[j] || '#d4af37';
+        var pts = RADAR_KEYS.map(function (f, i) {
+          var r = 42 * Math.min(1, avgAll[j][f.k] / maxAll[f.k]);
+          var ang = -Math.PI / 2 + i * 2 * Math.PI / RADAR_KEYS.length;
+          return (50 + r * Math.cos(ang)).toFixed(1) + ',' + (50 + r * Math.sin(ang)).toFixed(1);
+        }).join(' ');
+        var grid = [1, 0.75, 0.5, 0.25].map(function (sc) {
+          return '<polygon points="' + RADAR_KEYS.map(function (f, i) {
+            var ang = -Math.PI / 2 + i * 2 * Math.PI / RADAR_KEYS.length;
+            return (50 + 42 * sc * Math.cos(ang)).toFixed(1) + ',' + (50 + 42 * sc * Math.sin(ang)).toFixed(1);
+          }).join(' ') + '" class="bt-radar-grid-line"/>';
+        }).join('');
+        var axes = RADAR_KEYS.map(function (f, i) {
+          var ang = -Math.PI / 2 + i * 2 * Math.PI / RADAR_KEYS.length;
+          return '<text x="' + (50 + 49 * Math.cos(ang)).toFixed(1) + '" y="' +
+            (50 + 49 * Math.sin(ang) + 1.6).toFixed(1) + '" class="bt-radar-axis bt-radar-axis-lg">' + f.zh + '</text>';
+        }).join('');
+        var rowsHtml = RADAR_KEYS.map(function (f) {
+          var v = avgAll[j][f.k], r = Math.min(1, v / maxAll[f.k]);
+          return '<div class="bt-rm-row"><span>' + f.zh + '</span>' +
+            '<span class="bt-rm-bar"><i style="width:' + (r * 100).toFixed(1) + '%;background:' + clr + '"></i></span>' +
+            '<span>' + battleFmt(v, f.k) + '</span></div>';
+        }).join('');
+        return '<div class="modal-overlay bt-radar-modal" onclick="setBattleJob(\'all\')">' +
+          '<div class="modal-box bt-radar-box" onclick="event.stopPropagation()">' +
+            '<div class="bt-rm-head">' + jobChip(j) +
+              '<span class="bt-radar-n">' + avgAll[j]._n + ' 人・每人平均</span>' +
+              '<button type="button" class="bt-rm-close" onclick="setBattleJob(\'all\')">×</button></div>' +
+            '<svg class="bt-rm-svg" viewBox="-16 -12 132 128">' + grid + axes +
+              '<polygon points="' + pts + '" fill="' + clr + '55" stroke="' + clr + '" stroke-width="1.2"/>' +
+            '</svg>' +
+            '<div class="bt-rm-list">' + rowsHtml + '</div>' +
+          '</div></div>';
+      }
 
       return '<div class="bt-sec-title">📡 職業雷達（每人平均）</div>' +
         '<div class="bt-radar-grid">' + jobs.map(function (j) {
@@ -5969,12 +6039,13 @@
               (50 + 48 * Math.sin(ang) + 1.6).toFixed(1) + '" class="bt-radar-axis">' + f.zh + '</text>';
           }).join('');
           var clr = JOB_CLR[j] || '#d4af37';
-          return '<div class="bt-radar-card">' +
+          return '<div class="bt-radar-card" onclick="setBattleJob(\'' + j + '\')" title="點開放大">' +
             '<div class="bt-radar-title">' + jobChip(j) + '<span class="bt-radar-n">' + avg[j]._n + ' 人</span></div>' +
-            '<svg viewBox="0 0 100 100">' + grid + axes +
+            // viewBox 往外放寬：軸標籤畫在半徑 48 的位置，用 0~100 的框會被切掉
+            '<svg viewBox="-16 -12 132 128">' + grid + axes +
               '<polygon points="' + pts + '" fill="' + clr + '44" stroke="' + clr + '" stroke-width="1"/>' +
             '</svg></div>';
-        }).join('') + '</div>';
+        }).join('') + '</div>' + radarModal(avg, max);
     }
 
     /* ── 分頁：貢獻熱力 ──
