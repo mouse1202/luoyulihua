@@ -26,6 +26,11 @@ const OWNER_NAME = "鼠仔丶";
 // 戰鬥類型。要增減直接改這裡，另外記得同步 battles 的 check 約束與前端的下拉。
 const BATTLE_TYPES = ["幫戰", "約戰", "龍虎", "內推"];
 
+// 權限身分組。「俱樂部」跟「幫眾」一樣，只能改自己的出勤，
+// 分開是為了在清冊上看得出誰是俱樂部的人。
+// 這裡與 access_requests 的 check 約束、前端的下拉要一起改。
+const ACCESS_CATEGORIES = ["管理", "文書", "幫眾", "俱樂部"];
+
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -135,6 +140,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   saveGuestList: (rows: any[]) => saveByCategory("guest", rows),
   getTrialList: () => listByCategory("trial"),
   saveTrialList: (rows: any[]) => saveByCategory("trial", rows),
+  getClubList: () => listByCategory("club"),
+  saveClubList: (rows: any[]) => saveByCategory("club", rows),
   getAttendanceCandidates: () => getAttendanceCandidates(),
 
   checkAccessStatus: async (nameIn: string) => {
@@ -168,7 +175,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     if (!name) return { success: false, message: "請輸入角色名稱" };
     // 擁有者本來就是最高權限，不需要、也不該被加進清冊
     if (name === OWNER_NAME) return { success: false, message: "這個名字是擁有者，本來就有最高權限" };
-    const category = (categoryIn === "管理" || categoryIn === "文書") ? categoryIn : "幫眾";
+    const category = ACCESS_CATEGORIES.includes(categoryIn) ? categoryIn : "幫眾";
     const now = new Date().toISOString();
     await chk(db.from("access_requests").upsert({ name, requested_at: now, status: "已核准", category }, { onConflict: "name" }).select("name"));
     return { success: true };
@@ -192,7 +199,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   setAccessRequestCategory: async (nameIn: string, categoryIn: string) => {
     const name = normName(nameIn);
     if (name === OWNER_NAME) return { success: false, message: "不能修改擁有者的類別" };
-    const category = (categoryIn === "管理" || categoryIn === "文書") ? categoryIn : "幫眾";
+    const category = ACCESS_CATEGORIES.includes(categoryIn) ? categoryIn : "幫眾";
     const { data } = await db.from("access_requests").select("name").eq("name", name).maybeSingle();
     if (!data) return { success: false, message: "找不到這個申請紀錄" };
     await chk(db.from("access_requests").update({ category }).eq("name", name).select("name"));

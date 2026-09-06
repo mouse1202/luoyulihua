@@ -2102,7 +2102,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory'];
 
   var JOB_COLORS = { '鐵衣':'e69138','血河':'cc0000','神相':'6fa8dc','素問':'f4cccc','九靈':'d9d2e9','碎夢':'4dd0e1','龍吟':'93c47d','玄機':'ffe599','潮光':'3c78d8' };
   var GROUP_BANNER = { '團一進攻':{bg:'1c4587',fg:'ffffff'}, '團二進攻':{bg:'990000',fg:'ffffff'}, '防守團':{bg:'f1c232',fg:'000000'} };
@@ -2384,6 +2384,8 @@
               <div class="roster-substitutes-panel roster-substitutes-panel-tall">
                 <div class="roster-substitutes-title">試訓<span id="roster-trial-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-trial-substitutes-list"></div>
+                <div class="roster-substitutes-title">俱樂部<span id="roster-club-substitutes-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-club-substitutes-list"></div>
               </div>
             </div>
             <div class="roster-list" id="roster-list"></div>
@@ -2482,6 +2484,15 @@
           </div>
           <div class="attendance-list" id="attendance-trial-list"></div>
           <p class="attendance-empty hidden" id="attendance-trial-empty">目前沒有試訓名單。</p>
+
+          <div class="member-section-title">俱樂部成員</div>
+          <div class="attendance-header-row">
+            <span class="attendance-col-name">姓名</span>
+            <span class="attendance-col-job">職業</span>
+            <span class="attendance-col-status">是否出勤</span>
+          </div>
+          <div class="attendance-list" id="attendance-club-list"></div>
+          <p class="attendance-empty hidden" id="attendance-club-empty">目前沒有俱樂部成員名單。</p>
         </div>
         <div class="roster-footer">
           <button type="button" class="roster-export-btn export-allowed-btn hidden" id="attendance-export-btn" onclick="openPasswordGate(exportAttendanceMonthData, 'attendance-view', false, 'export')">匯出出勤紀錄</button>
@@ -2543,6 +2554,15 @@
           </div>
           <div class="attendance-list" id="trial-list"></div>
           <button type="button" class="attendance-add-btn" onclick="addTrialRow()">＋ 新增一列</button>
+
+          <div class="member-section-title">俱樂部成員名單</div>
+          <div class="attendance-header-row">
+            <span class="attendance-col-name">姓名</span>
+            <span class="attendance-col-job">職業</span>
+            <span class="attendance-col-spacer"></span>
+          </div>
+          <div class="attendance-list" id="club-list"></div>
+          <button type="button" class="attendance-add-btn" onclick="addClubRow()">＋ 新增一列</button>
         </div>
         <div class="roster-footer">
           <button type="button" class="roster-save-btn" id="member-save-btn" onclick="saveMemberListData()">儲存名單</button>
@@ -2562,6 +2582,10 @@
         <div class="job-count-panel">
           <div class="job-count-title">試訓</div>
           <div class="job-count-row" id="job-count-trial"></div>
+        </div>
+        <div class="job-count-panel">
+          <div class="job-count-title">俱樂部</div>
+          <div class="job-count-row" id="job-count-club"></div>
         </div>
       </div>
       </div>
@@ -2584,6 +2608,7 @@
               <input type="text" id="access-admin-new-role" class="modal-input" placeholder="角色名稱" maxlength="30" />
               <select id="access-admin-new-category" class="modal-input">
                 <option value="幫眾">幫眾</option>
+                <option value="俱樂部">俱樂部</option>
                 <option value="文書">文書</option>
                 <option value="管理">管理</option>
               </select>
@@ -3274,6 +3299,8 @@
       renderRosterSubstituteList('roster-substitutes-list', 'roster-substitutes-count', memberSubstitutes, '目前沒有候補');
       renderRosterSubstituteList('roster-guest-substitutes-list', 'roster-guest-substitutes-count', guestSubstitutes, '目前沒有外援');
       renderRosterSubstituteList('roster-trial-substitutes-list', 'roster-trial-substitutes-count', trialSubstitutes, '目前沒有試訓');
+      var clubSubstitutes = unassigned.filter(function (m) { return m.category === 'club'; }).sort(compareByJob_);
+      renderRosterSubstituteList('roster-club-substitutes-list', 'roster-club-substitutes-count', clubSubstitutes, '目前沒有俱樂部成員');
     }
 
     function loadRosterAttendeesForDate(date, callback) {
@@ -4599,10 +4626,12 @@
         var mainMembers = members.filter(function (m) { return m.category === 'member'; }).sort(compareByJob_);
         var guestMembers = members.filter(function (m) { return m.category === 'guest'; }).sort(compareByJob_);
         var trialMembers = members.filter(function (m) { return m.category === 'trial'; }).sort(compareByJob_);
+        var clubMembers = members.filter(function (m) { return m.category === 'club'; }).sort(compareByJob_);
 
         renderAttendanceGroup_('attendance-list', 'attendance-empty', mainMembers);
         renderAttendanceGroup_('attendance-guest-list', 'attendance-guest-empty', guestMembers);
         renderAttendanceGroup_('attendance-trial-list', 'attendance-trial-empty', trialMembers);
+        renderAttendanceGroup_('attendance-club-list', 'attendance-club-empty', clubMembers);
         ensureJobFilterOptions();
         applyAttendanceJobFilter(); // 重新渲染後套用目前的職業篩選（只篩主要成員）
 
@@ -4729,11 +4758,13 @@
       var mainEl = document.getElementById('job-count-main');
       var guestEl = document.getElementById('job-count-guest');
       var trialEl = document.getElementById('job-count-trial');
+      var clubEl = document.getElementById('job-count-club');
       if (!mainEl || !guestEl || !trialEl) return;
 
       mainEl.innerHTML = buildJobCountRowHtml_(countMembersByJob_('member-list'));
       guestEl.innerHTML = buildJobCountRowHtml_(countMembersByJob_('guest-list'));
       trialEl.innerHTML = buildJobCountRowHtml_(countMembersByJob_('trial-list'));
+      if (clubEl) clubEl.innerHTML = buildJobCountRowHtml_(countMembersByJob_('club-list'));
     }
 
 
@@ -5204,6 +5235,13 @@
       updateMemberJobCounts();
     }
 
+    function addClubRow(name, job) {
+      var list = document.getElementById('club-list');
+      if (!list) return;
+      list.appendChild(createMemberRow(name, job));
+      updateMemberJobCounts();
+    }
+
     function addTrialRow(name, job) {
       var list = document.getElementById('trial-list');
       list.appendChild(createMemberRow(name, job));
@@ -5304,6 +5342,16 @@
         }
       }
 
+      function renderClubs(clubs) {
+        var list = document.getElementById('club-list');
+        if (list) list.innerHTML = '';
+        if (!clubs || clubs.length === 0) {
+          for (var i = 0; i < 3; i++) addClubRow();
+        } else {
+          clubs.forEach(function (c) { addClubRow(c.name, c.job); });
+        }
+      }
+
       if (window.google && google.script && google.script.run) {
         google.script.run.withSuccessHandler(renderMembers).withFailureHandler(function (err) {
           showAlertModal('讀取主名單失敗：' + err.message);
@@ -5319,11 +5367,17 @@
           showAlertModal('讀取試訓名單失敗：' + err.message);
           renderTrials([]);
         }).getTrialList();
+
+        google.script.run.withSuccessHandler(renderClubs).withFailureHandler(function (err) {
+          showAlertModal('讀取俱樂部成員名單失敗：' + err.message);
+          renderClubs([]);
+        }).getClubList();
       } else {
         console.log('local preview: 未連接 Google Apps Script，名單管理改用空白列');
         renderMembers([]);
         renderGuests([]);
         renderTrials([]);
+        renderClubs([]);
       }
     }
 
@@ -5375,6 +5429,7 @@
             '<option value="幫眾"' + (r.category === '幫眾' ? ' selected' : '') + '>幫眾</option>' +
             '<option value="文書"' + (r.category === '文書' ? ' selected' : '') + '>文書</option>' +
             '<option value="管理"' + (r.category === '管理' ? ' selected' : '') + '>管理</option>' +
+            '<option value="俱樂部"' + (r.category === '俱樂部' ? ' selected' : '') + '>俱樂部</option>' +
             '</select>';
 
           return '<div class="access-admin-row">' +
@@ -5387,7 +5442,7 @@
         }
 
         // 依類別分組顯示：管理 → 文書 → 幫眾，各組加一個標題（含人數），方便區分
-        var groupKeys = ['管理', '文書', '幫眾'];
+        var groupKeys = ['管理', '文書', '幫眾', '俱樂部'];
         var html = '';
         groupKeys.forEach(function (key) {
           var list = requests.filter(function (r) { return (r.category || '幫眾') === key; });
@@ -5535,12 +5590,13 @@
       var memberData = collectListRows_('member-list');
       var guestData = collectListRows_('guest-list');
       var trialData = collectListRows_('trial-list');
+      var clubData = collectListRows_('club-list');
 
       var saveBtn = document.getElementById('member-save-btn');
       saveBtn.disabled = true;
       saveBtn.textContent = '儲存中...';
 
-      var pending = 3;
+      var pending = 4;   // 主名單／外援／試訓／俱樂部成員
       var hadError = false;
 
       function checkDone() {
@@ -5563,6 +5619,7 @@
         google.script.run.withSuccessHandler(checkDone).withFailureHandler(onFailure('主名單')).saveMemberList(memberData);
         google.script.run.withSuccessHandler(checkDone).withFailureHandler(onFailure('外援名單')).saveGuestList(guestData);
         google.script.run.withSuccessHandler(checkDone).withFailureHandler(onFailure('試訓名單')).saveTrialList(trialData);
+        google.script.run.withSuccessHandler(checkDone).withFailureHandler(onFailure('俱樂部成員名單')).saveClubList(clubData);
       } else {
         console.log('member list data (local preview, no GAS backend):', memberData);
         console.log('guest list data (local preview, no GAS backend):', guestData);
