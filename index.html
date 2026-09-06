@@ -1549,7 +1549,7 @@
     /* 場次列表 */
     .battle-row {
       display: grid;
-      grid-template-columns: 1.4fr .7fr 1.6fr .8fr .6fr .8fr;
+      grid-template-columns: 1.5fr .7fr 1.7fr .8fr .7fr .7fr;
       gap: 8px;
       align-items: center;
       padding: 10px 12px;
@@ -1569,6 +1569,18 @@
       margin-bottom: 4px;
     }
     .battle-row a { color: #d4af37; text-decoration: none; }
+    /* 勝敗底下用小字附上比分，換欄位之後資訊才不會不見 */
+    .bt-score { display: block; font-style: normal; font-size: 11px; opacity: .55; font-weight: 400; }
+
+    /* 修改戰績的彈窗 */
+    .bt-edit-box { max-width: 520px; }
+    .bt-edit-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;
+    }
+    .bt-edit-grid label, .bt-edit-full {
+      display: flex; flex-direction: column; gap: 4px; color: #FFFFEF; font-size: 12px;
+    }
+    .bt-edit-full { margin-top: 10px; }
     .battle-row a:hover { text-decoration: underline; }
     .battle-win  { color: #7bd88f; font-weight: 700; }
     .battle-lose { color: #ef8f8f; font-weight: 700; }
@@ -1976,7 +1988,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle'];
 
   var JOB_COLORS = { '鐵衣':'e69138','血河':'cc0000','神相':'6fa8dc','素問':'f4cccc','九靈':'d9d2e9','碎夢':'4dd0e1','龍吟':'93c47d','玄機':'ffe599','潮光':'3c78d8' };
   var GROUP_BANNER = { '團一進攻':{bg:'1c4587',fg:'ffffff'}, '團二進攻':{bg:'990000',fg:'ffffff'}, '防守團':{bg:'f1c232',fg:'000000'} };
@@ -5712,17 +5724,21 @@
       if (tab === 'agg' && !battleAggCache) loadBattleAggregate();
     }
 
+    var battleListCache = [];
+
     function loadBattleList() {
       var box = document.getElementById('battle-list');
       box.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
       battleApi('listBattles').then(function (rows) {
+        battleListCache = rows;
         if (!rows.length) {
           box.innerHTML = '<div class="access-admin-empty">還沒有任何戰績。上傳遊戲匯出的 CSV 就會出現在這裡。</div>';
           return;
         }
+        var admin = currentAccessCategory === '管理';
         box.innerHTML =
           '<div class="battle-row battle-row-head">' +
-            '<span>日期</span><span>類型</span><span>對手</span><span>比分</span><span>結果</span><span></span>' +
+            '<span>日期</span><span>類型</span><span>對手</span><span>勝敗</span><span>修改</span><span></span>' +
           '</div>' +
           rows.map(function (b) {
             var cls = b.result === '勝' ? 'battle-win' : (b.result === '敗' ? 'battle-lose' : '');
@@ -5731,17 +5747,95 @@
                 escapeBattleHtml(b.date) + (b.time ? ' ' + escapeBattleHtml(b.time) : '') + '</a></span>' +
               '<span>' + escapeBattleHtml(b.type) + '</span>' +
               '<span>' + escapeBattleHtml(b.oppGuild) + '</span>' +
-              '<span>' + b.myKills + ' - ' + b.oppKills + '</span>' +
-              '<span class="' + cls + '">' + escapeBattleHtml(b.result) + '</span>' +
-              '<span><button type="button" class="access-admin-btn access-admin-btn-reject admin-only-btn' +
-                (currentAccessCategory === '管理' ? '' : ' hidden') +
-                '" onclick="deleteBattleFromAdmin(\'' + b.id + '\',\'' +
-                escapeBattleHtml(b.date) + ' vs ' + escapeBattleHtml(b.oppGuild) + '\')">刪除</button></span>' +
+              '<span class="' + cls + '">' + escapeBattleHtml(b.result) +
+                '<i class="bt-score">' + b.myKills + ' - ' + b.oppKills + '</i></span>' +
+              '<span>' + (admin
+                ? '<button type="button" class="access-admin-btn access-admin-btn-approve" ' +
+                  'onclick="openBattleEdit(\'' + b.id + '\')">修改</button>'
+                : '') + '</span>' +
+              '<span>' + (admin
+                ? '<button type="button" class="access-admin-btn access-admin-btn-reject" ' +
+                  'onclick="deleteBattleFromAdmin(\'' + b.id + '\',\'' +
+                  escapeBattleHtml(b.date) + ' vs ' + escapeBattleHtml(b.oppGuild) + '\')">刪除</button>'
+                : '') + '</span>' +
             '</div>';
           }).join('');
       }).catch(function (err) {
         box.innerHTML = '<div class="access-admin-empty">讀取失敗：' + escapeBattleHtml(err.message) + '</div>';
       });
+    }
+
+    /* ── 修改單場 ── */
+
+    function openBattleEdit(id) {
+      var b = battleListCache.filter(function (x) { return x.id === id; })[0];
+      if (!b) return;
+      var old = document.getElementById('battle-edit-overlay');
+      if (old) old.remove();
+
+      function sel(name, opts, cur) {
+        return '<select id="be-' + name + '" class="modal-input">' + opts.map(function (o) {
+          return '<option' + (o === cur ? ' selected' : '') + '>' + o + '</option>';
+        }).join('') + '</select>';
+      }
+      function txt(name, val, ph, maxlen) {
+        return '<input id="be-' + name + '" class="modal-input" value="' + escapeBattleHtml(val) +
+          '" placeholder="' + ph + '"' + (maxlen ? ' maxlength="' + maxlen + '"' : '') + '>';
+      }
+
+      var el = document.createElement('div');
+      el.id = 'battle-edit-overlay';
+      el.className = 'modal-overlay bt-radar-modal';
+      el.onclick = closeBattleEdit;
+      el.innerHTML =
+        '<div class="modal-box bt-edit-box" onclick="event.stopPropagation()">' +
+          '<div class="bt-rm-head"><span class="modal-title">修改戰績</span>' +
+            '<button type="button" class="bt-rm-close" onclick="closeBattleEdit()">×</button></div>' +
+          '<div class="bt-edit-grid">' +
+            '<label>日期' + txt('date', b.date, '20260905', 8) + '</label>' +
+            '<label>時間' + txt('time', b.time, '2025 或 202513', 6) + '</label>' +
+            '<label>類型' + sel('type', ['幫戰', '約戰', '其他'], b.type) + '</label>' +
+            '<label>勝敗' + sel('result', ['勝', '敗', '平'], b.result || '勝') + '</label>' +
+            '<label>我方公會' + txt('myg', b.myGuild, '', 40) + '</label>' +
+            '<label>對手公會' + txt('oppg', b.oppGuild, '', 40) + '</label>' +
+            '<label>我方擊敗' + txt('mk', b.myKills, '0', 6) + '</label>' +
+            '<label>對方擊敗' + txt('ok', b.oppKills, '0', 6) + '</label>' +
+          '</div>' +
+          '<label class="bt-edit-full">備註' + txt('note', b.note || '', '選填', 200) + '</label>' +
+          '<p class="modal-hint">勝敗預設是照擊敗數自動判定的。實際勝負跟擊敗數不一致時，在這裡改成正確的。</p>' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="modal-btn" onclick="closeBattleEdit()">取消</button>' +
+            '<button type="button" class="modal-btn modal-btn-confirm" onclick="saveBattleEdit(\'' + id + '\')">儲存</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(el);
+    }
+
+    function closeBattleEdit() {
+      var el = document.getElementById('battle-edit-overlay');
+      if (el) el.remove();
+    }
+
+    function saveBattleEdit(id) {
+      var v = function (n) { return document.getElementById('be-' + n).value.trim(); };
+      var date = v('date');
+      if (!/^\d{8}$/.test(date)) { showAlertModal('日期要是 8 碼，例如 20260905'); return; }
+      battleApi('updateBattle', id, {
+        battleDate: date,
+        battleTime: v('time'),
+        battleType: v('type'),
+        result: v('result'),
+        myGuild: v('myg'),
+        oppGuild: v('oppg'),
+        myKills: v('mk'),
+        oppKills: v('ok'),
+        note: v('note')
+      }, currentAccessName || '').then(function (res) {
+        if (!res.success) { showAlertModal(res.message || '儲存失敗'); return; }
+        closeBattleEdit();
+        battleAggCache = null;
+        loadBattleList();
+      }).catch(function (err) { showAlertModal('儲存失敗：' + err.message); });
     }
 
     function deleteBattleFromAdmin(id, label) {

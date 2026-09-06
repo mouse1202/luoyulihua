@@ -558,6 +558,44 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     };
   },
 
+  // 修改單場的基本資料。勝敗預設是依擊敗數自動判定的，
+  // 但幫戰的實際勝負不一定跟擊敗數一致，所以這裡可以手動改掉。
+  updateBattle: async (id: string, patch: any, actorName?: string) => {
+    const p: Record<string, any> = {};
+    if (patch.battleDate !== undefined) p.battle_date = String(patch.battleDate).trim();
+    if (patch.battleTime !== undefined) p.battle_time = String(patch.battleTime).trim();
+    if (patch.myGuild !== undefined)    p.my_guild = String(patch.myGuild).trim();
+    if (patch.oppGuild !== undefined)   p.opp_guild = String(patch.oppGuild).trim();
+    if (patch.note !== undefined)       p.note = String(patch.note).trim();
+    if (patch.dateLabel !== undefined)  p.date_label = patch.dateLabel || null;
+    if (patch.battleType !== undefined) {
+      if (!["幫戰", "約戰", "其他"].includes(patch.battleType)) return { success: false, message: "類型不正確" };
+      p.battle_type = patch.battleType;
+    }
+    if (patch.result !== undefined) {
+      if (!["勝", "敗", "平"].includes(patch.result)) return { success: false, message: "勝敗不正確" };
+      p.result = patch.result;
+    }
+    if (patch.myKills !== undefined)  p.my_kills = Math.round(Number(patch.myKills) || 0);
+    if (patch.oppKills !== undefined) p.opp_kills = Math.round(Number(patch.oppKills) || 0);
+
+    if (!p.battle_date && patch.battleDate !== undefined) return { success: false, message: "日期不能空白" };
+    if (Object.keys(p).length === 0) return { success: false, message: "沒有要更新的欄位" };
+
+    const { data, error } = await db.from("battles").update(p).eq("id", id).select().maybeSingle();
+    if (error) {
+      // 日期＋時間＋雙方公會有唯一鍵，改成跟別場一樣就會撞到
+      if (String(error.message).indexOf("duplicate") >= 0 || String(error.code) === "23505") {
+        return { success: false, message: "已經有另一場的日期、時間與雙方公會跟這樣一模一樣了" };
+      }
+      throw new Error(error.message);
+    }
+    if (!data) return { success: false, message: "找不到這場戰績" };
+    await appendActivityLog(actorName || "", actorName || "",
+      `${actorName || "有人"} 修改了戰績「${data.battle_date} vs ${data.opp_guild}」`);
+    return { success: true };
+  },
+
   deleteBattle: async (id: string, actorName?: string) => {
     const { data: b } = await db.from("battles").select("battle_date,opp_guild").eq("id", id).maybeSingle();
     await chk(db.from("battles").delete().eq("id", id).select("id"));
