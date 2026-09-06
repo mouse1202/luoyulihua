@@ -23,6 +23,9 @@ const GUILD_NAME = "落雨梨花";
 // 否則會產生一筆管理員在清單上看不到、也刪不掉的冒名資料。
 const OWNER_NAME = "鼠仔丶";
 
+// 戰鬥類型。要增減直接改這裡，另外記得同步 battles 的 check 約束與前端的下拉。
+const BATTLE_TYPES = ["幫戰", "約戰", "龍虎", "內推"];
+
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -489,7 +492,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       battle_time: String(payload.battleTime ?? "").trim(),
       my_guild:    String(payload.myGuild ?? "").trim(),
       opp_guild:   String(payload.oppGuild ?? "").trim(),
-      battle_type: ["幫戰", "約戰", "其他"].includes(payload.battleType) ? payload.battleType : "幫戰",
+      battle_type: BATTLE_TYPES.includes(payload.battleType) ? payload.battleType : "幫戰",
       my_kills:    myKills,
       opp_kills:   oppKills,
       result:      myKills > oppKills ? "勝" : (myKills < oppKills ? "敗" : "平"),
@@ -569,7 +572,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     if (patch.note !== undefined)       p.note = String(patch.note).trim();
     if (patch.dateLabel !== undefined)  p.date_label = patch.dateLabel || null;
     if (patch.battleType !== undefined) {
-      if (!["幫戰", "約戰", "其他"].includes(patch.battleType)) return { success: false, message: "類型不正確" };
+      if (!BATTLE_TYPES.includes(patch.battleType)) return { success: false, message: "類型不正確" };
       p.battle_type = patch.battleType;
     }
     if (patch.result !== undefined) {

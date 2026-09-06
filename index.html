@@ -2654,7 +2654,8 @@
                   <option value="">全部</option>
                   <option value="幫戰">幫戰</option>
                   <option value="約戰">約戰</option>
-                  <option value="其他">其他</option>
+                  <option value="龍虎">龍虎</option>
+                  <option value="內推">內推</option>
                 </select>
               </label>
               <button type="button" class="access-admin-btn access-admin-btn-approve" onclick="loadBattleAggregate()">查詢</button>
@@ -5613,6 +5614,10 @@
       { k: 'bone',    zh: '焚骨', w: false },
       { k: 'res',     zh: '資源', w: false }
     ];
+    // 戰鬥類型。三個地方共用：上傳卡片、修改彈窗、累積統計的篩選。
+    // 後端 lylhapi 的 BATTLE_TYPES 與 battles 的 check 約束要一起改。
+    var BATTLE_TYPES = ['幫戰', '約戰', '龍虎', '內推'];
+
     var BATTLE_KEY_ZH = {};
     BATTLE_KEYS.forEach(function (f) { BATTLE_KEY_ZH[f.k] = f; });
 
@@ -5740,7 +5745,7 @@
             '<label>日期<input type="text" class="modal-input" value="' + escapeBattleHtml(c.date) + '" maxlength="8" oninput="updateBattleCard(' + c.id + ',\'date\',this.value)"></label>' +
             '<label>時間<input type="text" class="modal-input" value="' + escapeBattleHtml(c.time) + '" maxlength="6" oninput="updateBattleCard(' + c.id + ',\'time\',this.value)"></label>' +
             '<label>類型<select class="modal-input" onchange="updateBattleCard(' + c.id + ',\'type\',this.value)">' +
-              ['幫戰', '約戰', '其他'].map(function (t) {
+              BATTLE_TYPES.map(function (t) {
                 return '<option' + (t === c.type ? ' selected' : '') + '>' + t + '</option>';
               }).join('') +
             '</select></label>' +
@@ -5920,7 +5925,7 @@
           '<div class="bt-edit-grid">' +
             '<label>日期' + txt('date', b.date, '20260905', 8) + '</label>' +
             '<label>時間' + txt('time', b.time, '2025 或 202513', 6) + '</label>' +
-            '<label>類型' + sel('type', ['幫戰', '約戰', '其他'], b.type) + '</label>' +
+            '<label>類型' + sel('type', BATTLE_TYPES, b.type) + '</label>' +
             '<label>勝敗' + sel('result', ['勝', '敗', '平'], b.result || '勝') + '</label>' +
             '<label>我方公會' + txt('myg', b.myGuild, '', 40) + '</label>' +
             '<label>對手公會' + txt('oppg', b.oppGuild, '', 40) + '</label>' +
