@@ -1858,7 +1858,16 @@
       border-left: 2px solid #6B1023;
       font-size: 12px;
     }
-    .bt-jm-name { padding-left: 10px; display: flex; align-items: center; gap: 4px; }
+    /* 職業欄只有 74px，名字加上「非名單」這種標籤會被擠到逐字換行。
+       成員列的名字改成跨用前兩欄（職業＋人數），空間才夠。 */
+    .bt-jm-name {
+      grid-column: 1 / 3;
+      padding-left: 10px;
+      display: flex; align-items: center; gap: 4px;
+      min-width: 0; white-space: nowrap;
+    }
+    /* 標籤本身也要擋住換行，否則 flex 會把它壓成一個字寬 */
+    .battle-tag { white-space: nowrap; flex: 0 0 auto; }
 
     /* 自選對比 */
     .bt-pick { display: flex; flex-direction: column; gap: 4px; color: #FFFFEF; font-size: 12px; }
@@ -6118,7 +6127,7 @@
           return '<div class="bt-jrow bt-jrow-member bt-clickable" data-side="' + x.side +
             '" data-name="' + escapeBattleHtml(x.name) + '">' +
             '<span class="bt-jm-name">' + rankBadge(i) + ' ' + escapeBattleHtml(x.name) +
-              (x.side === 'my' ? rosterTag(x.rosterCategory) : '') + '</span><span></span>' +
+              (x.side === 'my' ? rosterTag(x.rosterCategory) : '') + '</span>' +
             BATTLE_KEYS.map(function (f) { return '<span>' + battleFmt(x[f.k], f.k) + '</span>'; }).join('') +
           '</div>';
         }).join('');
