@@ -14,8 +14,9 @@ const db = createClient(
 );
 
 const GUILD_NAME = "落雨梨花";
-const OWNER_EMAIL = "aeddiex111@gmail.com";
-const OWNER_ROLE_NAME = "鼠仔丶";
+
+// 登入識別是「角色名稱」，不是 Gmail。這一位永遠是管理、不能被剔除或改類別。
+const OWNER_NAME = "鼠仔丶";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -23,11 +24,10 @@ const cors = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function normEmail(e: unknown): string {
-  return String(e ?? "").trim().toLowerCase();
-}
-function isEmail(e: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+// 角色名稱只去頭尾空白，不轉小寫也不做其他正規化：
+// 遊戲 ID 常有「丶」這類字元，動它反而會對不上。
+function normName(n: unknown): string {
+  return String(n ?? "").trim();
 }
 
 async function chk<T>(p: PromiseLike<{ data: T; error: { message: string } | null }>): Promise<T> {
@@ -125,87 +125,80 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   saveTrialList: (rows: any[]) => saveByCategory("trial", rows),
   getAttendanceCandidates: () => getAttendanceCandidates(),
 
-  checkAccessStatus: async (emailIn: string) => {
-    const email = normEmail(emailIn);
-    if (!email || !isEmail(email)) return { email, roleName: "", status: "none", message: "請輸入正確的 Gmail 格式" };
+  checkAccessStatus: async (nameIn: string) => {
+    const name = normName(nameIn);
+    if (!name) return { name, status: "none", message: "請輸入角色名稱" };
     const now = new Date().toISOString();
-    if (email === OWNER_EMAIL) {
-      const { data } = await db.from("access_requests").select("*").eq("email", OWNER_EMAIL).maybeSingle();
+    if (name === OWNER_NAME) {
+      const { data } = await db.from("access_requests").select("*").eq("name", OWNER_NAME).maybeSingle();
       if (!data) {
-        await chk(db.from("access_requests").insert({ email: OWNER_EMAIL, role_name: OWNER_ROLE_NAME, requested_at: now, status: "已核准", category: "管理" }).select("email"));
-        return { email: OWNER_EMAIL, roleName: OWNER_ROLE_NAME, status: "已核准", category: "管理", isOwner: true };
+        await chk(db.from("access_requests").insert({ name: OWNER_NAME, requested_at: now, status: "已核准", category: "管理" }).select("name"));
+        return { name: OWNER_NAME, status: "已核准", category: "管理", isOwner: true };
       }
       if (data.status !== "已核准" || data.category !== "管理") {
-        await chk(db.from("access_requests").update({ status: "已核准", category: "管理" }).eq("email", OWNER_EMAIL).select("email"));
+        await chk(db.from("access_requests").update({ status: "已核准", category: "管理" }).eq("name", OWNER_NAME).select("name"));
       }
-      return { email: data.email, roleName: data.role_name || OWNER_ROLE_NAME, status: "已核准", category: "管理", isOwner: true };
+      return { name: data.name, status: "已核准", category: "管理", isOwner: true };
     }
-    const { data } = await db.from("access_requests").select("*").eq("email", email).maybeSingle();
-    if (!data) return { email, roleName: "", status: "none" };
-    return { email: data.email, roleName: data.role_name, status: data.status, category: data.category || "幫眾", isOwner: false };
+    const { data } = await db.from("access_requests").select("*").eq("name", name).maybeSingle();
+    if (!data) return { name, status: "none" };
+    return { name: data.name, status: data.status, category: data.category || "幫眾", isOwner: false };
   },
-  submitAccessRequest: async (emailIn: string, roleNameIn: string) => {
-    const email = normEmail(emailIn);
-    if (!email || !isEmail(email)) return { success: false, message: "請輸入正確的 Gmail 格式" };
-    const roleName = String(roleNameIn ?? "").trim();
-    if (!roleName) return { success: false, message: "請輸入角色名稱" };
+  submitAccessRequest: async (nameIn: string) => {
+    const name = normName(nameIn);
+    if (!name) return { success: false, message: "請輸入角色名稱" };
     const now = new Date().toISOString();
-    const { data } = await db.from("access_requests").select("status").eq("email", email).maybeSingle();
+    const { data } = await db.from("access_requests").select("status").eq("name", name).maybeSingle();
     if (!data) {
-      await chk(db.from("access_requests").insert({ email, role_name: roleName, requested_at: now, status: "待審核", category: "幫眾" }).select("email"));
+      await chk(db.from("access_requests").insert({ name, requested_at: now, status: "待審核", category: "幫眾" }).select("name"));
       return { success: true, status: "待審核" };
     }
-    let status = data.status;
-    if (status !== "已核准") {
-      await chk(db.from("access_requests").update({ role_name: roleName, requested_at: now, status: "待審核" }).eq("email", email).select("email"));
-      status = "待審核";
-    } else {
-      await chk(db.from("access_requests").update({ role_name: roleName }).eq("email", email).select("email"));
-    }
-    return { success: true, status };
+    // 已經有人用這個名字登記過了。已核准就直接放行，
+    // 其他狀態視為重新申請（被拒絕過的人可以再送一次）。
+    if (data.status === "已核准") return { success: true, status: "已核准" };
+    await chk(db.from("access_requests").update({ requested_at: now, status: "待審核" }).eq("name", name).select("name"));
+    return { success: true, status: "待審核" };
   },
-  addAccessMember: async (emailIn: string, roleNameIn: string, categoryIn: string) => {
-    const email = normEmail(emailIn);
-    if (!email || !isEmail(email)) return { success: false, message: "請輸入正確的 Gmail 格式" };
-    const roleName = String(roleNameIn ?? "").trim();
-    if (!roleName) return { success: false, message: "請輸入角色名稱" };
+  addAccessMember: async (nameIn: string, categoryIn: string) => {
+    const name = normName(nameIn);
+    if (!name) return { success: false, message: "請輸入角色名稱" };
     const category = (categoryIn === "管理" || categoryIn === "文書") ? categoryIn : "幫眾";
     const now = new Date().toISOString();
-    await chk(db.from("access_requests").upsert({ email, role_name: roleName, requested_at: now, status: "已核准", category }, { onConflict: "email" }).select("email"));
+    await chk(db.from("access_requests").upsert({ name, requested_at: now, status: "已核准", category }, { onConflict: "name" }).select("name"));
     return { success: true };
   },
   getAllAccessRequests: async () => {
     const { data } = await db.from("access_requests").select("*").order("requested_at", { ascending: true });
     return (data ?? []).map((r) => ({
-      email: r.email, roleName: r.role_name, time: r.requested_at ? String(r.requested_at).slice(0, 16).replace("T", " ") : "",
-      status: r.status, category: r.category || "幫眾", isOwner: String(r.email).toLowerCase() === OWNER_EMAIL,
+      name: r.name, time: r.requested_at ? String(r.requested_at).slice(0, 16).replace("T", " ") : "",
+      status: r.status, category: r.category || "幫眾", isOwner: r.name === OWNER_NAME,
     }));
   },
-  setAccessRequestStatus: async (emailIn: string, status: string) => {
-    const email = normEmail(emailIn);
-    if (email === OWNER_EMAIL && status !== "已核准") return { success: false, message: "不能剔除擁有者帳號" };
-    const { data } = await db.from("access_requests").select("email").eq("email", email).maybeSingle();
+  setAccessRequestStatus: async (nameIn: string, status: string) => {
+    const name = normName(nameIn);
+    if (name === OWNER_NAME && status !== "已核准") return { success: false, message: "不能剔除擁有者" };
+    const { data } = await db.from("access_requests").select("name").eq("name", name).maybeSingle();
     if (!data) return { success: false, message: "找不到這個申請紀錄" };
-    await chk(db.from("access_requests").update({ status }).eq("email", email).select("email"));
+    await chk(db.from("access_requests").update({ status }).eq("name", name).select("name"));
     return { success: true };
   },
-  setAccessRequestCategory: async (emailIn: string, categoryIn: string) => {
-    const email = normEmail(emailIn);
-    if (email === OWNER_EMAIL) return { success: false, message: "不能修改擁有者的類別" };
+  setAccessRequestCategory: async (nameIn: string, categoryIn: string) => {
+    const name = normName(nameIn);
+    if (name === OWNER_NAME) return { success: false, message: "不能修改擁有者的類別" };
     const category = (categoryIn === "管理" || categoryIn === "文書") ? categoryIn : "幫眾";
-    const { data } = await db.from("access_requests").select("email").eq("email", email).maybeSingle();
+    const { data } = await db.from("access_requests").select("name").eq("name", name).maybeSingle();
     if (!data) return { success: false, message: "找不到這個申請紀錄" };
-    await chk(db.from("access_requests").update({ category }).eq("email", email).select("email"));
+    await chk(db.from("access_requests").update({ category }).eq("name", name).select("name"));
     return { success: true };
   },
-  deleteAccessRequest: async (emailIn: string) => {
-    const email = normEmail(emailIn);
-    if (email === OWNER_EMAIL) return { success: false, message: "不能刪除擁有者帳號" };
-    await chk(db.from("access_requests").delete().eq("email", email).select("email"));
+  deleteAccessRequest: async (nameIn: string) => {
+    const name = normName(nameIn);
+    if (name === OWNER_NAME) return { success: false, message: "不能刪除擁有者" };
+    await chk(db.from("access_requests").delete().eq("name", name).select("name"));
     return { success: true };
   },
   purgeRejected: async () => {
-    const { data } = await db.from("access_requests").delete().eq("status", "已拒絕").select("email");
+    const { data } = await db.from("access_requests").delete().eq("status", "已拒絕").select("name");
     return { success: true, count: data?.length ?? 0 };
   },
 

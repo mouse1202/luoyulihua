@@ -1330,16 +1330,10 @@
       color: #FFFFEF;
     }
 
-    .access-admin-col-email {
+    .access-admin-col-name {
       flex: 2;
       min-width: 180px;
       word-break: break-all;
-      color: #FFFFEF;
-    }
-
-    .access-admin-col-role {
-      flex: 1;
-      min-width: 80px;
       color: #FFFFEF;
     }
 
@@ -2116,7 +2110,6 @@
           <div class="access-admin-manual-add">
             <span class="access-admin-manual-title">手動新增成員（不用經過申請流程，直接核准）</span>
             <div class="access-admin-manual-row">
-              <input type="email" id="access-admin-new-email" class="modal-input" placeholder="Gmail" maxlength="60" />
               <input type="text" id="access-admin-new-role" class="modal-input" placeholder="角色名稱" maxlength="30" />
               <select id="access-admin-new-category" class="modal-input">
                 <option value="幫眾">幫眾</option>
@@ -2128,8 +2121,7 @@
           </div>
 
           <div class="access-admin-header-row">
-            <span class="access-admin-col-email">Gmail</span>
-            <span class="access-admin-col-role">角色名稱</span>
+            <span class="access-admin-col-name">角色名稱</span>
             <span class="access-admin-col-time">申請時間</span>
             <span class="access-admin-col-status">狀態</span>
             <span class="access-admin-col-category">類別</span>
@@ -2228,8 +2220,8 @@
       </div>
 
       <div class="access-gate-panel active" id="access-gate-panel-login">
-        <label class="access-gate-field-label" for="access-gate-login-email-input">Gmail</label>
-        <input type="email" id="access-gate-login-email-input" class="modal-input" placeholder="請輸入你的 Gmail" maxlength="60" onkeydown="if(event.key==='Enter') submitAccessGateLogin()" />
+        <label class="access-gate-field-label" for="access-gate-login-name-input">角色名稱</label>
+        <input type="text" id="access-gate-login-name-input" class="modal-input" placeholder="請輸入你的角色名稱" maxlength="30" onkeydown="if(event.key==='Enter') submitAccessGateLogin()" />
         <div class="modal-actions">
           <button type="button" class="modal-btn modal-btn-confirm" id="access-gate-login-submit" onclick="submitAccessGateLogin()">登入</button>
         </div>
@@ -2237,11 +2229,9 @@
       </div>
 
       <div class="access-gate-panel" id="access-gate-panel-register">
-        <label class="access-gate-field-label" for="access-gate-register-email-input">Gmail</label>
-        <input type="email" id="access-gate-register-email-input" class="modal-input" placeholder="請輸入你的 Gmail" maxlength="60" />
         <label class="access-gate-field-label" for="access-gate-role-input">角色名稱</label>
-        <input type="text" id="access-gate-role-input" class="modal-input" placeholder="請輸入你的角色名稱" maxlength="30" />
-        <p class="modal-hint" id="access-gate-register-hint">送出後請等待管理員在後台核准，核准前無法使用網頁功能。</p>
+        <input type="text" id="access-gate-role-input" class="modal-input" placeholder="請輸入你的角色名稱" maxlength="30" onkeydown="if(event.key==='Enter') submitAccessGateRegister()" />
+        <p class="modal-hint" id="access-gate-register-hint">請填遊戲裡的角色名稱，之後就用這個名字登入。送出後請等待管理員在後台核准，核准前無法使用網頁功能。</p>
         <div class="modal-actions">
           <button type="button" class="modal-btn modal-btn-confirm" id="access-gate-register-submit" onclick="submitAccessGateRegister()">送出申請</button>
         </div>
@@ -2267,7 +2257,7 @@
     // 「管理」可用所有後台功能（密碼 1102）；「文書」比幫眾多一項：可匯出出勤（密碼 0103）；
     // 「幫眾」登入後只能開出勤系統改自己的出勤狀態。
     var currentAccessCategory = null;
-    var currentAccessEmail = null;
+    var currentAccessName = null;
     var currentAccessRoleName = null;
 
     function applyAccessCategoryUI() {
@@ -4151,7 +4141,7 @@
         }).saveAttendanceRecord({
           date: date, name: name, job: job, status: status,
           isManual: !!isManual,
-          actorEmail: currentAccessEmail,
+          actorEmail: currentAccessName,
           actorRoleName: currentAccessRoleName
         });
       } else {
@@ -4308,7 +4298,7 @@
         renderVrStatus(session, name, !!url1, !!url2, pub, pub ? url1 : '', pub ? url2 : '');
       }).withFailureHandler(function (err) {
         btn.disabled = false; btn.textContent = '影片上傳'; showAlertModal('送出失敗：' + err.message);
-      }).saveVideoReport({ date: session, name: name, job: job, url1: url1, url2: url2, visibility: visibility, actorEmail: currentAccessEmail, actorRoleName: currentAccessRoleName });
+      }).saveVideoReport({ date: session, name: name, job: job, url1: url1, url2: url2, visibility: visibility, actorEmail: currentAccessName, actorRoleName: currentAccessRoleName });
     }
 
     // 只接受 YouTube 或 Twitch 連結（含各自子網域，如 www./m./clips.）
@@ -4365,7 +4355,7 @@
           queryVideoStatus();
         }).withFailureHandler(function (err) {
           showAlertModal('刪除失敗：' + err.message); queryVideoStatus();
-        }).deleteVideoUrl(session, name, which, currentAccessEmail, currentAccessRoleName);
+        }).deleteVideoUrl(session, name, which, currentAccessName, currentAccessRoleName);
       });
     }
 
@@ -4555,7 +4545,7 @@
         }
 
         if (window.google && google.script && google.script.run) {
-          google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).deleteAllRecordsForDate(date, currentAccessEmail, currentAccessRoleName);
+          google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).deleteAllRecordsForDate(date, currentAccessName, currentAccessRoleName);
         } else {
           console.log('local preview: 未連接 Google Apps Script，刪除動作未送出', date);
           onSuccess();
@@ -4841,29 +4831,29 @@
         function rowHtml(r) {
           var statusClass = ACCESS_STATUS_CLASS[r.status] || '';
           var statusLabel = ACCESS_STATUS_LABELS[r.status] || r.status;
-          var safeEmail = r.email.replace(/'/g, "\\'");
+          // 名字會被塞進 onclick 的字串裡，單引號和反斜線都要跳脫
+          var safeName = String(r.name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
           var actionsHtml = '';
           if (r.isOwner) {
             actionsHtml = '<span class="access-admin-owner-badge">擁有者</span>';
           } else if (r.status === '已核准') {
-            actionsHtml = '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="deleteAccessRequestFromAdmin(\'' + safeEmail + '\')">剔除</button>';
+            actionsHtml = '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="deleteAccessRequestFromAdmin(\'' + safeName + '\')">剔除</button>';
           } else {
             actionsHtml =
-              '<button type="button" class="access-admin-btn access-admin-btn-approve" onclick="setAccessRequestFromAdmin(\'' + safeEmail + '\', \'已核准\')">核准</button>' +
-              '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="deleteAccessRequestFromAdmin(\'' + safeEmail + '\')">拒絕</button>';
+              '<button type="button" class="access-admin-btn access-admin-btn-approve" onclick="setAccessRequestFromAdmin(\'' + safeName + '\', \'已核准\')">核准</button>' +
+              '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="deleteAccessRequestFromAdmin(\'' + safeName + '\')">拒絕</button>';
           }
 
           var categoryHtml = r.isOwner
             ? '<span>管理</span>'
-            : '<select class="access-admin-category-select" onchange="setAccessRequestCategoryFromAdmin(\'' + safeEmail + '\', this.value)">' +
+            : '<select class="access-admin-category-select" onchange="setAccessRequestCategoryFromAdmin(\'' + safeName + '\', this.value)">' +
               '<option value="幫眾"' + (r.category === '幫眾' ? ' selected' : '') + '>幫眾</option>' +
               '<option value="文書"' + (r.category === '文書' ? ' selected' : '') + '>文書</option>' +
               '<option value="管理"' + (r.category === '管理' ? ' selected' : '') + '>管理</option>' +
               '</select>';
 
           return '<div class="access-admin-row">' +
-            '<span class="access-admin-col-email">' + r.email + (r.isOwner ? ' <span class="access-admin-owner-tag">★</span>' : '') + '</span>' +
-            '<span class="access-admin-col-role">' + (r.roleName || '') + '</span>' +
+            '<span class="access-admin-col-name">' + r.name + (r.isOwner ? ' <span class="access-admin-owner-tag">★</span>' : '') + '</span>' +
             '<span class="access-admin-col-time">' + toTaipeiTime(r.time) + '</span>' +
             '<span class="access-admin-col-status ' + statusClass + '">' + statusLabel + '</span>' +
             '<span class="access-admin-col-category">' + categoryHtml + '</span>' +
@@ -4898,7 +4888,7 @@
       }
     }
 
-    function setAccessRequestFromAdmin(email, status) {
+    function setAccessRequestFromAdmin(name, status) {
       if (!(window.google && google.script && google.script.run)) {
         showAlertModal('本機預覽模式，未連接 Google Apps Script，無法實際更新申請狀態。');
         return;
@@ -4907,27 +4897,27 @@
         loadAccessAdminList();
       }).withFailureHandler(function (err) {
         showAlertModal('更新失敗：' + err.message);
-      }).setAccessRequestStatus(email, status);
+      }).setAccessRequestStatus(name, status);
     }
 
     // 拒絕／剔除＝直接刪除該筆申請紀錄（不保留已拒絕狀態）
-    function deleteAccessRequestFromAdmin(email) {
+    function deleteAccessRequestFromAdmin(name) {
       if (!(window.google && google.script && google.script.run)) {
         showAlertModal('本機預覽模式，無法刪除。');
         return;
       }
-      showConfirmModal('確認移除', '確定要移除「' + email + '」嗎？會直接刪除這筆紀錄、不保留。', function () {
+      showConfirmModal('確認移除', '確定要移除「' + name + '」嗎？會直接刪除這筆紀錄、不保留。', function () {
         google.script.run.withSuccessHandler(function (res) {
           res = res || {};
           if (res.success === false) { showAlertModal(res.message || '刪除失敗'); return; }
           loadAccessAdminList();
         }).withFailureHandler(function (err) {
           showAlertModal('刪除失敗：' + err.message);
-        }).deleteAccessRequest(email);
+        }).deleteAccessRequest(name);
       });
     }
 
-    function setAccessRequestCategoryFromAdmin(email, category) {
+    function setAccessRequestCategoryFromAdmin(name, category) {
       if (!(window.google && google.script && google.script.run)) {
         showAlertModal('本機預覽模式，未連接 Google Apps Script，無法實際更新類別。');
         return;
@@ -4939,19 +4929,14 @@
         loadAccessAdminList();
       }).withFailureHandler(function (err) {
         showAlertModal('更新失敗：' + err.message);
-      }).setAccessRequestCategory(email, category);
+      }).setAccessRequestCategory(name, category);
     }
 
     function addAccessMemberFromAdmin() {
-      var email = document.getElementById('access-admin-new-email').value.trim();
-      var roleName = document.getElementById('access-admin-new-role').value.trim();
+      var name = document.getElementById('access-admin-new-role').value.trim();
       var category = document.getElementById('access-admin-new-category').value;
 
-      if (!email) {
-        showAlertModal('請輸入 Gmail');
-        return;
-      }
-      if (!roleName) {
+      if (!name) {
         showAlertModal('請輸入角色名稱');
         return;
       }
@@ -4966,13 +4951,12 @@
           showAlertModal(res.message || '新增失敗');
           return;
         }
-        document.getElementById('access-admin-new-email').value = '';
         document.getElementById('access-admin-new-role').value = '';
         document.getElementById('access-admin-new-category').value = '幫眾';
         loadAccessAdminList();
       }).withFailureHandler(function (err) {
         showAlertModal('新增失敗：' + err.message);
-      }).addAccessMember(email, roleName, category);
+      }).addAccessMember(name, category);
     }
 
     /* ── 操作記錄（需管理員密碼）：後台記事本，誰把誰的出勤狀態改成什麼 ── */
@@ -5076,10 +5060,10 @@
     updateBackToTopVisibility();
 
     /* ── 登入／註冊彈窗：每個造訪者打開網頁都會先看到這個，跟遊戲登入畫面一樣
-       自己打 Gmail（不用密碼），已核准才會自動關閉，其餘狀態一律停在這裡。
-       登入成功會把 Gmail 記在瀏覽器（localStorage），下次打開網頁自動幫忙代入、
+       自己打角色名稱（不用密碼），已核准才會自動關閉，其餘狀態一律停在這裡。
+       登入成功會把名字記在瀏覽器（localStorage），下次打開網頁自動幫忙代入、
        不用每次都重打一次。 ── */
-    var ACCESS_GATE_EMAIL_STORAGE_KEY = 'lylh_access_email';
+    var ACCESS_GATE_NAME_STORAGE_KEY = 'lylh_access_name';
 
     function switchAccessGateTab(tab) {
       var isLogin = tab === 'login';
@@ -5089,8 +5073,8 @@
       document.getElementById('access-gate-panel-register').classList.toggle('active', !isLogin);
     }
 
-    function rememberAccessGateEmail(email) {
-      try { window.localStorage.setItem(ACCESS_GATE_EMAIL_STORAGE_KEY, email); } catch (e) { /* 無痕模式等情況允許失敗 */ }
+    function rememberAccessGateName(name) {
+      try { window.localStorage.setItem(ACCESS_GATE_NAME_STORAGE_KEY, name); } catch (e) { /* 無痕模式等情況允許失敗 */ }
     }
 
     function renderAccessGateStatus(result) {
@@ -5098,10 +5082,12 @@
       statusEl.className = 'access-gate-status-box';
 
       if (result.status === '已核准') {
-        rememberAccessGateEmail(result.email);
+        rememberAccessGateName(result.name);
         currentAccessCategory = result.category || '幫眾';
-        currentAccessEmail = result.email;
-        currentAccessRoleName = result.roleName;
+        // 現在識別身分的就是角色名稱本身，兩個變數都放同一個值：
+        // 操作記錄那邊還是照舊分別帶入 actorEmail / actorRoleName。
+        currentAccessName = result.name;
+        currentAccessRoleName = result.name;
         applyAccessCategoryUI();
         document.getElementById('access-gate-modal-overlay').classList.add('hidden');
         return;
@@ -5121,20 +5107,16 @@
         statusEl.textContent = result.message;
       } else {
         statusEl.classList.add('access-gate-status-none');
-        statusEl.textContent = '這個 Gmail 還沒申請過，請切換到「註冊」分頁完成申請';
+        statusEl.textContent = '這個角色名稱還沒申請過，請切換到「註冊」分頁完成申請';
         switchAccessGateTab('register');
-        document.getElementById('access-gate-register-email-input').value = result.email || '';
+        document.getElementById('access-gate-role-input').value = result.name || '';
       }
     }
 
     function submitAccessGateLogin() {
-      var email = document.getElementById('access-gate-login-email-input').value.trim();
-      if (!email) {
-        showAlertModal('請輸入 Gmail');
-        return;
-      }
-      if (!/@gmail\.com$/i.test(email)) {
-        showAlertModal('輸入錯誤：請輸入 @gmail.com 結尾的信箱');
+      var name = document.getElementById('access-gate-login-name-input').value.trim();
+      if (!name) {
+        showAlertModal('請輸入角色名稱');
         return;
       }
       var btn = document.getElementById('access-gate-login-submit');
@@ -5153,21 +5135,12 @@
       }).withFailureHandler(function (err) {
         btn.disabled = false;
         showAlertModal('登入失敗：' + err.message);
-      }).checkAccessStatus(email);
+      }).checkAccessStatus(name);
     }
 
     function submitAccessGateRegister() {
-      var email = document.getElementById('access-gate-register-email-input').value.trim();
-      var roleName = document.getElementById('access-gate-role-input').value.trim();
-      if (!email) {
-        showAlertModal('請輸入 Gmail');
-        return;
-      }
-      if (!/@gmail\.com$/i.test(email)) {
-        showAlertModal('輸入錯誤：請輸入 @gmail.com 結尾的信箱');
-        return;
-      }
-      if (!roleName) {
+      var name = document.getElementById('access-gate-role-input').value.trim();
+      if (!name) {
         showAlertModal('請輸入角色名稱');
         return;
       }
@@ -5186,13 +5159,15 @@
           showAlertModal(res.message || '送出失敗');
           return;
         }
-        document.getElementById('access-gate-login-email-input').value = email;
+        document.getElementById('access-gate-login-name-input').value = name;
         switchAccessGateTab('login');
-        renderAccessGateStatus({ email: email, status: res.status });
+        // 走一次真正的登入，才拿得到類別（管理／文書／幫眾）。
+        // 直接拿 res 來畫的話，已核准的人會被當成「幫眾」而少掉權限。
+        submitAccessGateLogin();
       }).withFailureHandler(function (err) {
         btn.disabled = false;
         showAlertModal('送出失敗：' + err.message);
-      }).submitAccessRequest(email, roleName);
+      }).submitAccessRequest(name);
     }
 
     function initAccessGate() {
@@ -5200,7 +5175,7 @@
         console.log('local preview: 未連接 Google Apps Script，略過登入／註冊驗證');
         document.getElementById('access-gate-modal-overlay').classList.add('hidden');
         currentAccessCategory = '管理';
-        currentAccessEmail = '（本機預覽）';
+        currentAccessName = '（本機預覽）';
         currentAccessRoleName = '開發者';
         applyAccessCategoryUI();
         return;
@@ -5208,11 +5183,11 @@
 
       document.getElementById('access-gate-modal-overlay').classList.remove('hidden');
 
-      var rememberedEmail = '';
-      try { rememberedEmail = window.localStorage.getItem(ACCESS_GATE_EMAIL_STORAGE_KEY) || ''; } catch (e) { /* 無痕模式等情況忽略 */ }
+      var rememberedName = '';
+      try { rememberedName = window.localStorage.getItem(ACCESS_GATE_NAME_STORAGE_KEY) || ''; } catch (e) { /* 無痕模式等情況忽略 */ }
 
-      if (rememberedEmail) {
-        document.getElementById('access-gate-login-email-input').value = rememberedEmail;
+      if (rememberedName) {
+        document.getElementById('access-gate-login-name-input').value = rememberedName;
         submitAccessGateLogin();
       }
     }
