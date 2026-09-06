@@ -2453,7 +2453,7 @@
             </div>
             <div class="attendance-stat-box">
               <span class="attendance-stat-value" id="stat-temp-leave">0</span>
-              <span class="attendance-stat-label">臨時請假數</span>
+              <span class="attendance-stat-label">X 數</span>
             </div>
           </div>
           <div class="member-section-title">主要成員</div>
@@ -2832,7 +2832,9 @@
       });
     }
 
-    var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', '臨時請假'];
+    // 「X」原本叫「臨時請假」。資料庫存的就是這個字串，
+    // attendance_records 的 check 約束要一起改。
+    var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', 'X'];
 
     // 所有可切換的畫面，以及各畫面是否要用「一頁寬」樣式
     var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view', 'video-roster-view', 'battle-view'];
@@ -3327,12 +3329,12 @@
       }
     }
 
-    // 排表工具左側「請假」面板：顯示當天出勤系統標記為「請假／臨時請假」的人（右側小字顯示是哪一種）。
+    // 排表工具左側「請假」面板：顯示當天出勤系統標記為「請假／X」的人（右側小字顯示是哪一種）。
     // 這份是純顯示、不會被排表指派影響，所以只在切換日期／開啟排表時載入。
     function loadRosterLeaveList(date) {
       function render(records) {
         var leave = (records || [])
-          .filter(function (r) { return r.status && r.status !== '出勤'; }) // 請假＋臨時請假都算請假，不分
+          .filter(function (r) { return r.status && r.status !== '出勤'; }) // 請假＋X 都算沒出，不分
           .map(function (r) { return { name: r.name, job: r.job }; })        // 名字後面顯示職業
           .sort(compareByJob_);                                              // 按職業順序排序
         renderRosterSubstituteList('roster-leave-list', 'roster-leave-count', leave, '目前沒有人請假');
@@ -4716,7 +4718,7 @@
 
     function updateAttendanceSummary() {
       var rows = Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-row'));
-      var counts = { '出勤': 0, '請假': 0, '臨時請假': 0 };
+      var counts = { '出勤': 0, '請假': 0, 'X': 0 };
 
       rows.forEach(function (row) {
         var status = row.querySelector('.attendance-status').value;
@@ -4726,7 +4728,7 @@
       document.getElementById('stat-total').textContent = rows.length;
       document.getElementById('stat-present').textContent = counts['出勤'];
       document.getElementById('stat-leave').textContent = counts['請假'];
-      document.getElementById('stat-temp-leave').textContent = counts['臨時請假'];
+      document.getElementById('stat-temp-leave').textContent = counts['X'];
     }
 
     // 右側額外三個獨立窗格用的：算出某一區塊（主要／外援／試訓）裡，當天標記

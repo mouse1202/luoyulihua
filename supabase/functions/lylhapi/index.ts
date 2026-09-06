@@ -379,17 +379,17 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       statusMap[label + "|" + r.name] = r.status;
     });
     const labels = Object.keys(labelSet).sort();
-    const header = ["姓名", "職業", ...labels, "出勤數", "請假數", "臨時請假數"];
+    const header = ["姓名", "職業", ...labels, "出勤數", "請假數", "X數"];
     const lines = [header];
     members.forEach((m) => {
       const row: string[] = [m.name, m.job ?? ""];
-      const counts: Record<string, number> = { "出勤": 0, "請假": 0, "臨時請假": 0 };
+      const counts: Record<string, number> = { "出勤": 0, "請假": 0, "X": 0 };
       labels.forEach((label) => {
         const status = statusMap[label + "|" + m.name] || "出勤";
         row.push(status);
         if (status in counts) counts[status]++;
       });
-      row.push(String(counts["出勤"]), String(counts["請假"]), String(counts["臨時請假"]));
+      row.push(String(counts["出勤"]), String(counts["請假"]), String(counts["X"]));
       lines.push(row);
     });
     const csv = "﻿" + lines.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
