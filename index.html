@@ -174,8 +174,10 @@
       align-items: baseline;
       column-gap: 12px;
       row-gap: 6px;
-      /* 不貼齊右邊緣，留一段距離看起來才不會像被擠出去 */
-      padding-right: clamp(14px, 6vw, 76px);
+      /* 靠右對齊，但右邊要留一大段：底圖右側那個人物的頭大約在畫面
+         85% 之後，貼太右邊「戰績」會正好壓在他頭上。用 vw 讓這段留白
+         跟著視窗縮放，不同寬度都能閃開。 */
+      padding-right: clamp(16px, 14vw, 260px);
     }
     .nav .btn-row { width: auto; }
 
@@ -228,18 +230,21 @@
 
     /* 標語變長之後，18px 字加 4px 字距在手機上會撐到 436px、超出畫面寬度，
        膠囊兩端會被切掉。窄螢幕改小一號並收緊字距。 */
+    /* 導覽列往左讓開人物之後，可用寬度變窄，大約 750px 以下就排不下一行。
+       讓長標語自己佔一行，「影片上傳」「戰績」並排第二行；
+       換行後第二行開頭會冒出一個孤立的分隔點，一併拿掉。 */
+    @media (max-width: 820px) {
+      .nav .btn-row:first-child { width: 100%; justify-content: flex-end; }
+      .nav .btn-row:nth-child(2)::before { content: none; margin-right: 0; }
+    }
+
     @media (max-width: 600px) {
       .nav-btn {
         padding: 9px 12px;
         font-size: 14px;
         letter-spacing: 1px;
       }
-      /* 標語比另外兩個長很多，窄螢幕讓它自己佔一行，
-         「影片上傳」「戰績」才會乾淨地並排在第二行 */
-      .nav .btn-row:first-child { width: 100%; justify-content: flex-end; }
       .nav { column-gap: 8px; padding-right: 12px; }
-      /* 換行之後第二行的開頭會是分隔點，看起來像多打了一個字，拿掉 */
-      .nav .btn-row:nth-child(2)::before { content: none; margin-right: 0; }
     }
 
     @keyframes glow {
