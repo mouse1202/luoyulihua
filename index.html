@@ -1680,24 +1680,31 @@
     .bt-mvp-empty { opacity: .4; }
 
     /* 左右對比條 */
+    /* 對稱 VS 版面：[我方數字][我方長條→][項目][←對方長條][對方數字]
+       標籤真的置中，左右兩側才會各自看起來都有標示。 */
+    .bt-cmp-head, .bt-cmp-row {
+      display: grid;
+      grid-template-columns: minmax(96px, 1.1fr) 1fr minmax(64px, 88px) 1fr minmax(96px, 1.1fr);
+      gap: 8px; align-items: center;
+    }
     .bt-cmp-head {
-      display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 8px;
       text-align: center; font-weight: 700; color: #FFFFEF;
       padding-bottom: 6px; letter-spacing: 1px; font-size: 13px;
     }
-    .bt-cmp-row {
-      display: grid; grid-template-columns: 90px 1fr 78px 90px; gap: 8px;
-      align-items: center; padding: 6px 0; color: #FFFFEF; font-size: 13px;
-    }
-    .bt-cmp-v { text-align: center; }
+    /* 表頭只有三格，讓公會名各自跨越自己那一側的兩欄 */
+    .bt-cmp-head > span:nth-child(1) { grid-column: 1 / 3; }
+    .bt-cmp-head > span:nth-child(2) { grid-column: 3; }
+    .bt-cmp-head > span:nth-child(3) { grid-column: 4 / 6; }
+    .bt-cmp-row { padding: 6px 0; color: #FFFFEF; font-size: 13px; }
+    .bt-cmp-v { text-align: center; white-space: nowrap; }
     .bt-cmp-k { text-align: center; color: #cfcfcf; font-size: 12px; }
+    .bt-inline-k { font-style: normal; color: #9a9a9a; font-size: 11px; margin: 0 4px; }
     .bt-win { color: #d4af37; font-weight: 700; }
-    .bt-cmp-bar { display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: #1a0409; }
-    .bt-bar-my  { background: #6fa8dc; }
-    .bt-bar-opp { background: #ef8f8f; }
-    .bt-cmp-bar2 { justify-content: center; background: transparent; }
-    .bt-cmp-bar2 .bt-bar-l { margin-left: auto; border-radius: 999px 0 0 999px; }
-    .bt-cmp-bar2 .bt-bar-r { margin-right: auto; border-radius: 0 999px 999px 0; }
+    .bt-cmp-bar { display: flex; height: 9px; border-radius: 999px; background: #1a0409; overflow: hidden; }
+    .bt-cmp-bar > i { display: block; height: 100%; }
+    /* 左側長條從右邊往左長、右側從左往右長，兩條在中間標籤處會合 */
+    .bt-bar-left  { justify-content: flex-end; }
+    .bt-bar-right { justify-content: flex-start; }
 
     /* 名次徽章與職業標籤 */
     .bt-rank {
@@ -5806,22 +5813,34 @@
         '<div class="bt-sec-title">📊 雙方合計</div>' + compareBars(b, my, opp);
     }
 
-    // 雙方合計：中間放項目名，左右各一條長度按比例的橫條
+    /* 對比列共用版面：標籤置中，兩側各有自己的長條與數字，
+       兩邊都看得出這一列在講什麼。長條長度取兩者的較大值當滿格。 */
+    function cmpRow(labelHtml, a, c, fmtA, fmtC, clrA, clrC, scaleMax) {
+      // 沒指定 scaleMax 就用這一列的最大值（各項目量級差很多時才合理）；
+      // 同一種單位的表（例如陣容人數）要傳整張表的最大值，長度才跨列可比。
+      var m = scaleMax || Math.max(a, c) || 1;
+      return '<div class="bt-cmp-row">' +
+        '<span class="bt-cmp-v ' + (a >= c ? 'bt-win' : '') + '">' + fmtA + '</span>' +
+        '<span class="bt-cmp-bar bt-bar-left"><i style="width:' + (a / m * 100) + '%;background:' + clrA + '"></i></span>' +
+        '<span class="bt-cmp-k">' + labelHtml + '</span>' +
+        '<span class="bt-cmp-bar bt-bar-right"><i style="width:' + (c / m * 100) + '%;background:' + clrC + '"></i></span>' +
+        '<span class="bt-cmp-v ' + (c >= a ? 'bt-win' : '') + '">' + fmtC + '</span>' +
+      '</div>';
+    }
+
+    function cmpHead(b, extraMy, extraOpp) {
+      return '<div class="bt-cmp-head">' +
+        '<span class="bt-my">' + escapeBattleHtml(b.myGuild) + (extraMy || '') + '</span>' +
+        '<span>項目</span>' +
+        '<span class="bt-opp">' + escapeBattleHtml(b.oppGuild) + (extraOpp || '') + '</span></div>';
+    }
+
+    // 雙方合計
     function compareBars(b, my, opp) {
-      return '<div class="bt-cmp">' +
-        '<div class="bt-cmp-head"><span class="bt-my">' + escapeBattleHtml(b.myGuild) + '</span>' +
-          '<span>項目</span><span class="bt-opp">' + escapeBattleHtml(b.oppGuild) + '</span></div>' +
+      return '<div class="bt-cmp">' + cmpHead(b) +
         BATTLE_KEYS.map(function (f) {
           var a = battleSum(my, f.k), c = battleSum(opp, f.k);
-          var tot = a + c || 1;
-          var ap = Math.round(a / tot * 100), cp = 100 - ap;
-          return '<div class="bt-cmp-row">' +
-            '<span class="bt-cmp-v ' + (a >= c ? 'bt-win' : '') + '">' + battleFmt(a, f.k) + '</span>' +
-            '<span class="bt-cmp-bar"><i class="bt-bar-my" style="width:' + ap + '%"></i>' +
-              '<i class="bt-bar-opp" style="width:' + cp + '%"></i></span>' +
-            '<span class="bt-cmp-k">' + f.zh + '</span>' +
-            '<span class="bt-cmp-v ' + (c >= a ? 'bt-win' : '') + '">' + battleFmt(c, f.k) + '</span>' +
-          '</div>';
+          return cmpRow(f.zh, a, c, battleFmt(a, f.k), battleFmt(c, f.k), '#6fa8dc', '#ef8f8f');
         }).join('') + '</div>';
     }
 
@@ -5873,26 +5892,24 @@
       var jobs = JOB_ORDER.filter(function (j) {
         return my.some(function (p) { return p.job === j; }) || opp.some(function (p) { return p.job === j; });
       });
-      var maxN = Math.max(1, Math.max.apply(null, jobs.map(function (j) {
+      if (!jobs.length) return '<div class="access-admin-empty">沒有職業資料</div>';
+      // 所有職業裡人數最多的當滿格，長條長度才跨列可比
+      var maxN = Math.max.apply(null, jobs.map(function (j) {
         return Math.max(my.filter(function (p) { return p.job === j; }).length,
                         opp.filter(function (p) { return p.job === j; }).length);
-      })));
+      })) || 1;
       return '<div class="bt-sec-title">⚔ 陣容對比</div>' +
-        '<div class="bt-cmp-head"><span class="bt-my">' + escapeBattleHtml(b.myGuild) + '（' + my.length + '）</span>' +
-          '<span>職業</span><span class="bt-opp">' + escapeBattleHtml(b.oppGuild) + '（' + opp.length + '）</span></div>' +
+        cmpHead(b, '（' + my.length + '）', '（' + opp.length + '）') +
         jobs.map(function (j) {
           var a = my.filter(function (p) { return p.job === j; }).length;
           var c = opp.filter(function (p) { return p.job === j; }).length;
           var clr = JOB_CLR[j] || '#888';
-          return '<div class="bt-cmp-row">' +
-            '<span class="bt-cmp-v">' + (a || '—') + '</span>' +
-            '<span class="bt-cmp-bar bt-cmp-bar2">' +
-              '<i class="bt-bar-l" style="width:' + (a / maxN * 50) + '%;background:' + clr + '"></i>' +
-              '<i class="bt-bar-r" style="width:' + (c / maxN * 50) + '%;background:' + clr + '99"></i>' +
-            '</span>' +
-            '<span class="bt-cmp-k">' + jobChip(j) + '</span>' +
-            '<span class="bt-cmp-v">' + (c || '—') + '</span>' +
-          '</div>';
+          // 兩側都帶職業名（小字），中間放彩色職業籤
+          return cmpRow(jobChip(j),
+            a, c,
+            '<i class="bt-inline-k">' + j + '</i>' + (a || '—'),
+            (c || '—') + '<i class="bt-inline-k">' + j + '</i>',
+            clr, clr + '99', maxN);
         }).join('');
     }
 
@@ -5980,21 +5997,15 @@
     /* ── 分頁：數據對比（我方 vs 對方，每人平均） ── */
 
     function renderStatCompare(b, my, opp) {
-      return '<div class="bt-sec-title">📊 數據對比（每人平均）</div>' +
-        '<div class="bt-cmp-head"><span class="bt-my">' + escapeBattleHtml(b.myGuild) + '</span>' +
-          '<span>項目</span><span class="bt-opp">' + escapeBattleHtml(b.oppGuild) + '</span></div>' +
+      return '<div class="bt-sec-title">📊 數據對比（每人平均）</div>' + cmpHead(b) +
         BATTLE_KEYS.map(function (f) {
           var a = my.length ? battleSum(my, f.k) / my.length : 0;
           var c = opp.length ? battleSum(opp, f.k) / opp.length : 0;
-          var tot = a + c || 1;
-          var ap = Math.round(a / tot * 100);
-          return '<div class="bt-cmp-row">' +
-            '<span class="bt-cmp-v ' + (a >= c ? 'bt-win' : '') + '">' + battleFmt(a, f.k) + '</span>' +
-            '<span class="bt-cmp-bar"><i class="bt-bar-my" style="width:' + ap + '%"></i>' +
-              '<i class="bt-bar-opp" style="width:' + (100 - ap) + '%"></i></span>' +
-            '<span class="bt-cmp-k">' + f.zh + '</span>' +
-            '<span class="bt-cmp-v ' + (c >= a ? 'bt-win' : '') + '">' + battleFmt(c, f.k) + '</span>' +
-          '</div>';
+          // 兩側的數字都帶上項目名，左右各看各的也知道是哪一項
+          return cmpRow(f.zh, a, c,
+            '<i class="bt-inline-k">' + f.zh + '</i>' + battleFmt(a, f.k),
+            battleFmt(c, f.k) + '<i class="bt-inline-k">' + f.zh + '</i>',
+            '#6fa8dc', '#ef8f8f');
         }).join('');
     }
 
