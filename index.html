@@ -1448,20 +1448,6 @@
       padding: 30px 0;
     }
 
-    .access-admin-owner-tag {
-      color: #ffd54f;
-    }
-
-    .access-admin-owner-badge {
-      color: #ffd54f;
-      border: 1px solid #ffd54f;
-      border-radius: 999px;
-      padding: 4px 12px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 1px;
-    }
-
     /* ── 後台「操作記錄」列表 ── */
     .activity-log-list {
       display: flex;
@@ -4833,27 +4819,21 @@
           var statusLabel = ACCESS_STATUS_LABELS[r.status] || r.status;
           // 名字會被塞進 onclick 的字串裡，單引號和反斜線都要跳脫
           var safeName = String(r.name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-          var actionsHtml = '';
-          if (r.isOwner) {
-            actionsHtml = '<span class="access-admin-owner-badge">擁有者</span>';
-          } else if (r.status === '已核准') {
-            actionsHtml = '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="deleteAccessRequestFromAdmin(\'' + safeName + '\')">剔除</button>';
-          } else {
-            actionsHtml =
-              '<button type="button" class="access-admin-btn access-admin-btn-approve" onclick="setAccessRequestFromAdmin(\'' + safeName + '\', \'已核准\')">核准</button>' +
+          // 擁有者寫死在 Edge Function 裡，不會出現在這份清單，所以這裡沒有他的分支
+          var actionsHtml = r.status === '已核准'
+            ? '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="deleteAccessRequestFromAdmin(\'' + safeName + '\')">剔除</button>'
+            : '<button type="button" class="access-admin-btn access-admin-btn-approve" onclick="setAccessRequestFromAdmin(\'' + safeName + '\', \'已核准\')">核准</button>' +
               '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="deleteAccessRequestFromAdmin(\'' + safeName + '\')">拒絕</button>';
-          }
 
-          var categoryHtml = r.isOwner
-            ? '<span>管理</span>'
-            : '<select class="access-admin-category-select" onchange="setAccessRequestCategoryFromAdmin(\'' + safeName + '\', this.value)">' +
-              '<option value="幫眾"' + (r.category === '幫眾' ? ' selected' : '') + '>幫眾</option>' +
-              '<option value="文書"' + (r.category === '文書' ? ' selected' : '') + '>文書</option>' +
-              '<option value="管理"' + (r.category === '管理' ? ' selected' : '') + '>管理</option>' +
-              '</select>';
+          var categoryHtml =
+            '<select class="access-admin-category-select" onchange="setAccessRequestCategoryFromAdmin(\'' + safeName + '\', this.value)">' +
+            '<option value="幫眾"' + (r.category === '幫眾' ? ' selected' : '') + '>幫眾</option>' +
+            '<option value="文書"' + (r.category === '文書' ? ' selected' : '') + '>文書</option>' +
+            '<option value="管理"' + (r.category === '管理' ? ' selected' : '') + '>管理</option>' +
+            '</select>';
 
           return '<div class="access-admin-row">' +
-            '<span class="access-admin-col-name">' + r.name + (r.isOwner ? ' <span class="access-admin-owner-tag">★</span>' : '') + '</span>' +
+            '<span class="access-admin-col-name">' + r.name + '</span>' +
             '<span class="access-admin-col-time">' + toTaipeiTime(r.time) + '</span>' +
             '<span class="access-admin-col-status ' + statusClass + '">' + statusLabel + '</span>' +
             '<span class="access-admin-col-category">' + categoryHtml + '</span>' +

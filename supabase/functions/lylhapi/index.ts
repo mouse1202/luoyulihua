@@ -15,7 +15,12 @@ const db = createClient(
 
 const GUILD_NAME = "落雨梨花";
 
-// 登入識別是「角色名稱」，不是 Gmail。這一位永遠是管理、不能被剔除或改類別。
+// 登入識別是「角色名稱」，不是 Gmail。
+//
+// 擁有者完全寫死在這裡，access_requests 不會有他的資料列：
+// 登入直接放行成「管理」，也不會出現在審核申請清單上。
+// 這個名字是保留字 —— 別人拿去註冊不會建立紀錄，
+// 否則會產生一筆管理員在清單上看不到、也刪不掉的冒名資料。
 const OWNER_NAME = "鼠仔丶";
 
 const cors = {
@@ -128,18 +133,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   checkAccessStatus: async (nameIn: string) => {
     const name = normName(nameIn);
     if (!name) return { name, status: "none", message: "請輸入角色名稱" };
-    const now = new Date().toISOString();
-    if (name === OWNER_NAME) {
-      const { data } = await db.from("access_requests").select("*").eq("name", OWNER_NAME).maybeSingle();
-      if (!data) {
-        await chk(db.from("access_requests").insert({ name: OWNER_NAME, requested_at: now, status: "已核准", category: "管理" }).select("name"));
-        return { name: OWNER_NAME, status: "已核准", category: "管理", isOwner: true };
-      }
-      if (data.status !== "已核准" || data.category !== "管理") {
-        await chk(db.from("access_requests").update({ status: "已核准", category: "管理" }).eq("name", OWNER_NAME).select("name"));
-      }
-      return { name: data.name, status: "已核准", category: "管理", isOwner: true };
-    }
+    // 擁有者不查資料庫、也不寫資料庫，直接放行
+    if (name === OWNER_NAME) return { name: OWNER_NAME, status: "已核准", category: "管理", isOwner: true };
     const { data } = await db.from("access_requests").select("*").eq("name", name).maybeSingle();
     if (!data) return { name, status: "none" };
     return { name: data.name, status: data.status, category: data.category || "幫眾", isOwner: false };
@@ -147,6 +142,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   submitAccessRequest: async (nameIn: string) => {
     const name = normName(nameIn);
     if (!name) return { success: false, message: "請輸入角色名稱" };
+    // 擁有者的名字是保留字，不建立申請紀錄
+    if (name === OWNER_NAME) return { success: true, status: "已核准" };
     const now = new Date().toISOString();
     const { data } = await db.from("access_requests").select("status").eq("name", name).maybeSingle();
     if (!data) {
@@ -162,6 +159,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   addAccessMember: async (nameIn: string, categoryIn: string) => {
     const name = normName(nameIn);
     if (!name) return { success: false, message: "請輸入角色名稱" };
+    // 擁有者本來就是最高權限，不需要、也不該被加進清冊
+    if (name === OWNER_NAME) return { success: false, message: "這個名字是擁有者，本來就有最高權限" };
     const category = (categoryIn === "管理" || categoryIn === "文書") ? categoryIn : "幫眾";
     const now = new Date().toISOString();
     await chk(db.from("access_requests").upsert({ name, requested_at: now, status: "已核准", category }, { onConflict: "name" }).select("name"));
@@ -169,14 +168,15 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   },
   getAllAccessRequests: async () => {
     const { data } = await db.from("access_requests").select("*").order("requested_at", { ascending: true });
-    return (data ?? []).map((r) => ({
+    // 擁有者不列在清冊上。理論上不會有這筆，過濾是為了舊資料。
+    return (data ?? []).filter((r) => r.name !== OWNER_NAME).map((r) => ({
       name: r.name, time: r.requested_at ? String(r.requested_at).slice(0, 16).replace("T", " ") : "",
-      status: r.status, category: r.category || "幫眾", isOwner: r.name === OWNER_NAME,
+      status: r.status, category: r.category || "幫眾",
     }));
   },
   setAccessRequestStatus: async (nameIn: string, status: string) => {
     const name = normName(nameIn);
-    if (name === OWNER_NAME && status !== "已核准") return { success: false, message: "不能剔除擁有者" };
+    if (name === OWNER_NAME) return { success: false, message: "擁有者不在審核清冊裡，不用也不能改" };
     const { data } = await db.from("access_requests").select("name").eq("name", name).maybeSingle();
     if (!data) return { success: false, message: "找不到這個申請紀錄" };
     await chk(db.from("access_requests").update({ status }).eq("name", name).select("name"));
