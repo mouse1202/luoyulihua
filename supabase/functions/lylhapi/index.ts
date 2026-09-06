@@ -606,6 +606,64 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     return { success: true };
   },
 
+  // 趨勢與最高紀錄：都要跨場次，所以一次撈回來，前端不用打兩趟。
+  // trend  = 每一場我方的合計（依日期由舊到新）
+  // records = 每個項目的單場最佳（誰、哪一場、多少）
+  getBattleHistory: async (opts: any) => {
+    const from = String(opts?.from ?? "").trim();
+    const to = String(opts?.to ?? "").trim();
+    const type = String(opts?.type ?? "").trim();
+
+    let q = db.from("battles").select("*");
+    if (from) q = q.gte("battle_date", from);
+    if (to) q = q.lte("battle_date", to);
+    if (type) q = q.eq("battle_type", type);
+    const { data: battles } = await q;
+    const list = (battles ?? []).sort((a, b) =>
+      (a.battle_date + a.battle_time) < (b.battle_date + b.battle_time) ? -1 : 1);
+    if (list.length === 0) return { trend: [], records: [] };
+
+    const ids = list.map((b) => b.id);
+    const { data: ps } = await db.from("battle_players").select("*").in("battle_id", ids).eq("side", "my");
+
+    const KEYS = ["kills", "assists", "pvp", "bld", "heal", "tank", "heavy", "feather", "bone", "res"];
+    const byBattle: Record<string, any> = {};
+    list.forEach((b) => {
+      byBattle[b.id] = { people: 0, ...Object.fromEntries(KEYS.map((k) => [k, 0])) };
+    });
+
+    // 單場最佳：同時記下是誰、哪一場
+    const best: Record<string, any> = {};
+    KEYS.forEach((k) => { best[k] = { value: 0, name: "", job: "", date: "", opp: "" }; });
+    const dateOf: Record<string, any> = {};
+    list.forEach((b) => { dateOf[b.id] = b; });
+
+    (ps ?? []).forEach((p) => {
+      const t = byBattle[p.battle_id];
+      if (t) {
+        t.people += 1;
+        KEYS.forEach((k) => { t[k] += Number((p as any)[k]) || 0; });
+      }
+      KEYS.forEach((k) => {
+        const v = Number((p as any)[k]) || 0;
+        if (v > best[k].value) {
+          const b = dateOf[p.battle_id];
+          best[k] = { value: v, name: p.name, job: p.job, date: b ? b.battle_date : "", opp: b ? b.opp_guild : "" };
+        }
+      });
+    });
+
+    return {
+      trend: list.map((b) => ({
+        id: b.id, date: b.battle_date, time: b.battle_time, type: b.battle_type,
+        oppGuild: b.opp_guild, result: b.result,
+        myKills: b.my_kills, oppKills: b.opp_kills,
+        totals: byBattle[b.id],
+      })),
+      records: KEYS.map((k) => ({ key: k, ...best[k] })).filter((r) => r.value > 0),
+    };
+  },
+
   // 累積統計：把區間內每個人的場次與各項數據加總，只算我方。
   getBattleAggregate: async (opts: any) => {
     const from = String(opts?.from ?? "").trim();

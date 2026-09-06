@@ -1808,6 +1808,91 @@
     .bt-rm-bar { display: block; height: 7px; border-radius: 999px; background: #1a0409; overflow: hidden; }
     .bt-rm-bar > i { display: block; height: 100%; }
 
+    .bt-clickable { cursor: pointer; }
+    .bt-clickable:hover { background: rgba(212,175,55,.07); }
+
+    /* 個人詳細視窗 */
+    .bt-pm-box { max-width: 560px; }
+    .bt-pm-dgrid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+      gap: 6px; margin-bottom: 12px;
+    }
+    .bt-pm-d {
+      display: flex; flex-direction: column; gap: 2px;
+      border: 1px solid #2a0a12; border-radius: 6px; padding: 6px 8px;
+      color: #cfcfcf; font-size: 11px;
+    }
+    .bt-pm-d b { color: #FFFFEF; font-size: 13px; }
+    .bt-pm-legend {
+      display: flex; align-items: center; gap: 6px;
+      color: #9a9a9a; font-size: 11px; margin-bottom: 6px;
+    }
+    .bt-pm-legend i { display: inline-block; width: 14px; height: 7px; border-radius: 2px; }
+    .bt-pm-list { display: flex; flex-direction: column; gap: 5px; }
+    .bt-pm-row {
+      display: grid; grid-template-columns: 48px 1fr 82px 82px; gap: 8px;
+      align-items: center; color: #FFFFEF; font-size: 12px;
+    }
+    .bt-pm-row > span:first-child { color: #cfcfcf; }
+    .bt-pm-v { text-align: right; }
+    .bt-pm-a { text-align: right; opacity: .5; }
+    /* 本人與平均各一條，疊在同一格裡上下排 */
+    .bt-pm-bars { display: flex; flex-direction: column; gap: 2px; }
+    .bt-pm-bars > i { display: block; height: 5px; border-radius: 999px; }
+    .bt-pm-avg { background: #5a5a5a; }
+
+    /* 各職業平均 */
+    .bt-jrow {
+      display: grid; grid-template-columns: 74px 50px repeat(10, minmax(62px, 1fr));
+      gap: 6px; align-items: center; padding: 6px 8px;
+      border-bottom: 1px solid #2a0a12; color: #FFFFEF; font-size: 12.5px; min-width: 860px;
+    }
+    .bt-jrow.bt-head { border-bottom: 1px solid #6B1023; font-weight: 700; color: #d4af37; }
+
+    /* 自選對比 */
+    .bt-pick { display: flex; flex-direction: column; gap: 4px; color: #FFFFEF; font-size: 12px; }
+    .bt-pick select { min-width: 200px; max-width: 260px; }
+
+    /* 趨勢 */
+    .bt-trend-chart {
+      position: relative; border: 1px solid #6B1023; border-radius: 8px;
+      background: #0A0A0A; padding: 8px; margin: 10px 0 14px;
+    }
+    .bt-trend-chart svg { width: 100%; height: 130px; display: block; }
+    .bt-trend-max {
+      position: absolute; top: 6px; right: 10px;
+      color: #d4af37; font-size: 11px; opacity: .8;
+    }
+    .bt-trend-row {
+      display: grid; grid-template-columns: 1.3fr .7fr 1.4fr .6fr .6fr 1fr;
+      gap: 8px; align-items: center; padding: 8px 10px;
+      border: 1px solid #2a0a12; border-radius: 6px; margin-bottom: 6px;
+      color: #FFFFEF; font-size: 12.5px;
+    }
+    .bt-trend-head {
+      border: 0; color: #d4af37; font-weight: 700; padding-bottom: 2px; margin-bottom: 2px;
+    }
+
+    /* 最高紀錄 */
+    .bt-rec-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px;
+    }
+    .bt-rec {
+      display: flex; flex-direction: column; gap: 3px;
+      border: 1px solid #6B1023; border-radius: 8px; background: #0A0A0A;
+      padding: 10px 12px; color: #FFFFEF;
+    }
+    .bt-rec-k { color: #d4af37; font-size: 12px; letter-spacing: 1px; }
+    .bt-rec-v { font-size: 17px; font-weight: 700; }
+    .bt-rec-who { font-size: 12.5px; }
+    .bt-rec-when { font-size: 11px; opacity: .55; }
+
+    @media (max-width: 700px) {
+      .bt-pm-row { grid-template-columns: 42px 1fr 66px; }
+      .bt-pm-a { display: none; }
+      .bt-trend-row { grid-template-columns: 1fr 1fr; font-size: 12px; }
+    }
+
     @media (max-width: 700px) {
       .bt-cmp-row { grid-template-columns: 66px 1fr 60px 66px; font-size: 12px; }
       .bt-cmp-head { font-size: 12px; }
@@ -1988,7 +2073,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory'];
 
   var JOB_COLORS = { '鐵衣':'e69138','血河':'cc0000','神相':'6fa8dc','素問':'f4cccc','九靈':'d9d2e9','碎夢':'4dd0e1','龍吟':'93c47d','玄機':'ffe599','潮光':'3c78d8' };
   var GROUP_BANNER = { '團一進攻':{bg:'1c4587',fg:'ffffff'}, '團二進攻':{bg:'990000',fg:'ffffff'}, '防守團':{bg:'f1c232',fg:'000000'} };
@@ -2544,6 +2629,11 @@
                 </select>
               </label>
               <button type="button" class="access-admin-btn access-admin-btn-approve" onclick="loadBattleAggregate()">查詢</button>
+            </div>
+            <div class="bt-tabs" id="agg-tabs">
+              <button type="button" class="bt-tab on" id="aggtab-rank" onclick="setAggTab('rank')">📋 個人累積</button>
+              <button type="button" class="bt-tab" id="aggtab-trend" onclick="setAggTab('trend')">📈 趨勢</button>
+              <button type="button" class="bt-tab" id="aggtab-record" onclick="setAggTab('record')">🏆 最高紀錄</button>
             </div>
             <div id="battle-agg"></div>
           </div>
@@ -5846,6 +5936,205 @@
       });
     }
 
+    /* ── 戰績共用狀態 ──
+       之前改寫常數區塊時把這幾個宣告一起刪掉了。有賦值的路徑會被隱式建成全域，
+       所以大多數功能照常，但「只讀取」的地方（例如切到累積統計時讀 battleAggCache）
+       會直接丟 ReferenceError。 */
+    var battleCards = [];          // 上傳中、還沒送出的 CSV
+    var battleCardSeq = 0;
+    var battleSort = { key: 'pvp', dir: -1 };
+    var aggSort = { key: 'games', dir: -1 };
+    var battleDetailCache = null;
+    var battleAggCache = null;
+
+    /* ── 衍生指標 ──
+       這幾項不在 CSV 裡，是算出來的。擊助率與玩傷佔比要跟同一邊的總和比，
+       所以計算時要把整邊的人一起傳進來。 */
+
+    var DERIVED_KEYS = [
+      { k: 'ka',         zh: '擊助',     w: false, pct: false },
+      { k: 'kaPct',      zh: '擊助率',   w: false, pct: true  },
+      { k: 'pvpPct',     zh: '玩傷佔比', w: false, pct: true  },
+      { k: 'killEff',    zh: '擊殺效率', w: true,  pct: false },
+      { k: 'netHeal',    zh: '淨奶量',   w: true,  pct: false },
+      { k: 'rescueDiff', zh: '救援差',   w: false, pct: false }
+    ];
+
+    function derivedOf(p, sideList) {
+      var sum = function (k) { return battleSum(sideList, k); };
+      var kaTotal = sum('kills') + sum('assists');
+      var pvpTotal = sum('pvp');
+      return {
+        ka:         p.kills + p.assists,
+        kaPct:      kaTotal ? (p.kills + p.assists) / kaTotal : 0,
+        pvpPct:     pvpTotal ? p.pvp / pvpTotal : 0,
+        killEff:    p.kills > 0 ? p.pvp / p.kills : 0,   // 每一次擊敗換算多少玩傷
+        netHeal:    p.heal - p.tank,                      // 治療扣掉自己承的傷
+        rescueDiff: p.feather - p.heavy                   // 救起來的減掉被重傷的
+      };
+    }
+
+    function derivedFmt(v, d) {
+      var n = Number(v) || 0;
+      if (d.pct) return (n * 100).toFixed(1) + '%';
+      if (!n) return '<span class="bt-dash">—</span>';
+      var r = Math.round(n).toLocaleString('en-US');
+      return d.w ? r + '萬' : r;
+    }
+
+    /* ── 個人詳細視窗 ──
+       點出戰紀錄或熱力圖任一列都會打開，比對象是同一邊的平均。 */
+
+    // 用控制字元當分隔，角色名稱不可能包含它
+    var SEP = String.fromCharCode(1);
+    var playerModalName = '';
+
+    function openPlayerModal(side, name) {
+      playerModalName = side + SEP + name;
+      renderBattleDetail();
+    }
+    // 用事件委派開個人視窗：名字放在 data 屬性裡，
+    // 不必把它塞進 onclick 字串，也就沒有跳脫問題。
+    document.addEventListener('click', function (e) {
+      var row = e.target.closest ? e.target.closest('.bt-clickable') : null;
+      if (row && row.dataset.name) openPlayerModal(row.dataset.side, row.dataset.name);
+    });
+
+    function closePlayerModal() {
+      playerModalName = '';
+      renderBattleDetail();
+    }
+
+    function playerModalHtml() {
+      if (!playerModalName) return '';
+      var parts = playerModalName.split(SEP);
+      var side = parts[0], name = parts[1];
+      var sideList = battleDetailCache.players.filter(function (p) { return p.side === side; });
+      var p = sideList.filter(function (x) { return x.name === name; })[0];
+      if (!p) return '';
+
+      var avg = {};
+      BATTLE_KEYS.forEach(function (f) { avg[f.k] = battleSum(sideList, f.k) / (sideList.length || 1); });
+      var d = derivedOf(p, sideList);
+      var clr = JOB_CLR[p.job] || '#d4af37';
+
+      // 每一項跟同邊平均比：長條以「本人與平均的較大者」為滿格
+      var rows = BATTLE_KEYS.map(function (f) {
+        var mine = Number(p[f.k]) || 0, mean = avg[f.k];
+        var m = Math.max(mine, mean) || 1;
+        return '<div class="bt-pm-row"><span>' + f.zh + '</span>' +
+          '<span class="bt-pm-bars">' +
+            '<i class="bt-pm-me" style="width:' + (mine / m * 100).toFixed(1) + '%;background:' + clr + '"></i>' +
+            '<i class="bt-pm-avg" style="width:' + (mean / m * 100).toFixed(1) + '%"></i>' +
+          '</span>' +
+          '<span class="bt-pm-v">' + battleFmt(mine, f.k) + '</span>' +
+          '<span class="bt-pm-a">' + battleFmt(mean, f.k) + '</span></div>';
+      }).join('');
+
+      var derived = DERIVED_KEYS.map(function (dk) {
+        return '<div class="bt-pm-d"><span>' + dk.zh + '</span><b>' + derivedFmt(d[dk.k], dk) + '</b></div>';
+      }).join('');
+
+      return '<div class="modal-overlay bt-radar-modal" onclick="closePlayerModal()">' +
+        '<div class="modal-box bt-pm-box" onclick="event.stopPropagation()">' +
+          '<div class="bt-rm-head">' + jobChip(p.job) +
+            '<span class="modal-title">' + escapeBattleHtml(p.name) + '</span>' +
+            (side === 'my' ? rosterTag(p.rosterCategory) : '') +
+            '<button type="button" class="bt-rm-close" onclick="closePlayerModal()">×</button></div>' +
+          '<div class="bt-pm-dgrid">' + derived + '</div>' +
+          '<div class="bt-pm-legend"><i class="bt-pm-me" style="background:' + clr + '"></i>本人' +
+            '<i class="bt-pm-avg"></i>同邊平均</div>' +
+          '<div class="bt-pm-list">' + rows + '</div>' +
+        '</div></div>';
+    }
+
+    /* ── 分頁：各職業平均 ── */
+
+    function renderJobAvg(b) {
+      var list = battleFiltered(battleSide);
+      var jobs = JOB_ORDER.filter(function (j) { return list.some(function (p) { return p.job === j; }); });
+      if (!jobs.length) return '<div class="access-admin-empty">這一邊沒有資料</div>';
+      var max = {};
+      BATTLE_KEYS.forEach(function (f) {
+        max[f.k] = Math.max.apply(null, jobs.map(function (j) {
+          var ps = list.filter(function (p) { return p.job === j; });
+          return battleSum(ps, f.k) / ps.length;
+        })) || 1;
+      });
+      return '<div class="bt-sec-title">✦ 各職業平均（每人）</div>' +
+        '<div class="bt-table"><div class="bt-jrow bt-head"><span>職業</span><span>人數</span>' +
+        BATTLE_KEYS.map(function (f) { return '<span>' + f.zh + '</span>'; }).join('') + '</div>' +
+        jobs.map(function (j) {
+          var ps = list.filter(function (p) { return p.job === j; });
+          return '<div class="bt-jrow"><span>' + jobChip(j) + '</span><span>' + ps.length + '</span>' +
+            BATTLE_KEYS.map(function (f) {
+              var v = battleSum(ps, f.k) / ps.length;
+              return '<span class="bt-cell" style="background:rgba(212,175,55,' +
+                (v / max[f.k] * 0.6).toFixed(3) + ')">' + battleFmt(v, f.k) + '</span>';
+            }).join('') + '</div>';
+        }).join('') + '</div>';
+    }
+
+    /* ── 分頁：自選對比 ──
+       挑兩個人（可跨陣營）並排看，含衍生指標。 */
+
+    var pickA = '', pickB = '';
+
+    function setPick(which, val) {
+      if (which === 'a') pickA = val; else pickB = val;
+      renderBattleDetail();
+    }
+
+    function renderPick(b) {
+      var all = battleDetailCache.players;
+      function opts(cur) {
+        return '<option value="">—</option>' + all.map(function (p) {
+          var v = p.side + SEP + p.name;
+          return '<option value="' + escapeBattleHtml(v) + '"' + (v === cur ? ' selected' : '') + '>' +
+            (p.side === 'my' ? '🔵 ' : '🔴 ') + escapeBattleHtml(p.name) + '（' + escapeBattleHtml(p.job) + '）</option>';
+        }).join('');
+      }
+      var find = function (v) {
+        if (!v) return null;
+        var s = v.split(SEP);
+        return all.filter(function (p) { return p.side === s[0] && p.name === s[1]; })[0] || null;
+      };
+      var A = find(pickA), B = find(pickB);
+
+      var head = '<div class="bt-sec-title">🔀 自選對比</div>' +
+        '<div class="bt-filter">' +
+          '<label class="bt-pick">左<select class="modal-input" onchange="setPick(\'a\',this.value)">' + opts(pickA) + '</select></label>' +
+          '<label class="bt-pick">右<select class="modal-input" onchange="setPick(\'b\',this.value)">' + opts(pickB) + '</select></label>' +
+        '</div>';
+
+      if (!A || !B) return head + '<div class="access-admin-empty">左右各挑一個人就會出現對比</div>';
+
+      var la = all.filter(function (p) { return p.side === A.side; });
+      var lb = all.filter(function (p) { return p.side === B.side; });
+      var da = derivedOf(A, la), dbv = derivedOf(B, lb);
+
+      var basic = BATTLE_KEYS.map(function (f) {
+        var x = Number(A[f.k]) || 0, y = Number(B[f.k]) || 0;
+        return cmpRow(f.zh, x, y, battleFmt(x, f.k), battleFmt(y, f.k),
+          JOB_CLR[A.job] || '#6fa8dc', JOB_CLR[B.job] || '#ef8f8f');
+      }).join('');
+
+      var derived = DERIVED_KEYS.map(function (dk) {
+        var x = Number(da[dk.k]) || 0, y = Number(dbv[dk.k]) || 0;
+        // 淨奶量與救援差可能是負的，長條長度取絕對值才不會消失
+        return cmpRow(dk.zh, Math.abs(x), Math.abs(y), derivedFmt(x, dk), derivedFmt(y, dk),
+          JOB_CLR[A.job] || '#6fa8dc', JOB_CLR[B.job] || '#ef8f8f');
+      }).join('');
+
+      return head +
+        '<div class="bt-cmp-head">' +
+          '<span class="bt-my">' + jobChip(A.job) + ' ' + escapeBattleHtml(A.name) + '</span>' +
+          '<span>項目</span>' +
+          '<span class="bt-opp">' + escapeBattleHtml(B.name) + ' ' + jobChip(B.job) + '</span></div>' +
+        basic +
+        '<div class="bt-sec-title">衍生指標</div>' + derived;
+    }
+
     /* ── 單場戰報 ──
        分頁：總覽／出戰紀錄／陣容對比／數據對比／職業雷達／貢獻熱力
        用語與數值格式對齊戰績視覺化工具（玩傷／塔傷／重傷／化羽／焚骨／資源，
@@ -6004,7 +6293,8 @@
 
       return '<div class="bt-table">' + head + list.map(function (p, i) {
         var tag = p.side === 'my' ? rosterTag(p.rosterCategory) : '';
-        return '<div class="bt-prow">' +
+        return '<div class="bt-prow bt-clickable" data-side="' + p.side +
+            '" data-name="' + escapeBattleHtml(p.name) + '">' +
           '<span>' + rankBadge(i) + '</span>' +
           '<span class="bt-name">' + escapeBattleHtml(p.name) + tag + '</span>' +
           '<span>' + jobChip(p.job) + '</span>' +
@@ -6163,7 +6453,8 @@
         '<div class="bt-table"><div class="bt-hrow bt-head"><span>#</span><span>玩家</span><span>職業</span>' +
         BATTLE_KEYS.map(function (f) { return '<span>' + f.zh + '</span>'; }).join('') + '</div>' +
         list.map(function (p, i) {
-          return '<div class="bt-hrow"><span>' + rankBadge(i) + '</span>' +
+          return '<div class="bt-hrow bt-clickable" data-side="' + p.side +
+            '" data-name="' + escapeBattleHtml(p.name) + '"><span>' + rankBadge(i) + '</span>' +
             '<span class="bt-name">' + escapeBattleHtml(p.name) + '</span>' +
             '<span>' + jobChip(p.job) + '</span>' +
             BATTLE_KEYS.map(function (f) {
@@ -6201,14 +6492,15 @@
 
       var tabs = [
         ['overview', '📊 總覽'], ['roster', '📋 出戰紀錄'], ['lineup', '⚔ 陣容對比'],
-        ['stats', '📊 數據對比'], ['radar', '📡 職業雷達'], ['heat', '🌡 貢獻熱力']
+        ['stats', '📊 數據對比'], ['jobavg', '✦ 各職業平均'], ['radar', '📡 職業雷達'],
+        ['heat', '🌡 貢獻熱力'], ['pick', '🔀 自選對比']
       ].map(function (t) {
         return '<button type="button" class="bt-tab' + (battleTab === t[0] ? ' on' : '') +
           '" onclick="setBattleTab(\'' + t[0] + '\')">' + t[1] + '</button>';
       }).join('');
 
       // 只有跟「人」有關的分頁才需要搜尋與職業篩選
-      var needFilter = ['roster', 'radar', 'heat'].indexOf(battleTab) >= 0;
+      var needFilter = ['roster', 'radar', 'heat', 'jobavg'].indexOf(battleTab) >= 0;
       var jobs = ['all'].concat(JOB_ORDER.filter(function (j) {
         return res.players.some(function (p) { return p.job === j; });
       }));
@@ -6233,7 +6525,9 @@
         battleTab === 'roster'   ? renderRoster() :
         battleTab === 'lineup'   ? renderLineup(b, my, opp) :
         battleTab === 'stats'    ? renderStatCompare(b, my, opp) :
+        battleTab === 'jobavg'   ? renderJobAvg(b) :
         battleTab === 'radar'    ? renderRadar(b) :
+        battleTab === 'pick'     ? renderPick(b) :
                                    renderHeatmap();
 
       document.getElementById('battle-detail').innerHTML =
@@ -6244,7 +6538,7 @@
             '<span class="bt-opp">' + escapeBattleHtml(b.oppGuild) + '</span></span>' +
           '<span class="bt-head-score ' + cls + '">' + b.myKills + ' - ' + b.oppKills + '　' + escapeBattleHtml(b.result) + '</span>' +
         '</div>' +
-        '<div class="bt-tabs">' + tabs + '</div>' + filterBar + body;
+        '<div class="bt-tabs">' + tabs + '</div>' + filterBar + body + playerModalHtml();
     }
 
     /* ── 累積統計 ── */
@@ -6254,25 +6548,106 @@
       renderBattleAggregate();
     }
 
+    var aggTab = 'rank';
+    var battleHistCache = null;
+
+    function setAggTab(t) {
+      aggTab = t;
+      ['rank', 'trend', 'record'].forEach(function (x) {
+        document.getElementById('aggtab-' + x).classList.toggle('on', x === t);
+      });
+      renderBattleAggregate();
+    }
+
     function loadBattleAggregate() {
       var box = document.getElementById('battle-agg');
       box.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
-      battleApi('getBattleAggregate', {
+      var opts = {
         from: document.getElementById('battle-from').value.trim(),
         to: document.getElementById('battle-to').value.trim(),
         type: document.getElementById('battle-type-filter').value
-      }).then(function (res) {
-        battleAggCache = res;
-        renderBattleAggregate();
-      }).catch(function (err) {
-        box.innerHTML = '<div class="access-admin-empty">讀取失敗：' + escapeBattleHtml(err.message) + '</div>';
-      });
+      };
+      // 個人累積與趨勢／最高紀錄共用同一組條件，一次抓回來
+      Promise.all([battleApi('getBattleAggregate', opts), battleApi('getBattleHistory', opts)])
+        .then(function (r) {
+          battleAggCache = r[0];
+          battleHistCache = r[1];
+          renderBattleAggregate();
+        }).catch(function (err) {
+          box.innerHTML = '<div class="access-admin-empty">讀取失敗：' + escapeBattleHtml(err.message) + '</div>';
+        });
+    }
+
+    /* ── 趨勢：每一場我方合計的折線 ── */
+
+    var trendKey = 'pvp';
+    function setTrendKey(k) { trendKey = k; renderBattleAggregate(); }
+
+    function renderTrend() {
+      var t = battleHistCache ? battleHistCache.trend : [];
+      if (t.length === 0) return '<div class="access-admin-empty">這個範圍內沒有戰績</div>';
+
+      var f = BATTLE_KEY_ZH[trendKey];
+      var vals = t.map(function (x) { return Number(x.totals[trendKey]) || 0; });
+      var max = Math.max.apply(null, vals) || 1;
+      var W = 100, H = 44, pad = 3;
+      var xAt = function (i) { return t.length < 2 ? W / 2 : pad + i * (W - pad * 2) / (t.length - 1); };
+      var yAt = function (v) { return H - pad - (v / max) * (H - pad * 2); };
+
+      var line = vals.map(function (v, i) { return xAt(i).toFixed(1) + ',' + yAt(v).toFixed(1); }).join(' ');
+      var dots = t.map(function (x, i) {
+        var c = x.result === '勝' ? '#7bd88f' : (x.result === '敗' ? '#ef8f8f' : '#cfcfcf');
+        return '<circle cx="' + xAt(i).toFixed(1) + '" cy="' + yAt(vals[i]).toFixed(1) +
+          '" r="1.3" fill="' + c + '"><title>' + escapeBattleHtml(x.date) + ' ' +
+          escapeBattleHtml(x.result) + '</title></circle>';
+      }).join('');
+
+      var picker = BATTLE_KEYS.map(function (k) {
+        return '<button type="button" class="bt-pill' + (trendKey === k.k ? ' on' : '') +
+          '" onclick="setTrendKey(&#39;' + k.k + '&#39;)">' + k.zh + '</button>';
+      }).join('');
+
+      var rows = t.slice().reverse().map(function (x) {
+        var cls = x.result === '勝' ? 'battle-win' : (x.result === '敗' ? 'battle-lose' : '');
+        return '<div class="bt-trend-row"><span>' + escapeBattleHtml(x.date) +
+          (x.time ? ' ' + escapeBattleHtml(x.time) : '') + '</span>' +
+          '<span>' + escapeBattleHtml(x.type) + '</span>' +
+          '<span>' + escapeBattleHtml(x.oppGuild) + '</span>' +
+          '<span class="' + cls + '">' + escapeBattleHtml(x.result) + '</span>' +
+          '<span>' + x.totals.people + ' 人</span>' +
+          '<span>' + battleFmt(x.totals[trendKey], trendKey) + '</span></div>';
+      }).join('');
+
+      return '<div class="bt-sec-title">📈 趨勢（我方每場合計・' + f.zh + '）</div>' +
+        '<div class="bt-pillbar">' + picker + '</div>' +
+        '<div class="bt-trend-chart"><svg viewBox="0 0 100 44" preserveAspectRatio="none">' +
+          '<polyline points="' + line + '" fill="none" stroke="#d4af37" stroke-width="0.7"/>' + dots +
+        '</svg><span class="bt-trend-max">最高 ' + battleFmt(max, trendKey) + '</span></div>' +
+        '<div class="bt-trend-head bt-trend-row"><span>日期</span><span>類型</span><span>對手</span>' +
+          '<span>勝敗</span><span>人數</span><span>' + f.zh + '</span></div>' + rows;
+    }
+
+    /* ── 最高紀錄：每個項目的單場最佳 ── */
+
+    function renderRecords() {
+      var rs = battleHistCache ? battleHistCache.records : [];
+      if (!rs.length) return '<div class="access-admin-empty">這個範圍內沒有戰績</div>';
+      return '<div class="bt-sec-title">🏆 最高紀錄（單場最佳）</div>' +
+        '<div class="bt-rec-grid">' + rs.map(function (r) {
+          var f = BATTLE_KEY_ZH[r.key];
+          return '<div class="bt-rec"><span class="bt-rec-k">' + (f ? f.zh : r.key) + '</span>' +
+            '<span class="bt-rec-v">' + battleFmt(r.value, r.key) + '</span>' +
+            '<span class="bt-rec-who">' + jobChip(r.job) + ' ' + escapeBattleHtml(r.name) + '</span>' +
+            '<span class="bt-rec-when">' + escapeBattleHtml(r.date) + ' vs ' + escapeBattleHtml(r.opp) + '</span></div>';
+        }).join('') + '</div>';
     }
 
     function renderBattleAggregate() {
       var res = battleAggCache;
       var box = document.getElementById('battle-agg');
       if (!res) return;
+      if (aggTab === 'trend')  { box.innerHTML = renderTrend();   return; }
+      if (aggTab === 'record') { box.innerHTML = renderRecords(); return; }
       if (!res.rows.length) {
         box.innerHTML = '<div class="access-admin-empty">這個範圍內沒有戰績</div>';
         return;
