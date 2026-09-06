@@ -5590,10 +5590,17 @@
     // 雷達圖的八個軸（不含資源，那不是貢獻）
     var RADAR_KEYS = BATTLE_KEYS.filter(function (f) { return f.k !== 'res'; });
 
-    var JOB_ORDER = ['碎夢', '神相', '血河', '九靈', '玄機', '龍吟', '鐵衣', '素問'];
+    // 這份清單決定陣容對比、職業雷達、各職業平均與職業篩選會列出哪些門派，
+    // 漏掉的會被歸成「其他」。醉心亭那份原始清單只有八個、少了潮光，
+    // 結果實際資料裡 41 個潮光全被丟進「其他」。這裡改用網站自己的 JOB_OPTIONS
+    // 那一套，並補上還沒出現在資料裡的鴻音與滄瀾。
+    var JOB_ORDER = ['碎夢', '神相', '血河', '九靈', '玄機', '龍吟', '鐵衣', '素問',
+                     '潮光', '鴻音', '滄瀾'];
     var JOB_CLR = {
       '碎夢': '#5b9bd5', '神相': '#4fc3f7', '血河': '#ef5350', '九靈': '#ab47bc',
-      '玄機': '#ffd54f', '龍吟': '#66bb6a', '鐵衣': '#ffca28', '素問': '#f48fb1'
+      '玄機': '#ffd54f', '龍吟': '#66bb6a', '鐵衣': '#ffca28', '素問': '#f48fb1',
+      // 醉心亭那份沒有這三個，配色挑跟上面八個拉得開的
+      '潮光': '#26c6da', '鴻音': '#ff8a65', '滄瀾': '#9fa8da'
     };
 
     var MVP_DEFS = [
@@ -6087,12 +6094,32 @@
 
     function renderPick(b) {
       var all = battleDetailCache.players;
+      // 依職業分組：先我方後對方，職業照 JOB_ORDER，同職業內玩傷高的排前面。
+      // 用 optgroup 而不是只排序，找人的時候不必一路捲。
       function opts(cur) {
-        return '<option value="">—</option>' + all.map(function (p) {
-          var v = p.side + SEP + p.name;
-          return '<option value="' + escapeBattleHtml(v) + '"' + (v === cur ? ' selected' : '') + '>' +
-            (p.side === 'my' ? '🔵 ' : '🔴 ') + escapeBattleHtml(p.name) + '（' + escapeBattleHtml(p.job) + '）</option>';
-        }).join('');
+        var html = '<option value="">—</option>';
+        ['my', 'opp'].forEach(function (side) {
+          var mine = all.filter(function (x) { return x.side === side; });
+          if (!mine.length) return;
+          var guild = side === 'my' ? b.myGuild : b.oppGuild;
+          JOB_ORDER.concat(['']).forEach(function (job) {
+            var group = mine.filter(function (x) {
+              // 最後一輪收沒列在 JOB_ORDER 裡的職業（含空白）
+              return job ? x.job === job : JOB_ORDER.indexOf(x.job) < 0;
+            });
+            if (!group.length) return;
+            group.sort(function (x, y) { return (Number(y.pvp) || 0) - (Number(x.pvp) || 0); });
+            html += '<optgroup label="' + (side === 'my' ? '🔵 ' : '🔴 ') +
+              escapeBattleHtml(guild) + ' · ' + escapeBattleHtml(job || '其他') + '">';
+            html += group.map(function (x) {
+              var v = x.side + SEP + x.name;
+              return '<option value="' + escapeBattleHtml(v) + '"' + (v === cur ? ' selected' : '') + '>' +
+                escapeBattleHtml(x.name) + '</option>';
+            }).join('');
+            html += '</optgroup>';
+          });
+        });
+        return html;
       }
       var find = function (v) {
         if (!v) return null;
