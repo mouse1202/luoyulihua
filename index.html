@@ -1458,6 +1458,137 @@
       padding: 30px 0;
     }
 
+    /* ── 戰績 ── */
+    .battle-upload {
+      border: 1px dashed #6B1023;
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+    .battle-file-btn {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 9px 16px;
+      border: 1px solid #6B1023;
+      border-radius: 6px;
+      background: #1A0409;
+      color: #FFFFEF;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .battle-file-btn:hover { border-color: #d4af37; }
+    .battle-file-btn input { display: none; }
+
+    .battle-card {
+      border: 1px solid #6B1023;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 12px;
+      background: #0A0A0A;
+    }
+    .battle-card-bad { border-color: #b95555; }
+    .battle-card-name { color: #FFFFEF; font-weight: 700; margin-bottom: 8px; word-break: break-all; }
+    .battle-card-err { color: #efb0b0; font-size: 13px; margin-bottom: 8px; }
+    .battle-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+    }
+    .battle-card-grid label { display: flex; flex-direction: column; gap: 4px; color: #FFFFEF; font-size: 12px; }
+    .battle-card-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+    .battle-filter {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-end;
+      margin-bottom: 14px;
+    }
+    .battle-filter label { display: flex; flex-direction: column; gap: 4px; color: #FFFFEF; font-size: 12px; }
+    .battle-filter .modal-input { min-width: 120px; }
+
+    /* 場次列表 */
+    .battle-row {
+      display: grid;
+      grid-template-columns: 1.4fr .7fr 1.6fr .8fr .6fr .8fr;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid #6B1023;
+      border-radius: 6px;
+      background: #0A0A0A;
+      margin-bottom: 8px;
+      color: #FFFFEF;
+      font-size: 14px;
+    }
+    .battle-row-head {
+      background: transparent;
+      border: none;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding-bottom: 2px;
+      margin-bottom: 4px;
+    }
+    .battle-row a { color: #d4af37; text-decoration: none; }
+    .battle-row a:hover { text-decoration: underline; }
+    .battle-win  { color: #7bd88f; font-weight: 700; }
+    .battle-lose { color: #ef8f8f; font-weight: 700; }
+
+    /* 單場：雙方合計對比 */
+    .battle-compare { margin: 14px 0 6px; }
+    .battle-compare .battle-row,
+    .battle-compare-row { grid-template-columns: 1fr .8fr 1fr; text-align: center; }
+    .battle-better { color: #d4af37; font-weight: 700; }
+
+    .battle-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: baseline;
+      color: #FFFFEF;
+      margin-bottom: 6px;
+    }
+    .battle-head-title { font-size: 16px; font-weight: 700; }
+    .battle-head-score { font-size: 16px; }
+
+    /* 戰績表：欄位多，橫向可捲動 */
+    .battle-table { overflow-x: auto; }
+    .battle-prow, .battle-arow {
+      display: grid;
+      gap: 6px;
+      align-items: center;
+      padding: 7px 10px;
+      border-bottom: 1px solid #2a0a12;
+      color: #FFFFEF;
+      font-size: 13px;
+      min-width: 900px;
+    }
+    .battle-prow { grid-template-columns: 34px 130px 60px repeat(10, minmax(58px, 1fr)); }
+    .battle-arow { grid-template-columns: 34px 130px 60px 50px repeat(10, minmax(58px, 1fr)); }
+    .battle-prow.battle-row-head,
+    .battle-arow.battle-row-head { border-bottom: 1px solid #6B1023; }
+    .battle-sortable { cursor: pointer; user-select: none; }
+    .battle-sortable:hover { color: #d4af37; }
+    .battle-sorted { color: #d4af37; }
+    .battle-avg { display: block; font-style: normal; font-size: 11px; opacity: .55; }
+    .battle-tag {
+      display: inline-block;
+      margin-left: 5px;
+      padding: 1px 5px;
+      border: 1px solid #6B1023;
+      border-radius: 4px;
+      font-size: 10px;
+      opacity: .8;
+    }
+    .battle-tag-none { border-color: #7a5a2a; color: #d4af37; }
+
+    @media (max-width: 700px) {
+      .battle-row { grid-template-columns: 1fr 1fr; font-size: 13px; }
+      .battle-compare .battle-row,
+      .battle-compare-row { grid-template-columns: 1fr .8fr 1fr; }
+    }
+
     /* ── 後台「操作記錄」列表 ── */
     .activity-log-list {
       display: flex;
@@ -1633,7 +1764,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate'];
 
   var JOB_COLORS = { '鐵衣':'e69138','血河':'cc0000','神相':'6fa8dc','素問':'f4cccc','九靈':'d9d2e9','碎夢':'4dd0e1','龍吟':'93c47d','玄機':'ffe599','潮光':'3c78d8' };
   var GROUP_BANNER = { '團一進攻':{bg:'1c4587',fg:'ffffff'}, '團二進攻':{bg:'990000',fg:'ffffff'}, '防守團':{bg:'f1c232',fg:'000000'} };
@@ -1763,6 +1894,9 @@
       </div>
       <div class="btn-row">
         <button class="nav-btn" onclick="openVideoView()">影片上傳</button>
+      </div>
+      <div class="btn-row">
+        <button class="nav-btn" onclick="openBattleView()">戰績</button>
       </div>
     </div>
 
@@ -2141,6 +2275,59 @@
       </div>
     </div>
 
+    <!-- 戰績：吃遊戲匯出的 CSV，兩種看法 —— 單場戰報、跨場次累積統計 -->
+    <div class="view hidden" id="battle-view">
+      <div class="roster-section">
+        <div class="roster-header">
+          <span class="roster-title">戰績</span>
+          <button type="button" class="roster-back-btn" id="battle-tab-list" onclick="switchBattleTab('list')">場次</button>
+          <button type="button" class="roster-back-btn" id="battle-tab-agg" onclick="switchBattleTab('agg')">累積統計</button>
+          <button type="button" class="roster-back-btn" onclick="showView('main-view')">回首頁</button>
+        </div>
+        <div class="roster-body">
+
+          <!-- 上傳 CSV：只有「管理」看得到 -->
+          <div class="battle-upload admin-only-btn hidden">
+            <span class="access-admin-manual-title">上傳戰績 CSV（遊戲匯出的檔案，可一次選多個）</span>
+            <label class="battle-file-btn">選擇 CSV
+              <input type="file" id="battle-csv-input" accept=".csv" multiple>
+            </label>
+            <div id="battle-upload-cards"></div>
+          </div>
+
+          <!-- 場次列表 -->
+          <div id="battle-pane-list">
+            <div id="battle-list"></div>
+          </div>
+
+          <!-- 單場戰報 -->
+          <div id="battle-pane-detail" class="hidden">
+            <button type="button" class="roster-back-btn" onclick="switchBattleTab('list')">← 回場次列表</button>
+            <div id="battle-detail"></div>
+          </div>
+
+          <!-- 累積統計 -->
+          <div id="battle-pane-agg" class="hidden">
+            <div class="battle-filter">
+              <label>起 <input type="text" id="battle-from" class="modal-input" placeholder="20260901" maxlength="8"></label>
+              <label>迄 <input type="text" id="battle-to" class="modal-input" placeholder="20260930" maxlength="8"></label>
+              <label>類型
+                <select id="battle-type-filter" class="modal-input">
+                  <option value="">全部</option>
+                  <option value="幫戰">幫戰</option>
+                  <option value="約戰">約戰</option>
+                  <option value="其他">其他</option>
+                </select>
+              </label>
+              <button type="button" class="access-admin-btn access-admin-btn-approve" onclick="loadBattleAggregate()">查詢</button>
+            </div>
+            <div id="battle-agg"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- 所有頁面共用同一顆回到頂端按鈕（固定在畫面右下角） -->
@@ -2271,14 +2458,15 @@
     var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', '臨時請假'];
 
     // 所有可切換的畫面，以及各畫面是否要用「一頁寬」樣式
-    var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view', 'video-roster-view'];
+    var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view', 'video-roster-view', 'battle-view'];
     var VIEW_WIDE = {
       'main-view': false,
       'roster-view': true,
       'attendance-view': false,
       'member-view': false,
       'access-admin-view': false,
-      'activity-log-view': false
+      'activity-log-view': false,
+      'battle-view': true
     };
 
     // 切換畫面要跟 .view 的 opacity transition（0.25s）搭配：
@@ -5048,6 +5236,447 @@
 
     window.addEventListener('scroll', updateBackToTopVisibility);
     updateBackToTopVisibility();
+
+    /* ══════════════════════════════════════════════════════════════
+       戰績：吃遊戲匯出的 CSV，兩種看法 —— 單場戰報、跨場次累積統計
+       ══════════════════════════════════════════════════════════════ */
+
+    // 把既有的 google.script.run shim 包成 Promise，這段程式碼才不用一路寫 callback
+    function battleApi(fn) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      return new Promise(function (resolve, reject) {
+        if (!(window.google && google.script && google.script.run)) {
+          reject(new Error('本機預覽模式，未連接後端'));
+          return;
+        }
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)[fn].apply(null, args);
+      });
+    }
+
+    // 戰績的 12 個欄位。pvp/bld/heal/tank 在匯入時已經除以 10000，單位是「萬」。
+    var BATTLE_KEYS = [
+      { k: 'kills',   label: '擊殺',   dec: 0 },
+      { k: 'assists', label: '助攻',   dec: 0 },
+      { k: 'pvp',     label: 'PVP傷害', dec: 1 },
+      { k: 'tank',    label: '承傷',   dec: 1 },
+      { k: 'heal',    label: '治療',   dec: 1 },
+      { k: 'bld',     label: '建築傷害', dec: 1 },
+      { k: 'res',     label: '復活',   dec: 0 },
+      { k: 'heavy',   label: '重擊',   dec: 0 },
+      { k: 'feather', label: '羽',     dec: 0 },
+      { k: 'bone',    label: '骨',     dec: 0 }
+    ];
+
+    var battleCards = [];      // 上傳中、還沒送出的 CSV
+    var battleCardSeq = 0;
+    var battleSort = { key: 'pvp', dir: -1 };
+    var aggSort = { key: 'games', dir: -1 };
+    var battleDetailCache = null;
+    var battleAggCache = null;
+
+    function fmtNum(v, dec) {
+      var n = Number(v) || 0;
+      return dec ? n.toFixed(dec) : String(Math.round(n));
+    }
+
+    /* ── CSV 解析 ──
+       格式是一段一段的：公會名 + 人數 → 欄位標題 → 每人一列 12 欄。
+       判斷區塊起始的規則跟遊戲匯出的檔案一致：第一欄是文字、第二欄是純數字。 */
+
+    function parseBattleCSVRow(line) {
+      var r = [], c = '', q = false;
+      for (var i = 0; i < line.length; i++) {
+        var ch = line[i];
+        if (ch === '"') q = !q;
+        else if (ch === ',' && !q) { r.push(c.trim()); c = ''; }
+        else c += ch;
+      }
+      r.push(c.trim());
+      return r;
+    }
+
+    function parseBattleCSV(text) {
+      text = text.replace(/^﻿/, '');
+      var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+      var blocks = [], i = 0;
+      while (i < lines.length) {
+        var h = parseBattleCSVRow(lines[i]);
+        if (!h || h.length < 2 || isNaN(parseInt(h[1], 10)) || h[0] === '玩家名字') { i++; continue; }
+        var guildName = h[0];
+        i += 2; // 跳過區塊起始行與欄位標題行
+        var players = [];
+        while (i < lines.length) {
+          var row = parseBattleCSVRow(lines[i]);
+          // 碰到下一個區塊起始行就停（第二欄是數字、第三欄不是數字）
+          if (row.length >= 2 && !isNaN(parseInt(row[1], 10)) &&
+              (isNaN(parseFloat(row[2])) || row[0] === '玩家名字')) break;
+          if (row.length >= 12 && row[0] && row[0] !== '玩家名字') {
+            var n = function (idx) { return parseFloat(row[idx]) || 0; };
+            players.push({
+              name: row[0], job: row[1],
+              kills: n(2), assists: n(3), res: n(4),
+              pvp: n(5) / 10000, bld: n(6) / 10000,
+              heal: n(7) / 10000, tank: n(8) / 10000,
+              heavy: n(9), feather: n(10), bone: n(11)
+            });
+          }
+          i++;
+        }
+        if (players.length > 0) blocks.push({ guildName: guildName, players: players });
+      }
+      return blocks;
+    }
+
+    // 檔名兩種格式：20260417_185736_我方_對方.csv（時間 6 位）
+    //               20260418_2156_我方_對方.csv  （時間 4 位）
+    function parseBattleFileName(fileName) {
+      var base = String(fileName || '').replace(/\.csv$/i, '');
+      var parts = base.split('_');
+      var out = { date: '', time: '', myGuild: '', oppGuild: '' };
+      if (parts.length >= 4 && /^\d{8}$/.test(parts[0]) && /^\d{4}$|^\d{6}$/.test(parts[1])) {
+        out.date = parts[0];
+        out.time = parts[1];
+        out.myGuild = parts[2];
+        out.oppGuild = parts.slice(3).join('_'); // 公會名本身可能有底線
+      } else if (parts.length >= 1 && /^\d{8}$/.test(parts[0])) {
+        out.date = parts[0];
+      }
+      return out;
+    }
+
+    /* ── 上傳 ── */
+
+    function renderBattleCards() {
+      var box = document.getElementById('battle-upload-cards');
+      if (battleCards.length === 0) { box.innerHTML = ''; return; }
+      box.innerHTML = battleCards.map(function (c) {
+        if (c.error) {
+          return '<div class="battle-card battle-card-bad">' +
+            '<div class="battle-card-name">' + escapeBattleHtml(c.fileName) + '</div>' +
+            '<div class="battle-card-err">' + escapeBattleHtml(c.error) + '</div>' +
+            '<button type="button" class="access-admin-btn access-admin-btn-reject" ' +
+            'onclick="dropBattleCard(' + c.id + ')">移除</button></div>';
+        }
+        var opts = c.blocks.map(function (b, bi) {
+          return '<option value="' + bi + '"' + (bi === c.myIndex ? ' selected' : '') + '>' +
+            escapeBattleHtml(b.guildName) + '（' + b.players.length + ' 人）</option>';
+        }).join('');
+        return '<div class="battle-card">' +
+          '<div class="battle-card-name">' + escapeBattleHtml(c.fileName) + '</div>' +
+          '<div class="battle-card-grid">' +
+            '<label>日期<input type="text" class="modal-input" value="' + escapeBattleHtml(c.date) + '" maxlength="8" oninput="updateBattleCard(' + c.id + ',\'date\',this.value)"></label>' +
+            '<label>時間<input type="text" class="modal-input" value="' + escapeBattleHtml(c.time) + '" maxlength="6" oninput="updateBattleCard(' + c.id + ',\'time\',this.value)"></label>' +
+            '<label>類型<select class="modal-input" onchange="updateBattleCard(' + c.id + ',\'type\',this.value)">' +
+              ['幫戰', '約戰', '其他'].map(function (t) {
+                return '<option' + (t === c.type ? ' selected' : '') + '>' + t + '</option>';
+              }).join('') +
+            '</select></label>' +
+            '<label>哪一邊是我方<select class="modal-input" onchange="updateBattleCard(' + c.id + ',\'myIndex\',this.value)">' + opts + '</select></label>' +
+          '</div>' +
+          '<div class="battle-card-actions">' +
+            '<button type="button" class="access-admin-btn access-admin-btn-approve" onclick="submitBattleCard(' + c.id + ')">存進資料庫</button>' +
+            '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="dropBattleCard(' + c.id + ')">移除</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function escapeBattleHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m];
+      });
+    }
+
+    function updateBattleCard(id, key, value) {
+      var c = battleCards.filter(function (x) { return x.id === id; })[0];
+      if (!c) return;
+      if (key === 'myIndex') c.myIndex = parseInt(value, 10) || 0;
+      else c[key] = value;
+    }
+
+    function dropBattleCard(id) {
+      battleCards = battleCards.filter(function (x) { return x.id !== id; });
+      renderBattleCards();
+    }
+
+    function submitBattleCard(id) {
+      var c = battleCards.filter(function (x) { return x.id === id; })[0];
+      if (!c) return;
+      if (!/^\d{8}$/.test(c.date)) { showAlertModal('日期要是 8 碼，例如 20260906'); return; }
+
+      var players = [];
+      c.blocks.forEach(function (b, bi) {
+        var side = bi === c.myIndex ? 'my' : 'opp';
+        b.players.forEach(function (p) {
+          players.push(Object.assign({ side: side, guildName: b.guildName }, p));
+        });
+      });
+
+      battleApi('saveBattle', {
+        battleDate: c.date, battleTime: c.time,
+        myGuild: c.blocks[c.myIndex] ? c.blocks[c.myIndex].guildName : '',
+        oppGuild: c.blocks.filter(function (b, bi) { return bi !== c.myIndex; })
+                          .map(function (b) { return b.guildName; }).join('、'),
+        battleType: c.type, fileName: c.fileName, players: players
+      }).then(function (res) {
+        if (!res.success) { showAlertModal(res.message || '存檔失敗'); return; }
+        showAlertModal('已存入：' + c.date + '　' + res.myKills + ' - ' + res.oppKills +
+                       '　' + res.result + '（' + res.players + ' 人）');
+        dropBattleCard(id);
+        loadBattleList();
+      }).catch(function (err) { showAlertModal('存檔失敗：' + err.message); });
+    }
+
+    function handleBattleFiles(e) {
+      var files = Array.prototype.slice.call(e.target.files || []);
+      e.target.value = '';
+      files.forEach(function (f) {
+        var meta = parseBattleFileName(f.name);
+        var card = {
+          id: ++battleCardSeq, fileName: f.name,
+          date: meta.date, time: meta.time, type: '幫戰',
+          blocks: [], myIndex: 0, error: ''
+        };
+        battleCards.push(card);
+        var reader = new FileReader();
+        reader.onload = function () {
+          try {
+            card.blocks = parseBattleCSV(String(reader.result));
+          } catch (err) {
+            card.error = '解析失敗：' + err.message;
+          }
+          if (!card.error && card.blocks.length === 0) {
+            card.error = '這個檔案裡找不到任何戰績區塊，確認一下是不是遊戲匯出的 CSV';
+          }
+          if (!card.error) {
+            // 檔名有寫我方公會就照著選，否則預設第一個區塊
+            var idx = card.blocks.findIndex(function (b) { return b.guildName === meta.myGuild; });
+            card.myIndex = idx >= 0 ? idx : 0;
+            if (!card.date) card.date = '';
+          }
+          renderBattleCards();
+        };
+        reader.onerror = function () { card.error = '讀取檔案失敗'; renderBattleCards(); };
+        reader.readAsText(f, 'UTF-8');
+      });
+      renderBattleCards();
+    }
+
+    /* ── 場次列表 ── */
+
+    function openBattleView() {
+      showView('battle-view');
+      switchBattleTab('list');
+    }
+
+    function switchBattleTab(tab) {
+      document.getElementById('battle-pane-list').classList.toggle('hidden', tab !== 'list');
+      document.getElementById('battle-pane-detail').classList.toggle('hidden', tab !== 'detail');
+      document.getElementById('battle-pane-agg').classList.toggle('hidden', tab !== 'agg');
+      if (tab === 'list') loadBattleList();
+      if (tab === 'agg' && !battleAggCache) loadBattleAggregate();
+    }
+
+    function loadBattleList() {
+      var box = document.getElementById('battle-list');
+      box.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
+      battleApi('listBattles').then(function (rows) {
+        if (!rows.length) {
+          box.innerHTML = '<div class="access-admin-empty">還沒有任何戰績。上傳遊戲匯出的 CSV 就會出現在這裡。</div>';
+          return;
+        }
+        box.innerHTML =
+          '<div class="battle-row battle-row-head">' +
+            '<span>日期</span><span>類型</span><span>對手</span><span>比分</span><span>結果</span><span></span>' +
+          '</div>' +
+          rows.map(function (b) {
+            var cls = b.result === '勝' ? 'battle-win' : (b.result === '敗' ? 'battle-lose' : '');
+            return '<div class="battle-row">' +
+              '<span><a href="javascript:void(0)" onclick="openBattleDetail(\'' + b.id + '\')">' +
+                escapeBattleHtml(b.date) + (b.time ? ' ' + escapeBattleHtml(b.time) : '') + '</a></span>' +
+              '<span>' + escapeBattleHtml(b.type) + '</span>' +
+              '<span>' + escapeBattleHtml(b.oppGuild) + '</span>' +
+              '<span>' + b.myKills + ' - ' + b.oppKills + '</span>' +
+              '<span class="' + cls + '">' + escapeBattleHtml(b.result) + '</span>' +
+              '<span><button type="button" class="access-admin-btn access-admin-btn-reject admin-only-btn' +
+                (currentAccessCategory === '管理' ? '' : ' hidden') +
+                '" onclick="deleteBattleFromAdmin(\'' + b.id + '\',\'' +
+                escapeBattleHtml(b.date) + ' vs ' + escapeBattleHtml(b.oppGuild) + '\')">刪除</button></span>' +
+            '</div>';
+          }).join('');
+      }).catch(function (err) {
+        box.innerHTML = '<div class="access-admin-empty">讀取失敗：' + escapeBattleHtml(err.message) + '</div>';
+      });
+    }
+
+    function deleteBattleFromAdmin(id, label) {
+      showConfirmModal('確認刪除', '確定要刪除「' + label + '」這場戰績嗎？連同所有人的數據一起刪除，無法復原。', function () {
+        battleApi('deleteBattle', id, currentAccessName || '')
+          .then(function () { battleAggCache = null; loadBattleList(); })
+          .catch(function (err) { showAlertModal('刪除失敗：' + err.message); });
+      });
+    }
+
+    /* ── 單場戰報 ── */
+
+    function openBattleDetail(id) {
+      switchBattleTab('detail');
+      var box = document.getElementById('battle-detail');
+      box.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
+      battleApi('getBattle', id).then(function (res) {
+        if (!res.found) { box.innerHTML = '<div class="access-admin-empty">找不到這場戰績</div>'; return; }
+        battleDetailCache = res;
+        renderBattleDetail();
+      }).catch(function (err) {
+        box.innerHTML = '<div class="access-admin-empty">讀取失敗：' + escapeBattleHtml(err.message) + '</div>';
+      });
+    }
+
+    function sortBattleDetail(key) {
+      battleSort = { key: key, dir: battleSort.key === key ? -battleSort.dir : -1 };
+      renderBattleDetail();
+    }
+
+    function renderBattleDetail() {
+      var res = battleDetailCache;
+      if (!res) return;
+      var b = res.battle;
+      var cls = b.result === '勝' ? 'battle-win' : (b.result === '敗' ? 'battle-lose' : '');
+
+      function total(side, key) {
+        return res.players.filter(function (p) { return p.side === side; })
+          .reduce(function (n, p) { return n + (Number(p[key]) || 0); }, 0);
+      }
+
+      // 雙方合計對比：同一列左右並排，比較容易看出差在哪
+      var compare = '<div class="battle-compare"><div class="battle-row battle-row-head">' +
+        '<span>' + escapeBattleHtml(b.myGuild) + '</span><span>項目</span><span>' + escapeBattleHtml(b.oppGuild) + '</span></div>' +
+        BATTLE_KEYS.map(function (f) {
+          var mv = total('my', f.k), ov = total('opp', f.k);
+          return '<div class="battle-row battle-compare-row">' +
+            '<span class="' + (mv > ov ? 'battle-better' : '') + '">' + fmtNum(mv, f.dec) + '</span>' +
+            '<span>' + f.label + '</span>' +
+            '<span class="' + (ov > mv ? 'battle-better' : '') + '">' + fmtNum(ov, f.dec) + '</span>' +
+          '</div>';
+        }).join('') + '</div>';
+
+      function table(side, title) {
+        var list = res.players.filter(function (p) { return p.side === side; }).slice();
+        var k = battleSort.key, dir = battleSort.dir;
+        list.sort(function (x, y) {
+          var a = Number(x[k]) || 0, c = Number(y[k]) || 0;
+          // dir = -1 代表遞減（大的在前）：a 比較小就要排到後面，所以回傳 -dir
+        return a === c ? 0 : (a < c ? -dir : dir);
+        });
+        var head = '<div class="battle-prow battle-row-head">' +
+          '<span>#</span><span>名稱</span><span>門派</span>' +
+          BATTLE_KEYS.map(function (f) {
+            return '<span class="battle-sortable' + (k === f.k ? ' battle-sorted' : '') +
+              '" onclick="sortBattleDetail(\'' + f.k + '\')">' + f.label +
+              (k === f.k ? (dir < 0 ? ' ▼' : ' ▲') : '') + '</span>';
+          }).join('') + '</div>';
+        var body = list.map(function (p, i) {
+          var tag = side === 'my'
+            ? (p.rosterCategory === 'member' ? '' :
+               p.rosterCategory === 'guest' ? '<span class="battle-tag">外援</span>' :
+               p.rosterCategory === 'trial' ? '<span class="battle-tag">試訓</span>' :
+               '<span class="battle-tag battle-tag-none">非名單</span>')
+            : '';
+          return '<div class="battle-prow">' +
+            '<span>' + (i + 1) + '</span>' +
+            '<span>' + escapeBattleHtml(p.name) + tag + '</span>' +
+            '<span>' + escapeBattleHtml(p.job) + '</span>' +
+            BATTLE_KEYS.map(function (f) { return '<span>' + fmtNum(p[f.k], f.dec) + '</span>'; }).join('') +
+          '</div>';
+        }).join('');
+        return '<div class="member-section-title">' + title + '（' + list.length + ' 人）</div>' +
+          '<div class="battle-table">' + head + body + '</div>';
+      }
+
+      document.getElementById('battle-detail').innerHTML =
+        '<div class="battle-head">' +
+          '<span class="battle-head-title">' + escapeBattleHtml(b.date) + (b.time ? ' ' + escapeBattleHtml(b.time) : '') +
+          '　' + escapeBattleHtml(b.type) + '　' + escapeBattleHtml(b.myGuild) + ' vs ' + escapeBattleHtml(b.oppGuild) + '</span>' +
+          '<span class="battle-head-score ' + cls + '">' + b.myKills + ' - ' + b.oppKills + '　' + escapeBattleHtml(b.result) + '</span>' +
+        '</div>' +
+        compare +
+        table('my', escapeBattleHtml(b.myGuild)) +
+        table('opp', escapeBattleHtml(b.oppGuild));
+    }
+
+    /* ── 累積統計 ── */
+
+    function sortBattleAgg(key) {
+      aggSort = { key: key, dir: aggSort.key === key ? -aggSort.dir : -1 };
+      renderBattleAggregate();
+    }
+
+    function loadBattleAggregate() {
+      var box = document.getElementById('battle-agg');
+      box.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
+      battleApi('getBattleAggregate', {
+        from: document.getElementById('battle-from').value.trim(),
+        to: document.getElementById('battle-to').value.trim(),
+        type: document.getElementById('battle-type-filter').value
+      }).then(function (res) {
+        battleAggCache = res;
+        renderBattleAggregate();
+      }).catch(function (err) {
+        box.innerHTML = '<div class="access-admin-empty">讀取失敗：' + escapeBattleHtml(err.message) + '</div>';
+      });
+    }
+
+    function renderBattleAggregate() {
+      var res = battleAggCache;
+      var box = document.getElementById('battle-agg');
+      if (!res) return;
+      if (!res.rows.length) {
+        box.innerHTML = '<div class="access-admin-empty">這個範圍內沒有戰績</div>';
+        return;
+      }
+      var k = aggSort.key, dir = aggSort.dir;
+      var rows = res.rows.slice().sort(function (x, y) {
+        var a = k === 'games' ? x.games : (Number(x[k]) || 0);
+        var c = k === 'games' ? y.games : (Number(y[k]) || 0);
+        // dir = -1 代表遞減（大的在前）：a 比較小就要排到後面，所以回傳 -dir
+        return a === c ? 0 : (a < c ? -dir : dir);
+      });
+
+      var head = '<div class="battle-arow battle-row-head">' +
+        '<span>#</span><span>名稱</span><span>門派</span>' +
+        '<span class="battle-sortable' + (k === 'games' ? ' battle-sorted' : '') +
+          '" onclick="sortBattleAgg(\'games\')">場次' + (k === 'games' ? (dir < 0 ? ' ▼' : ' ▲') : '') + '</span>' +
+        BATTLE_KEYS.map(function (f) {
+          return '<span class="battle-sortable' + (k === f.k ? ' battle-sorted' : '') +
+            '" onclick="sortBattleAgg(\'' + f.k + '\')">' + f.label +
+            (k === f.k ? (dir < 0 ? ' ▼' : ' ▲') : '') + '</span>';
+        }).join('') + '</div>';
+
+      var body = rows.map(function (r, i) {
+        var tag = r.rosterCategory === 'member' ? '' :
+                  r.rosterCategory === 'guest' ? '<span class="battle-tag">外援</span>' :
+                  r.rosterCategory === 'trial' ? '<span class="battle-tag">試訓</span>' :
+                  '<span class="battle-tag battle-tag-none">非名單</span>';
+        return '<div class="battle-arow">' +
+          '<span>' + (i + 1) + '</span>' +
+          '<span>' + escapeBattleHtml(r.name) + tag + '</span>' +
+          '<span>' + escapeBattleHtml(r.job) + '</span>' +
+          '<span>' + r.games + '</span>' +
+          BATTLE_KEYS.map(function (f) {
+            return '<span>' + fmtNum(r[f.k], f.dec) +
+              '<i class="battle-avg">' + fmtNum(r.avg[f.k], f.dec) + '</i></span>';
+          }).join('') +
+        '</div>';
+      }).join('');
+
+      box.innerHTML =
+        '<p class="password-hint">範圍內共 ' + res.battleCount + ' 場。每格上面是總和、下面的小字是每場平均。點欄位標題可以排序。</p>' +
+        '<div class="battle-table">' + head + body + '</div>';
+    }
+
+    document.getElementById('battle-csv-input').addEventListener('change', handleBattleFiles);
 
     /* ── 登入／註冊彈窗：每個造訪者打開網頁都會先看到這個，跟遊戲登入畫面一樣
        自己打角色名稱（不用密碼），已核准才會自動關閉，其餘狀態一律停在這裡。

@@ -468,6 +468,145 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       actorEmail: r.actor_email, actorRoleName: r.actor_role, description: r.description,
     }));
   },
+
+  /* ── 戰績 ── */
+
+  // 前端解析完 CSV 之後把整場送過來。同一場重傳會覆蓋，不會變成兩筆。
+  saveBattle: async (payload: any) => {
+    const date = String(payload.battleDate ?? "").trim();
+    if (!date) return { success: false, message: "缺少戰鬥日期" };
+    const players = Array.isArray(payload.players) ? payload.players : [];
+    if (players.length === 0) return { success: false, message: "這場沒有任何玩家資料" };
+
+    const sum = (side: string, key: string) =>
+      players.filter((p: any) => p.side === side)
+             .reduce((n: number, p: any) => n + (Number(p[key]) || 0), 0);
+    const myKills = Math.round(sum("my", "kills"));
+    const oppKills = Math.round(sum("opp", "kills"));
+
+    const [battle] = await chk(db.from("battles").upsert({
+      battle_date: date,
+      battle_time: String(payload.battleTime ?? "").trim(),
+      my_guild:    String(payload.myGuild ?? "").trim(),
+      opp_guild:   String(payload.oppGuild ?? "").trim(),
+      battle_type: ["幫戰", "約戰", "其他"].includes(payload.battleType) ? payload.battleType : "幫戰",
+      my_kills:    myKills,
+      opp_kills:   oppKills,
+      result:      myKills > oppKills ? "勝" : (myKills < oppKills ? "敗" : "平"),
+      date_label:  payload.dateLabel || null,
+      file_name:   String(payload.fileName ?? "").trim(),
+      note:        String(payload.note ?? "").trim(),
+    }, { onConflict: "battle_date,battle_time,my_guild,opp_guild" }).select());
+
+    // 重傳同一場時先清掉舊的名單，避免新舊混在一起
+    await db.from("battle_players").delete().eq("battle_id", battle.id);
+    await chk(db.from("battle_players").insert(players.map((p: any) => ({
+      battle_id: battle.id,
+      side: p.side === "opp" ? "opp" : "my",
+      guild_name: String(p.guildName ?? "").trim(),
+      name: String(p.name ?? "").trim(),
+      job: String(p.job ?? "").trim(),
+      kills: Math.round(Number(p.kills) || 0),
+      assists: Math.round(Number(p.assists) || 0),
+      res: Math.round(Number(p.res) || 0),
+      pvp: Number(p.pvp) || 0,
+      bld: Number(p.bld) || 0,
+      heal: Number(p.heal) || 0,
+      tank: Number(p.tank) || 0,
+      heavy: Math.round(Number(p.heavy) || 0),
+      feather: Math.round(Number(p.feather) || 0),
+      bone: Math.round(Number(p.bone) || 0),
+    }))).select("id"));
+
+    return { success: true, id: battle.id, myKills, oppKills, result: battle.result, players: players.length };
+  },
+
+  listBattles: async () => {
+    const { data } = await db.from("battles").select("*")
+      .order("battle_date", { ascending: false }).order("battle_time", { ascending: false });
+    return (data ?? []).map((b) => ({
+      id: b.id, date: b.battle_date, time: b.battle_time,
+      myGuild: b.my_guild, oppGuild: b.opp_guild, type: b.battle_type,
+      myKills: b.my_kills, oppKills: b.opp_kills, result: b.result,
+      dateLabel: b.date_label || "", note: b.note, fileName: b.file_name,
+    }));
+  },
+
+  getBattle: async (id: string) => {
+    const { data: b } = await db.from("battles").select("*").eq("id", id).maybeSingle();
+    if (!b) return { found: false };
+    const { data: ps } = await db.from("battle_players").select("*").eq("battle_id", id);
+    // 帶上名單身分，好在戰報上看出誰是自己人、誰是外援或路人
+    const { data: roster } = await db.from("roster_members").select("name,category");
+    const cat: Record<string, string> = {};
+    (roster ?? []).forEach((r) => { cat[r.name] = r.category; });
+    return {
+      found: true,
+      battle: {
+        id: b.id, date: b.battle_date, time: b.battle_time,
+        myGuild: b.my_guild, oppGuild: b.opp_guild, type: b.battle_type,
+        myKills: b.my_kills, oppKills: b.opp_kills, result: b.result,
+        dateLabel: b.date_label || "", note: b.note,
+      },
+      players: (ps ?? []).map((p) => ({
+        side: p.side, guildName: p.guild_name, name: p.name, job: p.job,
+        kills: p.kills, assists: p.assists, res: p.res,
+        pvp: Number(p.pvp), bld: Number(p.bld), heal: Number(p.heal), tank: Number(p.tank),
+        heavy: p.heavy, feather: p.feather, bone: p.bone,
+        rosterCategory: p.side === "my" ? (cat[p.name] || "") : "",
+      })),
+    };
+  },
+
+  deleteBattle: async (id: string, actorName?: string) => {
+    const { data: b } = await db.from("battles").select("battle_date,opp_guild").eq("id", id).maybeSingle();
+    await chk(db.from("battles").delete().eq("id", id).select("id"));
+    if (b) {
+      await appendActivityLog(actorName || "", actorName || "",
+        `${actorName || "有人"} 刪除了戰績「${b.battle_date} vs ${b.opp_guild}」`);
+    }
+    return { success: true };
+  },
+
+  // 累積統計：把區間內每個人的場次與各項數據加總，只算我方。
+  getBattleAggregate: async (opts: any) => {
+    const from = String(opts?.from ?? "").trim();
+    const to = String(opts?.to ?? "").trim();
+    const type = String(opts?.type ?? "").trim();
+
+    let q = db.from("battles").select("id,battle_date,battle_type");
+    if (from) q = q.gte("battle_date", from);
+    if (to) q = q.lte("battle_date", to);
+    if (type) q = q.eq("battle_type", type);
+    const { data: battles } = await q;
+    const ids = (battles ?? []).map((b) => b.id);
+    if (ids.length === 0) return { battleCount: 0, rows: [] };
+
+    const { data: ps } = await db.from("battle_players").select("*").in("battle_id", ids).eq("side", "my");
+    const { data: roster } = await db.from("roster_members").select("name,job,category");
+    const cat: Record<string, string> = {};
+    (roster ?? []).forEach((r) => { cat[r.name] = r.category; });
+
+    const KEYS = ["kills", "assists", "res", "pvp", "bld", "heal", "tank", "heavy", "feather", "bone"];
+    const acc: Record<string, any> = {};
+    (ps ?? []).forEach((p) => {
+      const a = acc[p.name] ?? (acc[p.name] = {
+        name: p.name, job: p.job, games: 0,
+        ...Object.fromEntries(KEYS.map((k) => [k, 0])),
+      });
+      a.games += 1;
+      if (p.job) a.job = p.job;
+      KEYS.forEach((k) => { a[k] += Number((p as any)[k]) || 0; });
+    });
+
+    const rows = Object.values(acc).map((a: any) => {
+      const avg: Record<string, number> = {};
+      KEYS.forEach((k) => { avg[k] = a.games ? a[k] / a.games : 0; });
+      return { ...a, rosterCategory: cat[a.name] || "", avg };
+    }).sort((x: any, y: any) => y.games - x.games || y.pvp - x.pvp);
+
+    return { battleCount: ids.length, rows };
+  },
 };
 
 Deno.serve(async (req: Request): Promise<Response> => {
