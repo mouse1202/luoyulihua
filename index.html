@@ -83,14 +83,6 @@
       max-width: 1096px;
     }
 
-    /* ── Top image ── */
-    .top-image {
-      display: block;
-      width: 100vw;
-      max-width: 900px;
-      margin: 0 calc(50% - 50vw) 6px;
-    }
-
     /* ── Badge ── */
     .badge {
       border: 2px solid #f0d060;
@@ -151,6 +143,9 @@
       display: flex;
       flex-direction: column;
       align-items: stretch;
+      /* 原本靠頂部那張橫幅圖把按鈕推下來；圖拿掉後留一點上緣留白就好，
+         再多就會壓到底圖上的「落雨梨花」書法字 */
+      padding-top: clamp(28px, 6vh, 64px);
     }
 
     /* ── Banner card ── */
@@ -1758,7 +1753,6 @@
 
     <div class="view" id="main-view">
 
-    <img src="https://lh3.googleusercontent.com/d/1o9guDRszCEYQF3cv_fkmiZ8Z7wnqWeu_" alt="落雨梨花" class="top-image" />
 
     <div class="center-wrap">
 
