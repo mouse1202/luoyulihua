@@ -1842,11 +1842,20 @@
     .bt-pm-avg { background: #5a5a5a; }
 
     /* 各職業平均 */
+    /* 數值欄用 minmax(58px, 88px) 而不是 1fr：畫面寬的時候 1fr 會把十個數值欄
+       撐得很開，名字欄卻還是 74px，長一點的角色名就被逼成直排。
+       改成數值欄有上限、多出來的寬度全給名字欄。 */
     .bt-jrow {
-      display: grid; grid-template-columns: 74px 50px repeat(10, minmax(62px, 1fr));
+      display: grid;
+      /* 全部給固定寬：用 fr 的話寬螢幕會把多出來的空間塞進名字欄，
+         職業籤跟人數之間出現一大段空白。多餘的寬度留在表格右側就好。 */
+      grid-template-columns: 176px 52px repeat(10, 84px);
       gap: 6px; align-items: center; padding: 6px 8px;
       border-bottom: 1px solid #2a0a12; color: #FFFFEF; font-size: 12.5px; min-width: 860px;
     }
+    /* 展開的成員列數值置中，跟上面平均那排的熱力格對齊 */
+    .bt-jrow-member > span { text-align: center; }
+    .bt-jrow-member > .bt-jm-name { text-align: left; }
     .bt-jrow.bt-head { border-bottom: 1px solid #6B1023; font-weight: 700; color: #d4af37; }
 
     .bt-jrow-avg { cursor: pointer; }
