@@ -4205,7 +4205,7 @@
           loadAttendanceFromMembers();
         }).withFailureHandler(function (err) {
           showAlertModal('重新命名失敗：' + err.message);
-        }).renameDateLabel(oldDate, newDate);
+        }).renameDateLabel(oldDate, newDate, currentAccessName || '');
       });
     }
 

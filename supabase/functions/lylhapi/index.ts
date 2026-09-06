@@ -105,6 +105,10 @@ async function getAllDateLabels(): Promise<string[]> {
   });
   const dl = await db.from("date_labels").select("label");
   (dl.data ?? []).forEach((r) => { const l = String(r.label); if (l && !(l in labelTime)) labelTime[l] = null; });
+  // 影片的日期也要算進來：不然場次被改名後，留在舊名字底下的影片
+  // 會因為選單裡沒有那個場次而永遠看不到。
+  const vu = await db.from("video_uploads").select("date_label");
+  (vu.data ?? []).forEach((r) => { const l = String(r.date_label); if (l && !(l in labelTime)) labelTime[l] = null; });
   const labels = Object.keys(labelTime);
   labels.sort((a, b) => {
     const ta = labelTime[a], tb = labelTime[b];
@@ -267,14 +271,15 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const a = await db.from("attendance_records").delete().eq("date_label", date).select("id");
     const r = await db.from("roster_slots").delete().eq("date_label", date).select("id");
     const c = await db.from("roster_commanders").delete().eq("date_label", date).select("id");
+    const v = await db.from("video_uploads").delete().eq("date_label", date).select("id");
     await db.from("date_labels").delete().eq("label", date);
-    const na = a.data?.length ?? 0, nr = r.data?.length ?? 0, nc = c.data?.length ?? 0;
+    const na = a.data?.length ?? 0, nr = r.data?.length ?? 0, nc = c.data?.length ?? 0, nv = v.data?.length ?? 0;
     const actorLabel = actorRoleName || actorEmail || "有人";
     await appendActivityLog(actorEmail || "", actorRoleName || "",
-      `${actorLabel} 刪除了「${date}」的表單（出勤 ${na} 筆、排表 ${nr} 筆、指揮 ${nc} 筆）`);
-    return { success: true, attendance: na, roster: nr, commanders: nc };
+      `${actorLabel} 刪除了「${date}」的表單（出勤 ${na} 筆、排表 ${nr} 筆、指揮 ${nc} 筆、影片 ${nv} 筆）`);
+    return { success: true, attendance: na, roster: nr, commanders: nc, videos: nv };
   },
-  renameDateLabel: async (oldDate: string, newDate: string) => {
+  renameDateLabel: async (oldDate: string, newDate: string, actorName?: string) => {
     if (!oldDate || !newDate) return { success: false, message: "日期不能是空白" };
     if (oldDate === newDate) return { success: true, attendance: 0, roster: 0, commanders: 0 };
     const labels = await getAllDateLabels();
@@ -282,9 +287,18 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const a = await db.from("attendance_records").update({ date_label: newDate }).eq("date_label", oldDate).select("id");
     const r = await db.from("roster_slots").update({ date_label: newDate }).eq("date_label", oldDate).select("id");
     const c = await db.from("roster_commanders").update({ date_label: newDate }).eq("date_label", oldDate).select("id");
+    // 影片也要跟著搬，否則會留在舊場次名底下變成孤兒
+    const v = await db.from("video_uploads").update({ date_label: newDate }).eq("date_label", oldDate).select("id");
     await db.from("date_labels").upsert({ label: newDate }, { onConflict: "label" });
     await db.from("date_labels").delete().eq("label", oldDate);
-    return { success: true, attendance: a.data?.length ?? 0, roster: r.data?.length ?? 0, commanders: c.data?.length ?? 0 };
+    const actorLabel = actorName || "有人";
+    await appendActivityLog(actorName || "", actorName || "",
+      `${actorLabel} 把場次「${oldDate}」改名為「${newDate}」（出勤 ${a.data?.length ?? 0} 筆、排表 ${r.data?.length ?? 0} 筆、指揮 ${c.data?.length ?? 0} 筆、影片 ${v.data?.length ?? 0} 筆一起搬過去）`);
+    return {
+      success: true,
+      attendance: a.data?.length ?? 0, roster: r.data?.length ?? 0,
+      commanders: c.data?.length ?? 0, videos: v.data?.length ?? 0,
+    };
   },
 
   getActivityLog: async () => {
