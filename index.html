@@ -143,15 +143,15 @@
       display: flex;
       flex-direction: column;
       align-items: stretch;
-      /* 按鈕靠底部（見下面的 #main-view），這裡只留下緣的呼吸空間 */
-      padding-bottom: clamp(16px, 4vh, 48px);
+      /* 導覽列現在是純文字、放在畫面上方的天空區域，只留一點上緣留白 */
+      padding-top: clamp(14px, 3vh, 34px);
     }
 
     /* 首頁：內容靠畫面底部對齊，讓底圖的主視覺完整露出來。
        這裡刻意不寫 display —— id 權重比 .view.hidden 高，寫了會讓首頁藏不掉。 */
     #main-view {
       min-height: calc(100vh - 16px);
-      justify-content: flex-end;
+      justify-content: flex-start;
     }
 
     /* ── Banner card ── */
@@ -168,9 +168,14 @@
       width: 100%;
       margin-top: 8px;
       display: flex;
-      flex-direction: column;
-      gap: 10px;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: baseline;
+      column-gap: 28px;
+      row-gap: 6px;
     }
+    .nav .btn-row { width: auto; }
 
     .btn-row {
       display: flex;
@@ -181,28 +186,35 @@
 
     .nav-btn {
       flex: none;
-      padding: 14px 42px;
-      font-size: 18px;
+      /* 沒有底色，所以 padding 純粹是為了把點擊熱區撐大：
+         只留文字的話「戰績」兩個字寬度不到 45px，手機上很難點中 */
+      padding: 10px 14px;
+      font-size: 17px;
       font-family: inherit; /* 跟全站內文一樣用 Noto Sans TC（body 的 font-family） */
       font-weight: 700;
-      letter-spacing: 4px;
-      color: #1a1a1a;
-      background: linear-gradient(160deg, #f0d97a, #d4af37 45%, #a8862a);
+      letter-spacing: 3px;
+      color: #f0d97a;
+      background: none;
       border: none;
-      border-radius: 999px; /* 膠囊形：設一個一定大於高度一半的值，效果等同 height/2 */
       cursor: pointer;
-      animation: glow 2.6s ease-in-out infinite;
-      transition: transform 0.15s, filter 0.15s;
+      /* 純文字壓在照片上會看不清楚，靠陰影把字從背景裡拉出來，
+         比再加一層底色乾淨，也不會擋到畫面 */
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 14px rgba(0,0,0,.8);
+      transition: color 0.15s, text-shadow 0.15s;
     }
 
     /* 標語變長之後，18px 字加 4px 字距在手機上會撐到 436px、超出畫面寬度，
        膠囊兩端會被切掉。窄螢幕改小一號並收緊字距。 */
     @media (max-width: 600px) {
       .nav-btn {
-        padding: 12px 22px;
-        font-size: 15px;
+        padding: 9px 12px;
+        font-size: 14px;
         letter-spacing: 1px;
       }
+      /* 標語比另外兩個長很多，窄螢幕讓它自己佔一行，
+         「影片上傳」「戰績」才會乾淨地並排在第二行 */
+      .nav .btn-row:first-child { width: 100%; }
+      .nav { column-gap: 22px; }
     }
 
     @keyframes glow {
@@ -212,14 +224,11 @@
     }
 
     .nav-btn:hover {
-      filter: brightness(1.12);
-      transform: translateY(-2px);
+      color: #fff3c4;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 18px rgba(240,217,122,.75);
     }
 
-    .nav-btn:active {
-      transform: translateY(0);
-      filter: brightness(0.95);
-    }
+    .nav-btn:active { color: #d4af37; }
 
     /* ── View switcher (inline sections, no popup) ── */
     .view {
