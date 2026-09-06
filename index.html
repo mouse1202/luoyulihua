@@ -1628,6 +1628,132 @@
       .battle-compare-row { grid-template-columns: 1fr .8fr 1fr; }
     }
 
+    /* ── 單場戰報 ── */
+    .bt-head-bar {
+      display: flex; flex-wrap: wrap; gap: 8px 16px;
+      justify-content: space-between; align-items: baseline;
+      color: #FFFFEF; padding: 4px 0 10px;
+    }
+    .bt-head-title { font-size: 15px; font-weight: 700; }
+    .bt-head-vs { font-size: 15px; }
+    .bt-head-score { font-size: 17px; font-weight: 700; }
+    .bt-my  { color: #6fa8dc; }
+    .bt-opp { color: #ef8f8f; }
+
+    .bt-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .bt-tab {
+      border: 1px solid #6B1023; background: #0A0A0A; color: #FFFFEF;
+      border-radius: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+    }
+    .bt-tab:hover { border-color: #d4af37; }
+    .bt-tab.on { background: #6B1023; border-color: #d4af37; color: #fff; }
+
+    .bt-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .bt-search { max-width: 180px; }
+    .bt-pillbar { display: flex; flex-wrap: wrap; gap: 5px; }
+    .bt-pill {
+      border: 1px solid #3a3a3a; background: transparent; color: #cfcfcf;
+      border-radius: 999px; padding: 4px 11px; font-size: 12px; cursor: pointer;
+    }
+    .bt-pill:hover { border-color: #d4af37; color: #fff; }
+    .bt-pill.on { background: #6B1023; border-color: #d4af37; color: #fff; }
+
+    .bt-sec-title {
+      color: #d4af37; font-weight: 700; letter-spacing: 1px;
+      margin: 16px 0 8px; font-size: 14px;
+    }
+
+    /* 當場 MVP */
+    .bt-mvp-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px;
+    }
+    .bt-mvp {
+      /* minmax(0,1fr) 而不是 1fr：不然長名字會把整格撐開而不是省略 */
+      display: grid; grid-template-columns: 24px 58px minmax(0, 1fr) auto; gap: 6px; align-items: center;
+      border: 1px solid #6B1023; border-radius: 6px; background: #0A0A0A;
+      padding: 9px 11px; color: #FFFFEF; font-size: 13px;
+    }
+    .bt-mvp-icon { font-size: 15px; }
+    .bt-mvp-label { color: #d4af37; }
+    .bt-mvp-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bt-mvp-val { opacity: .85; font-size: 12px; }
+    .bt-mvp-empty { opacity: .4; }
+
+    /* 左右對比條 */
+    .bt-cmp-head {
+      display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 8px;
+      text-align: center; font-weight: 700; color: #FFFFEF;
+      padding-bottom: 6px; letter-spacing: 1px; font-size: 13px;
+    }
+    .bt-cmp-row {
+      display: grid; grid-template-columns: 90px 1fr 78px 90px; gap: 8px;
+      align-items: center; padding: 6px 0; color: #FFFFEF; font-size: 13px;
+    }
+    .bt-cmp-v { text-align: center; }
+    .bt-cmp-k { text-align: center; color: #cfcfcf; font-size: 12px; }
+    .bt-win { color: #d4af37; font-weight: 700; }
+    .bt-cmp-bar { display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: #1a0409; }
+    .bt-bar-my  { background: #6fa8dc; }
+    .bt-bar-opp { background: #ef8f8f; }
+    .bt-cmp-bar2 { justify-content: center; background: transparent; }
+    .bt-cmp-bar2 .bt-bar-l { margin-left: auto; border-radius: 999px 0 0 999px; }
+    .bt-cmp-bar2 .bt-bar-r { margin-right: auto; border-radius: 0 999px 999px 0; }
+
+    /* 名次徽章與職業標籤 */
+    .bt-rank {
+      display: inline-grid; place-items: center; width: 21px; height: 21px;
+      border-radius: 50%; font-size: 11px; font-weight: 700; color: #1a1a1a;
+    }
+    .bt-rank.r1 { background: #e8c86a; }
+    .bt-rank.r2 { background: #c8ccd0; }
+    .bt-rank.r3 { background: #cf9b62; }
+    .bt-rank.rn { background: #2c2c2c; color: #999; }
+    .bt-job {
+      display: inline-block; padding: 1px 7px; border: 1px solid #444;
+      border-radius: 4px; font-size: 11.5px;
+    }
+    .bt-dash { opacity: .3; }
+    .bt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* 出戰紀錄／熱力圖表格 */
+    .bt-table { overflow-x: auto; }
+    .bt-prow, .bt-hrow {
+      display: grid; gap: 6px; align-items: center;
+      padding: 6px 8px; border-bottom: 1px solid #2a0a12;
+      color: #FFFFEF; font-size: 12.5px; min-width: 940px;
+    }
+    .bt-prow { grid-template-columns: 34px 132px 62px repeat(10, minmax(62px, 1fr)); }
+    .bt-hrow { grid-template-columns: 34px 132px 62px repeat(10, minmax(62px, 1fr)); }
+    .bt-prow.bt-head, .bt-hrow.bt-head {
+      border-bottom: 1px solid #6B1023; font-weight: 700; color: #d4af37;
+      position: sticky; top: 0; background: #0A0A0A; z-index: 1;
+    }
+    .bt-sortable { cursor: pointer; user-select: none; }
+    .bt-sortable:hover { color: #fff; }
+    .bt-sortable.on { color: #fff; }
+    .bt-cell { border-radius: 4px; padding: 3px 5px; text-align: center; }
+
+    /* 職業雷達 */
+    .bt-radar-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;
+    }
+    .bt-radar-card {
+      border: 1px solid #6B1023; border-radius: 8px; background: #0A0A0A; padding: 8px;
+    }
+    .bt-radar-title {
+      display: flex; justify-content: space-between; align-items: center;
+      color: #FFFFEF; font-size: 12px; margin-bottom: 4px;
+    }
+    .bt-radar-n { opacity: .6; font-size: 11px; }
+    .bt-radar-card svg { width: 100%; height: auto; display: block; }
+    .bt-radar-grid-line { fill: none; stroke: #3a3a3a; stroke-width: .5; }
+    .bt-radar-axis { fill: #9a9a9a; font-size: 5px; text-anchor: middle; }
+
+    @media (max-width: 700px) {
+      .bt-cmp-row { grid-template-columns: 66px 1fr 60px 66px; font-size: 12px; }
+      .bt-cmp-head { font-size: 12px; }
+    }
+
     /* ── 後台「操作記錄」列表 ── */
     .activity-log-list {
       display: flex;
@@ -5295,29 +5421,50 @@
     }
 
     // 戰績的 12 個欄位。pvp/bld/heal/tank 在匯入時已經除以 10000，單位是「萬」。
+    // 欄位用語跟戰績視覺化工具一致：玩傷／塔傷／重傷／化羽／焚骨／資源。
+    // w:true 代表這欄的單位是「萬」（匯入時已經除以 10000）。
     var BATTLE_KEYS = [
-      { k: 'kills',   label: '擊殺',   dec: 0 },
-      { k: 'assists', label: '助攻',   dec: 0 },
-      { k: 'pvp',     label: 'PVP傷害', dec: 1 },
-      { k: 'tank',    label: '承傷',   dec: 1 },
-      { k: 'heal',    label: '治療',   dec: 1 },
-      { k: 'bld',     label: '建築傷害', dec: 1 },
-      { k: 'res',     label: '復活',   dec: 0 },
-      { k: 'heavy',   label: '重擊',   dec: 0 },
-      { k: 'feather', label: '羽',     dec: 0 },
-      { k: 'bone',    label: '骨',     dec: 0 }
+      { k: 'kills',   zh: '擊敗', w: false },
+      { k: 'assists', zh: '助攻', w: false },
+      { k: 'pvp',     zh: '玩傷', w: true  },
+      { k: 'bld',     zh: '塔傷', w: true  },
+      { k: 'heal',    zh: '治療', w: true  },
+      { k: 'tank',    zh: '承傷', w: true  },
+      { k: 'heavy',   zh: '重傷', w: false },
+      { k: 'feather', zh: '化羽', w: false },
+      { k: 'bone',    zh: '焚骨', w: false },
+      { k: 'res',     zh: '資源', w: false }
+    ];
+    var BATTLE_KEY_ZH = {};
+    BATTLE_KEYS.forEach(function (f) { BATTLE_KEY_ZH[f.k] = f; });
+
+    // 雷達圖的八個軸（不含資源，那不是貢獻）
+    var RADAR_KEYS = BATTLE_KEYS.filter(function (f) { return f.k !== 'res'; });
+
+    var JOB_ORDER = ['碎夢', '神相', '血河', '九靈', '玄機', '龍吟', '鐵衣', '素問'];
+    var JOB_CLR = {
+      '碎夢': '#5b9bd5', '神相': '#4fc3f7', '血河': '#ef5350', '九靈': '#ab47bc',
+      '玄機': '#ffd54f', '龍吟': '#66bb6a', '鐵衣': '#ffca28', '素問': '#f48fb1'
+    };
+
+    var MVP_DEFS = [
+      { icon: '🏆', label: '擊殺王', k: 'kills'   },
+      { icon: '⚔',  label: '輸出王', k: 'pvp'     },
+      { icon: '❤',  label: '輔助王', k: 'heal'    },
+      { icon: '🏰', label: '塔傷王', k: 'bld'     },
+      { icon: '🛡', label: '肉王',   k: 'tank'    },
+      { icon: '💀', label: '重傷王', k: 'heavy'   },
+      { icon: '🕊', label: '救援王', k: 'feather' },
+      { icon: '🔥', label: '焚骨王', k: 'bone'    }
     ];
 
-    var battleCards = [];      // 上傳中、還沒送出的 CSV
-    var battleCardSeq = 0;
-    var battleSort = { key: 'pvp', dir: -1 };
-    var aggSort = { key: 'games', dir: -1 };
-    var battleDetailCache = null;
-    var battleAggCache = null;
-
-    function fmtNum(v, dec) {
+    // 0 一律顯示破折號，畫面才不會被一堆 0 淹沒；傷害類補上「萬」
+    function battleFmt(v, key) {
       var n = Number(v) || 0;
-      return dec ? n.toFixed(dec) : String(Math.round(n));
+      if (!n) return '<span class="bt-dash">—</span>';
+      var f = BATTLE_KEY_ZH[key];
+      var r = Math.round(n).toLocaleString('en-US');
+      return f && f.w ? r + '萬' : r;
     }
 
     /* ── CSV 解析 ──
@@ -5558,12 +5705,23 @@
       });
     }
 
-    /* ── 單場戰報 ── */
+    /* ── 單場戰報 ──
+       分頁：總覽／出戰紀錄／陣容對比／數據對比／職業雷達／貢獻熱力
+       用語與數值格式對齊戰績視覺化工具（玩傷／塔傷／重傷／化羽／焚骨／資源，
+       傷害類顯示成「萬」，0 顯示成破折號）。 */
+
+    var battleTab = 'overview';
+    var battleSide = 'my';      // 出戰紀錄／熱力圖看哪一邊
+    var battleSearch = '';
+    var battleJobFilter = 'all';
+    var mvpSide = 'all';
 
     function openBattleDetail(id) {
       switchBattleTab('detail');
       var box = document.getElementById('battle-detail');
       box.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
+      battleTab = 'overview'; battleSide = 'my'; battleSearch = ''; battleJobFilter = 'all'; mvpSide = 'all';
+      battleSort = { key: 'pvp', dir: -1 };
       battleApi('getBattle', id).then(function (res) {
         if (!res.found) { box.innerHTML = '<div class="access-admin-empty">找不到這場戰績</div>'; return; }
         battleDetailCache = res;
@@ -5573,76 +5731,329 @@
       });
     }
 
+    function setBattleTab(t) { battleTab = t; renderBattleDetail(); }
+    function setBattleSide(s) { battleSide = s; renderBattleDetail(); }
+    function setMvpSide(s) { mvpSide = s; renderBattleDetail(); }
+    function setBattleJob(j) { battleJobFilter = j; renderBattleDetail(); }
+    function onBattleSearch(v) {
+      battleSearch = String(v || '').trim();
+      renderBattleDetail();
+      // 重畫會換掉 input，焦點與游標要自己補回去，不然打一個字就跳掉
+      var el = document.getElementById('battle-search');
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }
+
     function sortBattleDetail(key) {
       battleSort = { key: key, dir: battleSort.key === key ? -battleSort.dir : -1 };
       renderBattleDetail();
     }
 
+    /* ── 小工具 ── */
+
+    function battleSum(list, key) {
+      return list.reduce(function (n, p) { return n + (Number(p[key]) || 0); }, 0);
+    }
+
+    function jobChip(job) {
+      var c = JOB_CLR[job];
+      return '<span class="bt-job"' + (c ? ' style="color:' + c + ';border-color:' + c + '55"' : '') + '>' +
+        escapeBattleHtml(job || '—') + '</span>';
+    }
+
+    function rankBadge(i) {
+      var cls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : 'rn'));
+      return '<span class="bt-rank ' + cls + '">' + (i + 1) + '</span>';
+    }
+
+    // 依目前的搜尋與職業篩選挑出某一邊的人
+    function battleFiltered(side) {
+      return battleDetailCache.players.filter(function (p) {
+        if (p.side !== side) return false;
+        if (battleJobFilter !== 'all' && p.job !== battleJobFilter) return false;
+        if (battleSearch && p.name.indexOf(battleSearch) < 0) return false;
+        return true;
+      });
+    }
+
+    /* ── 分頁：總覽 ── */
+
+    function renderOverview(b, my, opp) {
+      // 八個王：各項目取最高的人。可切換只看我方／對方。
+      var pool = mvpSide === 'my' ? my : (mvpSide === 'opp' ? opp : my.concat(opp));
+      var mvp = MVP_DEFS.map(function (d) {
+        var top = pool.slice().sort(function (x, y) { return (y[d.k] || 0) - (x[d.k] || 0); })[0];
+        if (!top || !(top[d.k] || 0)) {
+          return '<div class="bt-mvp"><span class="bt-mvp-icon">' + d.icon + '</span>' +
+            '<span class="bt-mvp-label">' + d.label + '</span><span class="bt-mvp-empty">—</span></div>';
+        }
+        var mine = top.side === 'my';
+        return '<div class="bt-mvp"><span class="bt-mvp-icon">' + d.icon + '</span>' +
+          '<span class="bt-mvp-label">' + d.label + '</span>' +
+          '<span class="bt-mvp-name ' + (mine ? 'bt-my' : 'bt-opp') + '">' +
+            (mine ? '🔵' : '🔴') + ' ' + escapeBattleHtml(top.name) + '</span>' +
+          '<span class="bt-mvp-val">' + battleFmt(top[d.k], d.k) + '</span></div>';
+      }).join('');
+
+      var tabs = ['all', 'my', 'opp'].map(function (s) {
+        var t = s === 'all' ? '雙方' : (s === 'my' ? escapeBattleHtml(b.myGuild) : escapeBattleHtml(b.oppGuild));
+        return '<button type="button" class="bt-pill' + (mvpSide === s ? ' on' : '') +
+          '" onclick="setMvpSide(\'' + s + '\')">' + t + '</button>';
+      }).join('');
+
+      return '<div class="bt-sec-title">🏆 當場 MVP</div>' +
+        '<div class="bt-pillbar">' + tabs + '</div>' +
+        '<div class="bt-mvp-grid">' + mvp + '</div>' +
+        '<div class="bt-sec-title">📊 雙方合計</div>' + compareBars(b, my, opp);
+    }
+
+    // 雙方合計：中間放項目名，左右各一條長度按比例的橫條
+    function compareBars(b, my, opp) {
+      return '<div class="bt-cmp">' +
+        '<div class="bt-cmp-head"><span class="bt-my">' + escapeBattleHtml(b.myGuild) + '</span>' +
+          '<span>項目</span><span class="bt-opp">' + escapeBattleHtml(b.oppGuild) + '</span></div>' +
+        BATTLE_KEYS.map(function (f) {
+          var a = battleSum(my, f.k), c = battleSum(opp, f.k);
+          var tot = a + c || 1;
+          var ap = Math.round(a / tot * 100), cp = 100 - ap;
+          return '<div class="bt-cmp-row">' +
+            '<span class="bt-cmp-v ' + (a >= c ? 'bt-win' : '') + '">' + battleFmt(a, f.k) + '</span>' +
+            '<span class="bt-cmp-bar"><i class="bt-bar-my" style="width:' + ap + '%"></i>' +
+              '<i class="bt-bar-opp" style="width:' + cp + '%"></i></span>' +
+            '<span class="bt-cmp-k">' + f.zh + '</span>' +
+            '<span class="bt-cmp-v ' + (c >= a ? 'bt-win' : '') + '">' + battleFmt(c, f.k) + '</span>' +
+          '</div>';
+        }).join('') + '</div>';
+    }
+
+    /* ── 分頁：出戰紀錄 ── */
+
+    function renderRoster() {
+      var list = battleFiltered(battleSide).slice();
+      var k = battleSort.key, dir = battleSort.dir;
+      list.sort(function (x, y) {
+        var a = k === 'job' ? (x.job || '') : (Number(x[k]) || 0);
+        var c = k === 'job' ? (y.job || '') : (Number(y[k]) || 0);
+        if (a === c) return 0;
+        return a < c ? -dir : dir;
+      });
+
+      var head = '<div class="bt-prow bt-head">' +
+        '<span>#</span><span>玩家</span>' +
+        '<span class="bt-sortable' + (k === 'job' ? ' on' : '') + '" onclick="sortBattleDetail(\'job\')">職業' +
+          (k === 'job' ? (dir < 0 ? ' ▼' : ' ▲') : ' ↕') + '</span>' +
+        BATTLE_KEYS.map(function (f) {
+          return '<span class="bt-sortable' + (k === f.k ? ' on' : '') +
+            '" onclick="sortBattleDetail(\'' + f.k + '\')">' + f.zh +
+            (k === f.k ? (dir < 0 ? ' ▼' : ' ▲') : ' ↕') + '</span>';
+        }).join('') + '</div>';
+
+      if (!list.length) return head + '<div class="access-admin-empty">沒有符合條件的人</div>';
+
+      return '<div class="bt-table">' + head + list.map(function (p, i) {
+        var tag = p.side === 'my' ? rosterTag(p.rosterCategory) : '';
+        return '<div class="bt-prow">' +
+          '<span>' + rankBadge(i) + '</span>' +
+          '<span class="bt-name">' + escapeBattleHtml(p.name) + tag + '</span>' +
+          '<span>' + jobChip(p.job) + '</span>' +
+          BATTLE_KEYS.map(function (f) { return '<span>' + battleFmt(p[f.k], f.k) + '</span>'; }).join('') +
+        '</div>';
+      }).join('') + '</div>';
+    }
+
+    function rosterTag(cat) {
+      if (cat === 'member') return '';
+      if (cat === 'guest') return '<span class="battle-tag">外援</span>';
+      if (cat === 'trial') return '<span class="battle-tag">試訓</span>';
+      return '<span class="battle-tag battle-tag-none">非名單</span>';
+    }
+
+    /* ── 分頁：陣容對比（職業分佈） ── */
+
+    function renderLineup(b, my, opp) {
+      var jobs = JOB_ORDER.filter(function (j) {
+        return my.some(function (p) { return p.job === j; }) || opp.some(function (p) { return p.job === j; });
+      });
+      var maxN = Math.max(1, Math.max.apply(null, jobs.map(function (j) {
+        return Math.max(my.filter(function (p) { return p.job === j; }).length,
+                        opp.filter(function (p) { return p.job === j; }).length);
+      })));
+      return '<div class="bt-sec-title">⚔ 陣容對比</div>' +
+        '<div class="bt-cmp-head"><span class="bt-my">' + escapeBattleHtml(b.myGuild) + '（' + my.length + '）</span>' +
+          '<span>職業</span><span class="bt-opp">' + escapeBattleHtml(b.oppGuild) + '（' + opp.length + '）</span></div>' +
+        jobs.map(function (j) {
+          var a = my.filter(function (p) { return p.job === j; }).length;
+          var c = opp.filter(function (p) { return p.job === j; }).length;
+          var clr = JOB_CLR[j] || '#888';
+          return '<div class="bt-cmp-row">' +
+            '<span class="bt-cmp-v">' + (a || '—') + '</span>' +
+            '<span class="bt-cmp-bar bt-cmp-bar2">' +
+              '<i class="bt-bar-l" style="width:' + (a / maxN * 50) + '%;background:' + clr + '"></i>' +
+              '<i class="bt-bar-r" style="width:' + (c / maxN * 50) + '%;background:' + clr + '99"></i>' +
+            '</span>' +
+            '<span class="bt-cmp-k">' + jobChip(j) + '</span>' +
+            '<span class="bt-cmp-v">' + (c || '—') + '</span>' +
+          '</div>';
+        }).join('');
+    }
+
+    /* ── 分頁：職業雷達 ──
+       每個職業一張小雷達，八個軸取該職業的「每人平均」，
+       再用所有職業裡的最大值當滿刻度，這樣不同職業之間才比得出形狀差異。 */
+
+    function renderRadar(b) {
+      var side = battleSide;
+      var list = battleFiltered(side);
+      var jobs = JOB_ORDER.filter(function (j) { return list.some(function (p) { return p.job === j; }); });
+      if (!jobs.length) return '<div class="access-admin-empty">這一邊沒有資料</div>';
+
+      var avg = {};
+      jobs.forEach(function (j) {
+        var ps = list.filter(function (p) { return p.job === j; });
+        avg[j] = {};
+        RADAR_KEYS.forEach(function (f) { avg[j][f.k] = battleSum(ps, f.k) / ps.length; });
+        avg[j]._n = ps.length;
+      });
+      var max = {};
+      RADAR_KEYS.forEach(function (f) {
+        max[f.k] = Math.max.apply(null, jobs.map(function (j) { return avg[j][f.k]; })) || 1;
+      });
+
+      return '<div class="bt-sec-title">📡 職業雷達（每人平均）</div>' +
+        '<div class="bt-radar-grid">' + jobs.map(function (j) {
+          var pts = RADAR_KEYS.map(function (f, i) {
+            var r = 42 * Math.min(1, avg[j][f.k] / max[f.k]);
+            var ang = -Math.PI / 2 + i * 2 * Math.PI / RADAR_KEYS.length;
+            return (50 + r * Math.cos(ang)).toFixed(1) + ',' + (50 + r * Math.sin(ang)).toFixed(1);
+          }).join(' ');
+          var grid = [1, 0.66, 0.33].map(function (s) {
+            return '<polygon points="' + RADAR_KEYS.map(function (f, i) {
+              var ang = -Math.PI / 2 + i * 2 * Math.PI / RADAR_KEYS.length;
+              return (50 + 42 * s * Math.cos(ang)).toFixed(1) + ',' + (50 + 42 * s * Math.sin(ang)).toFixed(1);
+            }).join(' ') + '" class="bt-radar-grid-line"/>';
+          }).join('');
+          var axes = RADAR_KEYS.map(function (f, i) {
+            var ang = -Math.PI / 2 + i * 2 * Math.PI / RADAR_KEYS.length;
+            return '<text x="' + (50 + 48 * Math.cos(ang)).toFixed(1) + '" y="' +
+              (50 + 48 * Math.sin(ang) + 1.6).toFixed(1) + '" class="bt-radar-axis">' + f.zh + '</text>';
+          }).join('');
+          var clr = JOB_CLR[j] || '#d4af37';
+          return '<div class="bt-radar-card">' +
+            '<div class="bt-radar-title">' + jobChip(j) + '<span class="bt-radar-n">' + avg[j]._n + ' 人</span></div>' +
+            '<svg viewBox="0 0 100 100">' + grid + axes +
+              '<polygon points="' + pts + '" fill="' + clr + '44" stroke="' + clr + '" stroke-width="1"/>' +
+            '</svg></div>';
+        }).join('') + '</div>';
+    }
+
+    /* ── 分頁：貢獻熱力 ──
+       每列一個人、每欄一個項目，顏色深淺＝該欄最大值的百分比。
+       一眼看出誰在哪個項目扛最多、誰整列都是暗的。 */
+
+    function renderHeatmap() {
+      var list = battleFiltered(battleSide).slice();
+      if (!list.length) return '<div class="access-admin-empty">沒有符合條件的人</div>';
+      var max = {};
+      BATTLE_KEYS.forEach(function (f) {
+        max[f.k] = Math.max.apply(null, list.map(function (p) { return Number(p[f.k]) || 0; })) || 1;
+      });
+      list.sort(function (x, y) {
+        var sx = BATTLE_KEYS.reduce(function (n, f) { return n + (Number(x[f.k]) || 0) / max[f.k]; }, 0);
+        var sy = BATTLE_KEYS.reduce(function (n, f) { return n + (Number(y[f.k]) || 0) / max[f.k]; }, 0);
+        return sy - sx;
+      });
+
+      return '<div class="bt-sec-title">🌡 貢獻熱力（每欄以該欄最高者為滿格）</div>' +
+        '<div class="bt-table"><div class="bt-hrow bt-head"><span>#</span><span>玩家</span><span>職業</span>' +
+        BATTLE_KEYS.map(function (f) { return '<span>' + f.zh + '</span>'; }).join('') + '</div>' +
+        list.map(function (p, i) {
+          return '<div class="bt-hrow"><span>' + rankBadge(i) + '</span>' +
+            '<span class="bt-name">' + escapeBattleHtml(p.name) + '</span>' +
+            '<span>' + jobChip(p.job) + '</span>' +
+            BATTLE_KEYS.map(function (f) {
+              var v = Number(p[f.k]) || 0, r = v / max[f.k];
+              return '<span class="bt-cell" style="background:rgba(212,175,55,' + (r * 0.75).toFixed(3) + ')">' +
+                battleFmt(v, f.k) + '</span>';
+            }).join('') + '</div>';
+        }).join('') + '</div>';
+    }
+
+    /* ── 分頁：數據對比（我方 vs 對方，每人平均） ── */
+
+    function renderStatCompare(b, my, opp) {
+      return '<div class="bt-sec-title">📊 數據對比（每人平均）</div>' +
+        '<div class="bt-cmp-head"><span class="bt-my">' + escapeBattleHtml(b.myGuild) + '</span>' +
+          '<span>項目</span><span class="bt-opp">' + escapeBattleHtml(b.oppGuild) + '</span></div>' +
+        BATTLE_KEYS.map(function (f) {
+          var a = my.length ? battleSum(my, f.k) / my.length : 0;
+          var c = opp.length ? battleSum(opp, f.k) / opp.length : 0;
+          var tot = a + c || 1;
+          var ap = Math.round(a / tot * 100);
+          return '<div class="bt-cmp-row">' +
+            '<span class="bt-cmp-v ' + (a >= c ? 'bt-win' : '') + '">' + battleFmt(a, f.k) + '</span>' +
+            '<span class="bt-cmp-bar"><i class="bt-bar-my" style="width:' + ap + '%"></i>' +
+              '<i class="bt-bar-opp" style="width:' + (100 - ap) + '%"></i></span>' +
+            '<span class="bt-cmp-k">' + f.zh + '</span>' +
+            '<span class="bt-cmp-v ' + (c >= a ? 'bt-win' : '') + '">' + battleFmt(c, f.k) + '</span>' +
+          '</div>';
+        }).join('');
+    }
+
+    /* ── 組裝 ── */
+
     function renderBattleDetail() {
       var res = battleDetailCache;
       if (!res) return;
       var b = res.battle;
+      var my = res.players.filter(function (p) { return p.side === 'my'; });
+      var opp = res.players.filter(function (p) { return p.side === 'opp'; });
       var cls = b.result === '勝' ? 'battle-win' : (b.result === '敗' ? 'battle-lose' : '');
 
-      function total(side, key) {
-        return res.players.filter(function (p) { return p.side === side; })
-          .reduce(function (n, p) { return n + (Number(p[key]) || 0); }, 0);
-      }
+      var tabs = [
+        ['overview', '📊 總覽'], ['roster', '📋 出戰紀錄'], ['lineup', '⚔ 陣容對比'],
+        ['stats', '📊 數據對比'], ['radar', '📡 職業雷達'], ['heat', '🌡 貢獻熱力']
+      ].map(function (t) {
+        return '<button type="button" class="bt-tab' + (battleTab === t[0] ? ' on' : '') +
+          '" onclick="setBattleTab(\'' + t[0] + '\')">' + t[1] + '</button>';
+      }).join('');
 
-      // 雙方合計對比：同一列左右並排，比較容易看出差在哪
-      var compare = '<div class="battle-compare"><div class="battle-row battle-row-head">' +
-        '<span>' + escapeBattleHtml(b.myGuild) + '</span><span>項目</span><span>' + escapeBattleHtml(b.oppGuild) + '</span></div>' +
-        BATTLE_KEYS.map(function (f) {
-          var mv = total('my', f.k), ov = total('opp', f.k);
-          return '<div class="battle-row battle-compare-row">' +
-            '<span class="' + (mv > ov ? 'battle-better' : '') + '">' + fmtNum(mv, f.dec) + '</span>' +
-            '<span>' + f.label + '</span>' +
-            '<span class="' + (ov > mv ? 'battle-better' : '') + '">' + fmtNum(ov, f.dec) + '</span>' +
-          '</div>';
-        }).join('') + '</div>';
+      // 只有跟「人」有關的分頁才需要搜尋與職業篩選
+      var needFilter = ['roster', 'radar', 'heat'].indexOf(battleTab) >= 0;
+      var jobs = ['all'].concat(JOB_ORDER.filter(function (j) {
+        return res.players.some(function (p) { return p.job === j; });
+      }));
+      var filterBar = !needFilter ? '' :
+        '<div class="bt-filter">' +
+          '<div class="bt-pillbar">' +
+            '<button type="button" class="bt-pill' + (battleSide === 'my' ? ' on' : '') +
+              '" onclick="setBattleSide(\'my\')">' + escapeBattleHtml(b.myGuild) + '</button>' +
+            '<button type="button" class="bt-pill' + (battleSide === 'opp' ? ' on' : '') +
+              '" onclick="setBattleSide(\'opp\')">' + escapeBattleHtml(b.oppGuild) + '</button>' +
+          '</div>' +
+          '<input id="battle-search" class="modal-input bt-search" placeholder="🔍 搜尋玩家" ' +
+            'value="' + escapeBattleHtml(battleSearch) + '" oninput="onBattleSearch(this.value)">' +
+          '<div class="bt-pillbar">' + jobs.map(function (j) {
+            return '<button type="button" class="bt-pill' + (battleJobFilter === j ? ' on' : '') +
+              '" onclick="setBattleJob(\'' + j + '\')">' + (j === 'all' ? '全部' : j) + '</button>';
+          }).join('') + '</div>' +
+        '</div>';
 
-      function table(side, title) {
-        var list = res.players.filter(function (p) { return p.side === side; }).slice();
-        var k = battleSort.key, dir = battleSort.dir;
-        list.sort(function (x, y) {
-          var a = Number(x[k]) || 0, c = Number(y[k]) || 0;
-          // dir = -1 代表遞減（大的在前）：a 比較小就要排到後面，所以回傳 -dir
-        return a === c ? 0 : (a < c ? -dir : dir);
-        });
-        var head = '<div class="battle-prow battle-row-head">' +
-          '<span>#</span><span>名稱</span><span>門派</span>' +
-          BATTLE_KEYS.map(function (f) {
-            return '<span class="battle-sortable' + (k === f.k ? ' battle-sorted' : '') +
-              '" onclick="sortBattleDetail(\'' + f.k + '\')">' + f.label +
-              (k === f.k ? (dir < 0 ? ' ▼' : ' ▲') : '') + '</span>';
-          }).join('') + '</div>';
-        var body = list.map(function (p, i) {
-          var tag = side === 'my'
-            ? (p.rosterCategory === 'member' ? '' :
-               p.rosterCategory === 'guest' ? '<span class="battle-tag">外援</span>' :
-               p.rosterCategory === 'trial' ? '<span class="battle-tag">試訓</span>' :
-               '<span class="battle-tag battle-tag-none">非名單</span>')
-            : '';
-          return '<div class="battle-prow">' +
-            '<span>' + (i + 1) + '</span>' +
-            '<span>' + escapeBattleHtml(p.name) + tag + '</span>' +
-            '<span>' + escapeBattleHtml(p.job) + '</span>' +
-            BATTLE_KEYS.map(function (f) { return '<span>' + fmtNum(p[f.k], f.dec) + '</span>'; }).join('') +
-          '</div>';
-        }).join('');
-        return '<div class="member-section-title">' + title + '（' + list.length + ' 人）</div>' +
-          '<div class="battle-table">' + head + body + '</div>';
-      }
+      var body =
+        battleTab === 'overview' ? renderOverview(b, my, opp) :
+        battleTab === 'roster'   ? renderRoster() :
+        battleTab === 'lineup'   ? renderLineup(b, my, opp) :
+        battleTab === 'stats'    ? renderStatCompare(b, my, opp) :
+        battleTab === 'radar'    ? renderRadar(b) :
+                                   renderHeatmap();
 
       document.getElementById('battle-detail').innerHTML =
-        '<div class="battle-head">' +
-          '<span class="battle-head-title">' + escapeBattleHtml(b.date) + (b.time ? ' ' + escapeBattleHtml(b.time) : '') +
-          '　' + escapeBattleHtml(b.type) + '　' + escapeBattleHtml(b.myGuild) + ' vs ' + escapeBattleHtml(b.oppGuild) + '</span>' +
-          '<span class="battle-head-score ' + cls + '">' + b.myKills + ' - ' + b.oppKills + '　' + escapeBattleHtml(b.result) + '</span>' +
+        '<div class="bt-head-bar">' +
+          '<span class="bt-head-title">' + escapeBattleHtml(b.date) + (b.time ? ' ' + escapeBattleHtml(b.time) : '') +
+            '　' + escapeBattleHtml(b.type) + '</span>' +
+          '<span class="bt-head-vs"><span class="bt-my">' + escapeBattleHtml(b.myGuild) + '</span> vs ' +
+            '<span class="bt-opp">' + escapeBattleHtml(b.oppGuild) + '</span></span>' +
+          '<span class="bt-head-score ' + cls + '">' + b.myKills + ' - ' + b.oppKills + '　' + escapeBattleHtml(b.result) + '</span>' +
         '</div>' +
-        compare +
-        table('my', escapeBattleHtml(b.myGuild)) +
-        table('opp', escapeBattleHtml(b.oppGuild));
+        '<div class="bt-tabs">' + tabs + '</div>' + filterBar + body;
     }
 
     /* ── 累積統計 ── */
@@ -5689,7 +6100,7 @@
           '" onclick="sortBattleAgg(\'games\')">場次' + (k === 'games' ? (dir < 0 ? ' ▼' : ' ▲') : '') + '</span>' +
         BATTLE_KEYS.map(function (f) {
           return '<span class="battle-sortable' + (k === f.k ? ' battle-sorted' : '') +
-            '" onclick="sortBattleAgg(\'' + f.k + '\')">' + f.label +
+            '" onclick="sortBattleAgg(\'' + f.k + '\')">' + f.zh +
             (k === f.k ? (dir < 0 ? ' ▼' : ' ▲') : '') + '</span>';
         }).join('') + '</div>';
 
@@ -5704,8 +6115,8 @@
           '<span>' + escapeBattleHtml(r.job) + '</span>' +
           '<span>' + r.games + '</span>' +
           BATTLE_KEYS.map(function (f) {
-            return '<span>' + fmtNum(r[f.k], f.dec) +
-              '<i class="battle-avg">' + fmtNum(r.avg[f.k], f.dec) + '</i></span>';
+            return '<span>' + battleFmt(r[f.k], f.k) +
+              '<i class="battle-avg">' + battleFmt(r.avg[f.k], f.k) + '</i></span>';
           }).join('') +
         '</div>';
       }).join('');
