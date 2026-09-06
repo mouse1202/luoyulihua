@@ -1741,8 +1741,14 @@
     .bt-cell { border-radius: 4px; padding: 3px 5px; text-align: center; }
 
     /* 職業雷達 */
+    /* 用固定寬度的軌道，不用 auto-fit + 1fr：
+       篩選成單一職業時只剩一張卡，1fr 會把它拉成整個容器寬、圖大得誇張。 */
     .bt-radar-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;
+      display: grid; grid-template-columns: repeat(auto-fill, 170px);
+      justify-content: start; gap: 10px;
+    }
+    @media (max-width: 420px) {
+      .bt-radar-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
     }
     .bt-radar-card {
       border: 1px solid #6B1023; border-radius: 8px; background: #0A0A0A; padding: 8px;
@@ -5918,22 +5924,31 @@
        再用所有職業裡的最大值當滿刻度，這樣不同職業之間才比得出形狀差異。 */
 
     function renderRadar(b) {
-      var side = battleSide;
-      var list = battleFiltered(side);
-      var jobs = JOB_ORDER.filter(function (j) { return list.some(function (p) { return p.job === j; }); });
-      if (!jobs.length) return '<div class="access-admin-empty">這一邊沒有資料</div>';
+      // 職業篩選只決定「顯示哪幾張卡」，不參與滿刻度計算：
+      // 只留一個職業時如果拿它自己當滿格，圖形一定填滿，等於看不出高低。
+      var base = battleDetailCache.players.filter(function (p) {
+        return p.side === battleSide && (!battleSearch || p.name.indexOf(battleSearch) >= 0);
+      });
+      var allJobs = JOB_ORDER.filter(function (j) { return base.some(function (p) { return p.job === j; }); });
+      if (!allJobs.length) return '<div class="access-admin-empty">這一邊沒有資料</div>';
 
       var avg = {};
-      jobs.forEach(function (j) {
-        var ps = list.filter(function (p) { return p.job === j; });
+      allJobs.forEach(function (j) {
+        var ps = base.filter(function (p) { return p.job === j; });
         avg[j] = {};
         RADAR_KEYS.forEach(function (f) { avg[j][f.k] = battleSum(ps, f.k) / ps.length; });
         avg[j]._n = ps.length;
       });
+      // 滿刻度一律取所有職業裡的最大值，篩選前後形狀才一致
       var max = {};
       RADAR_KEYS.forEach(function (f) {
-        max[f.k] = Math.max.apply(null, jobs.map(function (j) { return avg[j][f.k]; })) || 1;
+        max[f.k] = Math.max.apply(null, allJobs.map(function (j) { return avg[j][f.k]; })) || 1;
       });
+
+      var jobs = allJobs.filter(function (j) {
+        return battleJobFilter === 'all' || j === battleJobFilter;
+      });
+      if (!jobs.length) return '<div class="access-admin-empty">這一邊沒有這個職業</div>';
 
       return '<div class="bt-sec-title">📡 職業雷達（每人平均）</div>' +
         '<div class="bt-radar-grid">' + jobs.map(function (j) {
