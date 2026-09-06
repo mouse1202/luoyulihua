@@ -143,9 +143,15 @@
       display: flex;
       flex-direction: column;
       align-items: stretch;
-      /* 原本靠頂部那張橫幅圖把按鈕推下來；圖拿掉後留一點上緣留白就好，
-         再多就會壓到底圖上的「落雨梨花」書法字 */
-      padding-top: clamp(28px, 6vh, 64px);
+      /* 按鈕靠底部（見下面的 #main-view），這裡只留下緣的呼吸空間 */
+      padding-bottom: clamp(16px, 4vh, 48px);
+    }
+
+    /* 首頁：內容靠畫面底部對齊，讓底圖的主視覺完整露出來。
+       這裡刻意不寫 display —— id 權重比 .view.hidden 高，寫了會讓首頁藏不掉。 */
+    #main-view {
+      min-height: calc(100vh - 16px);
+      justify-content: flex-end;
     }
 
     /* ── Banner card ── */
