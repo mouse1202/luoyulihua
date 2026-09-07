@@ -1882,6 +1882,30 @@
     .bt-pick { display: flex; flex-direction: column; gap: 4px; color: #FFFFEF; font-size: 12px; }
     .bt-pick select { min-width: 200px; max-width: 260px; }
 
+    /* 象限圖 */
+    .bt-q-wrap { display: flex; flex-wrap: wrap; gap: 10px; }
+    .bt-q-chart {
+      flex: 1 1 380px; max-width: 520px;
+      border: 1px solid #6B1023; border-radius: 8px; background: #0A0A0A; padding: 6px;
+    }
+    .bt-q-chart svg { width: 100%; height: auto; display: block; }
+    .bt-q-chart text { fill: #FFFFEF; }
+    .bt-q-chart .bt-q-axis { fill: #a09880; font-size: 11px; }
+    .bt-q-chart .bt-q-max { fill: rgba(212,175,55,0.45); font-size: 9px; }
+    .bt-q-dot { cursor: pointer; }
+    .bt-q-dot:hover circle { r: 7; }
+    .bt-q-bar {
+      display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 6px 0 8px;
+    }
+    .bt-q-lab { color: #d4af37; font-size: 12px; margin-right: 4px; }
+    .bt-q-chip {
+      cursor: pointer; display: inline-flex; align-items: center; padding: 2px 8px;
+      border: 1px solid #3a3a3a; border-radius: 3px; font-size: 11px;
+      color: #6a6a6a; background: transparent; opacity: .5;
+    }
+    .bt-q-chip.on { opacity: 1; background: rgba(212,175,55,0.06); }
+    .bt-q-note { color: #FFFFEF; opacity: .5; font-size: 11px; margin-top: 8px; }
+
     /* 趨勢 */
     .bt-trend-chart {
       position: relative; border: 1px solid #6B1023; border-radius: 8px;
@@ -6142,9 +6166,38 @@
       // 職業列要先判斷：它跟成員列都在同一張表裡
       var jr = e.target.closest('[data-jobrow]');
       if (jr) { setJobAvgOpen(jr.dataset.jobrow); return; }
+      // 象限圖的開關要先攔：它們不是 .bt-clickable，但點在同一張圖裡
+      var qa = e.target.closest('[data-qall]');
+      if (qa) { quadrantSetAll_(qa.dataset.qall, true); return; }
+      var qn = e.target.closest('[data-qnone]');
+      if (qn) { quadrantSetAll_(qn.dataset.qnone, false); return; }
+      var qt = e.target.closest('[data-qtoggle]');
+      if (qt) {
+        var bag = qt.dataset.qtoggle === 'sw' ? suwenHidden : cqHidden;
+        var nm = qt.dataset.qname;
+        if (bag[nm]) delete bag[nm]; else bag[nm] = true;
+        renderBattleDetail();
+        return;
+      }
+      var qj = e.target.closest('[data-qjob]');
+      if (qj) { cqJobs[qj.dataset.qjob] = !cqJobs[qj.dataset.qjob]; renderBattleDetail(); return; }
+
       var row = e.target.closest('.bt-clickable');
       if (row && row.dataset.name) openPlayerModal(row.dataset.side, row.dataset.name);
     });
+
+    // 全選＝把隱藏清單清空；全不選＝把目前這一邊看得到的人全部塞進隱藏清單
+    function quadrantSetAll_(kind, on) {
+      var bag = kind === 'sw' ? suwenHidden : cqHidden;
+      Object.keys(bag).forEach(function (k) { delete bag[k]; });
+      if (!on && battleDetailCache) {
+        battleDetailCache.players.filter(function (p) {
+          if (p.side !== battleSide) return false;
+          return kind === 'sw' ? p.job === '素問' : !!(cqJobs && cqJobs[p.job]);
+        }).forEach(function (p) { bag[p.name] = true; });
+      }
+      renderBattleDetail();
+    }
 
     function closePlayerModal() {
       playerModalName = '';
@@ -6350,6 +6403,7 @@
       var box = document.getElementById('battle-detail');
       box.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
       battleTab = 'overview'; battleSide = 'my'; battleSearch = ''; battleJobFilter = 'all'; mvpSide = 'all';
+      cqJobs = null; cqHidden = {}; suwenHidden = {};
       battleSort = { key: 'pvp', dir: -1 };
       battleApi('getBattle', id).then(function (res) {
         if (!res.found) { box.innerHTML = '<div class="access-admin-empty">找不到這場戰績</div>'; return; }
@@ -6692,7 +6746,8 @@
       var tabs = [
         ['overview', '📊 總覽'], ['roster', '📋 出戰紀錄'], ['lineup', '⚔ 陣容對比'],
         ['stats', '📊 數據對比'], ['jobavg', '✦ 各職業平均'], ['radar', '📡 職業雷達'],
-        ['heat', '🌡 貢獻熱力'], ['pick', '🔀 自選對比']
+        ['heat', '🌡 貢獻熱力'], ['pick', '🔀 自選對比'],
+        ['suwen', '🎯 素問象限'], ['cquad', '📍 自選象限']
       ].map(function (t) {
         return '<button type="button" class="bt-tab' + (battleTab === t[0] ? ' on' : '') +
           '" onclick="setBattleTab(\'' + t[0] + '\')">' + t[1] + '</button>';
@@ -6700,17 +6755,22 @@
 
       // 只有跟「人」有關的分頁才需要搜尋與職業篩選
       var needFilter = ['roster', 'radar', 'heat', 'jobavg'].indexOf(battleTab) >= 0;
+      // 象限圖要能切左右陣營，但不要搜尋框與職業藥丸：
+      // 自選象限自己就有一排職業開關，再來一組只會互相打架。
+      var sideOnly = ['suwen', 'cquad'].indexOf(battleTab) >= 0;
       var jobs = ['all'].concat(JOB_ORDER.filter(function (j) {
         return res.players.some(function (p) { return p.job === j; });
       }));
-      var filterBar = !needFilter ? '' :
-        '<div class="bt-filter">' +
-          '<div class="bt-pillbar">' +
-            '<button type="button" class="bt-pill' + (battleSide === 'my' ? ' on' : '') +
-              '" onclick="setBattleSide(\'my\')">' + escapeBattleHtml(b.myGuild) + '</button>' +
-            '<button type="button" class="bt-pill' + (battleSide === 'opp' ? ' on' : '') +
-              '" onclick="setBattleSide(\'opp\')">' + escapeBattleHtml(b.oppGuild) + '</button>' +
-          '</div>' +
+      var sideBar =
+        '<div class="bt-pillbar">' +
+          '<button type="button" class="bt-pill' + (battleSide === 'my' ? ' on' : '') +
+            '" onclick="setBattleSide(\'my\')">' + escapeBattleHtml(b.myGuild) + '</button>' +
+          '<button type="button" class="bt-pill' + (battleSide === 'opp' ? ' on' : '') +
+            '" onclick="setBattleSide(\'opp\')">' + escapeBattleHtml(b.oppGuild) + '</button>' +
+        '</div>';
+      var filterBar = sideOnly ? '<div class="bt-filter">' + sideBar + '</div>' :
+        !needFilter ? '' :
+        '<div class="bt-filter">' + sideBar +
           '<input id="battle-search" class="modal-input bt-search" placeholder="🔍 搜尋玩家" ' +
             'value="' + escapeBattleHtml(battleSearch) + '" oninput="onBattleSearch(this.value)">' +
           '<div class="bt-pillbar">' + jobs.map(function (j) {
@@ -6727,6 +6787,8 @@
         battleTab === 'jobavg'   ? renderJobAvg(b) :
         battleTab === 'radar'    ? renderRadar(b) :
         battleTab === 'pick'     ? renderPick(b) :
+        battleTab === 'suwen'    ? renderSuwen(b) :
+        battleTab === 'cquad'    ? renderCQuad(b) :
                                    renderHeatmap();
 
       document.getElementById('battle-detail').innerHTML =
@@ -6739,6 +6801,219 @@
         '</div>' +
         '<div class="bt-tabs">' + tabs + '</div>' + filterBar + body + playerModalHtml();
     }
+
+    /* ── 象限圖 ──
+       兩個分頁：🎯 素問象限（固定兩張圖）與 🔀 自選象限（XY 自己挑）。
+       共用同一支 SVG 繪製函式，差別只在資料來源與要不要上色分職業。 */
+
+    // 自選象限可以當座標軸的欄位。d:true 表示是衍生欄位，要走 derivedOf() 算。
+    var CQ_AXES = [
+      { k: 'pvp',     zh: '玩傷', w: true },
+      { k: 'bld',     zh: '塔傷', w: true },
+      { k: 'heal',    zh: '治療', w: true },
+      { k: 'tank',    zh: '承傷', w: true },
+      { k: 'heavy',   zh: '重傷' },
+      { k: 'feather', zh: '化羽' },
+      { k: 'bone',    zh: '焚骨' },
+      { k: 'kills',   zh: '擊敗' },
+      { k: 'assists', zh: '助攻' },
+      { k: 'killEff',    zh: '擊殺效率', w: true, d: true },
+      { k: 'netHeal',    zh: '淨奶量',   w: true, d: true },
+      { k: 'rescueDiff', zh: '救援差',            d: true }
+    ];
+
+    var cqX = 'pvp';
+    var cqY = 'kills';
+    var cqJobs = null;      // { 職業: true }，null 代表還沒初始化（第一次全開）
+    var cqHidden = {};      // { 玩家名: true } 被關掉的點
+    var suwenHidden = {};
+
+    // 取一個玩家在某個軸上的值（衍生欄位要另外算）
+    function cqValue_(p, axis, sideList) {
+      if (!axis.d) return Number(p[axis.k]) || 0;
+      return Number(derivedOf(p, sideList)[axis.k]) || 0;
+    }
+
+    function cqAxisFmt_(v, axis) {
+      var n = Math.round(v);
+      return axis.w ? n.toLocaleString('en-US') + '萬' : n.toLocaleString('en-US');
+    }
+
+    /* 共用的象限 SVG。
+       pts = [{ x, y, name, color }]；四個角落的字純粹是描述位置，不是好壞評分。
+       座標軸從 0 起算，但淨奶量／救援差會是負的，所以下限取 min(0, 最小值)，
+       不然負值的點會被畫到圖框外面去。 */
+    function quadrantSvg_(pts, xAxis, yAxis) {
+      var W = 520, H = 380, PL = 64, PR = 24, PT = 24, PB = 54;
+      var pw = W - PL - PR, ph = H - PT - PB;
+
+      var xs = pts.map(function (p) { return p.x; });
+      var ys = pts.map(function (p) { return p.y; });
+      var xLo = Math.min.apply(null, xs.concat([0]));
+      var yLo = Math.min.apply(null, ys.concat([0]));
+      var xHi = Math.max.apply(null, xs.concat([xLo + 1]));
+      var yHi = Math.max.apply(null, ys.concat([yLo + 1]));
+      if (xHi === xLo) xHi = xLo + 1;
+      if (yHi === yLo) yHi = yLo + 1;
+
+      var sx = function (v) { return PL + (v - xLo) / (xHi - xLo) * pw; };
+      var sy = function (v) { return PT + ph - (v - yLo) / (yHi - yLo) * ph; };
+      var midX = PL + pw / 2, midY = PT + ph / 2;
+
+      var dots = pts.map(function (p) {
+        var x = sx(p.x), y = sy(p.y);
+        var label = p.name.slice(0, 6);
+        // 靠邊的名字要改對齊方式，不然會被圖框切掉
+        var half = label.length * 5, anchor = 'middle', tx = x;
+        if (x + half > PL + pw - 1) { anchor = 'end'; tx = PL + pw - 1; }
+        else if (x - half < PL + 1) { anchor = 'start'; tx = PL + 1; }
+        return '<g class="bt-q-dot bt-clickable" data-side="' + p.side + '" data-name="' +
+            escapeBattleHtml(p.name) + '">' +
+          '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="5" fill="' + p.color +
+            '" fill-opacity="0.85" stroke="' + p.color + '" stroke-width="1"><title>' +
+            escapeBattleHtml(p.name) + '　' + xAxis.zh + ' ' + cqAxisFmt_(p.x, xAxis) +
+            '　' + yAxis.zh + ' ' + cqAxisFmt_(p.y, yAxis) + '</title></circle>' +
+          '<text x="' + tx.toFixed(1) + '" y="' + (y - 8).toFixed(1) + '" text-anchor="' + anchor +
+            '" font-size="9">' + escapeBattleHtml(label) + '</text></g>';
+      }).join('');
+
+      var xt = xAxis.zh + (xAxis.w ? '（萬）' : '');
+      var yt = yAxis.zh + (yAxis.w ? '（萬）' : '');
+      var G = 'rgba(102,187,106,', O = 'rgba(255,183,77,', R = 'rgba(239,83,80,';
+
+      return '<div class="bt-q-chart"><svg viewBox="0 0 ' + W + ' ' + H + '">' +
+        '<rect x="' + PL + '" y="' + PT + '" width="' + pw / 2 + '" height="' + ph / 2 + '" fill="' + G + '0.05)"/>' +
+        '<rect x="' + midX + '" y="' + PT + '" width="' + pw / 2 + '" height="' + ph / 2 + '" fill="' + O + '0.05)"/>' +
+        '<rect x="' + PL + '" y="' + midY + '" width="' + pw / 2 + '" height="' + ph / 2 + '" fill="' + R + '0.05)"/>' +
+        '<rect x="' + midX + '" y="' + midY + '" width="' + pw / 2 + '" height="' + ph / 2 + '" fill="' + O + '0.05)"/>' +
+        '<line x1="' + midX + '" y1="' + PT + '" x2="' + midX + '" y2="' + (PT + ph) +
+          '" stroke="rgba(212,175,55,0.2)" stroke-dasharray="4,3"/>' +
+        '<line x1="' + PL + '" y1="' + midY + '" x2="' + (PL + pw) + '" y2="' + midY +
+          '" stroke="rgba(212,175,55,0.2)" stroke-dasharray="4,3"/>' +
+        '<line x1="' + PL + '" y1="' + (PT + ph) + '" x2="' + (PL + pw) + '" y2="' + (PT + ph) +
+          '" stroke="rgba(212,175,55,0.3)"/>' +
+        '<line x1="' + PL + '" y1="' + PT + '" x2="' + PL + '" y2="' + (PT + ph) +
+          '" stroke="rgba(212,175,55,0.3)"/>' +
+        '<text class="bt-q-axis" x="' + (PL + pw / 2) + '" y="' + (H - 8) + '" text-anchor="middle">' + xt + '</text>' +
+        '<text class="bt-q-axis" x="13" y="' + (PT + ph / 2) + '" text-anchor="middle" transform="rotate(-90,13,' +
+          (PT + ph / 2) + ')">' + yt + '</text>' +
+        '<text class="bt-q-max" x="' + (PL + pw) + '" y="' + (PT + ph + 16) + '" text-anchor="end">' +
+          cqAxisFmt_(xHi, xAxis) + '</text>' +
+        '<text class="bt-q-max" x="' + (PL - 4) + '" y="' + (PT + 4) + '" text-anchor="end">' +
+          cqAxisFmt_(yHi, yAxis) + '</text>' +
+        '<text x="' + (PL + 6) + '" y="' + (PT + 14) + '" fill="' + G + '0.6)" font-size="10">高' +
+          yAxis.zh + '低' + xAxis.zh + '</text>' +
+        '<text x="' + (PL + pw - 6) + '" y="' + (PT + 14) + '" text-anchor="end" fill="' + O + '0.6)" font-size="10">高' +
+          yAxis.zh + '高' + xAxis.zh + '</text>' +
+        '<text x="' + (PL + 6) + '" y="' + (PT + ph - 5) + '" fill="' + R + '0.6)" font-size="10">低' +
+          yAxis.zh + '低' + xAxis.zh + '</text>' +
+        '<text x="' + (PL + pw - 6) + '" y="' + (PT + ph - 5) + '" text-anchor="end" fill="' + O + '0.6)" font-size="10">低' +
+          yAxis.zh + '高' + xAxis.zh + '</text>' +
+        dots + '</svg></div>';
+    }
+
+    // 玩家開關小標籤。名字可能有各種字元，所以走 data 屬性＋事件委派，不用 inline onclick。
+    function quadrantChip_(name, color, on, kind) {
+      return '<span class="bt-q-chip' + (on ? ' on' : '') + '" data-qtoggle="' + kind +
+        '" data-qname="' + escapeBattleHtml(name) + '"' +
+        (on ? ' style="border-color:' + color + ';color:' + color + '"' : '') + '>' +
+        escapeBattleHtml(name.slice(0, 6)) + '</span>';
+    }
+
+    /* ── 🎯 素問象限：左 治療×承傷、右 化羽×重傷 ── */
+    function renderSuwen(b) {
+      var side = battleSide;
+      var list = battleDetailCache.players.filter(function (p) { return p.side === side; });
+      var sw = list.filter(function (p) { return p.job === '素問'; });
+      if (!sw.length) {
+        return '<div class="bt-sec-title">🎯 素問象限</div>' +
+          '<div class="access-admin-empty">' +
+          escapeBattleHtml(side === 'my' ? b.myGuild : b.oppGuild) + ' 這一場沒有素問。</div>';
+      }
+      var c = JOB_CLR['素問'];
+      var mk = function (xk, yk) {
+        return sw.filter(function (p) { return !suwenHidden[p.name]; }).map(function (p) {
+          return { x: Number(p[xk]) || 0, y: Number(p[yk]) || 0, name: p.name, color: c, side: side };
+        });
+      };
+      var ax = function (k) { return CQ_AXES.filter(function (a) { return a.k === k; })[0]; };
+
+      var chips = sw.slice().sort(function (x, y) { return (y.heal || 0) - (x.heal || 0); })
+        .map(function (p) { return quadrantChip_(p.name, c, !suwenHidden[p.name], 'sw'); }).join('');
+
+      return '<div class="bt-sec-title">🎯 素問象限（' +
+          escapeBattleHtml(side === 'my' ? b.myGuild : b.oppGuild) + '・' + sw.length + ' 位素問）</div>' +
+        '<div class="bt-q-bar"><span class="bt-q-lab">玩家</span>' +
+          '<button type="button" class="bt-pill" data-qall="sw">全選</button>' +
+          '<button type="button" class="bt-pill" data-qnone="sw">全不選</button>' + chips + '</div>' +
+        '<div class="bt-q-wrap">' +
+          quadrantSvg_(mk('heal', 'tank'), ax('heal'), ax('tank')) +
+          quadrantSvg_(mk('feather', 'heavy'), ax('feather'), ax('heavy')) +
+        '</div>' +
+        '<div class="bt-q-note">四個角落的字是描述點落在哪一區，不是好壞評分。點圓點可以看那個人的完整數據。</div>';
+    }
+
+    /* ── 🔀 自選象限：XY 自己挑，顏色照職業 ── */
+    function renderCQuad(b) {
+      var side = battleSide;
+      var list = battleDetailCache.players.filter(function (p) { return p.side === side; });
+      if (!list.length) return '<div class="access-admin-empty">這一邊沒有玩家資料</div>';
+
+      var availJobs = JOB_ORDER.filter(function (j) {
+        return list.some(function (p) { return p.job === j; });
+      });
+      // 第一次進來全部職業都打開
+      if (!cqJobs) { cqJobs = {}; availJobs.forEach(function (j) { cqJobs[j] = true; }); }
+      // 換一邊之後可能出現沒看過的職業，預設也打開
+      availJobs.forEach(function (j) { if (!(j in cqJobs)) cqJobs[j] = true; });
+
+      var xAxis = CQ_AXES.filter(function (a) { return a.k === cqX; })[0] || CQ_AXES[0];
+      var yAxis = CQ_AXES.filter(function (a) { return a.k === cqY; })[0] || CQ_AXES[7];
+
+      var inJob = list.filter(function (p) { return cqJobs[p.job]; });
+      var pts = inJob.filter(function (p) { return !cqHidden[p.name]; }).map(function (p) {
+        return {
+          x: cqValue_(p, xAxis, list), y: cqValue_(p, yAxis, list),
+          name: p.name, color: JOB_CLR[p.job] || '#d4af37', side: side
+        };
+      });
+
+      var sel = function (id, cur, handler) {
+        return '<select class="modal-input" onchange="' + handler + '(this.value)">' +
+          CQ_AXES.map(function (a) {
+            return '<option value="' + a.k + '"' + (a.k === cur ? ' selected' : '') + '>' + a.zh + '</option>';
+          }).join('') + '</select>';
+      };
+
+      var jobChips = availJobs.map(function (j) {
+        var on = !!cqJobs[j], c = JOB_CLR[j] || '#d4af37';
+        return '<span class="bt-q-chip' + (on ? ' on' : '') + '" data-qjob="' + j + '"' +
+          (on ? ' style="border-color:' + c + ';color:' + c + '"' : '') + '>' + j + '</span>';
+      }).join('');
+
+      var plChips = inJob.slice().sort(function (x, y) {
+        return JOB_ORDER.indexOf(x.job) - JOB_ORDER.indexOf(y.job);
+      }).map(function (p) {
+        return quadrantChip_(p.name, JOB_CLR[p.job] || '#d4af37', !cqHidden[p.name], 'cq');
+      }).join('');
+
+      return '<div class="bt-sec-title">🔀 自選象限（' +
+          escapeBattleHtml(side === 'my' ? b.myGuild : b.oppGuild) + '・' + pts.length + ' 人）</div>' +
+        '<div class="bt-filter">' +
+          '<label class="bt-pick">橫軸' + sel('cq-x', cqX, 'setCqX') + '</label>' +
+          '<label class="bt-pick">縱軸' + sel('cq-y', cqY, 'setCqY') + '</label>' +
+        '</div>' +
+        '<div class="bt-q-bar"><span class="bt-q-lab">職業</span>' + jobChips + '</div>' +
+        '<div class="bt-q-bar"><span class="bt-q-lab">玩家</span>' +
+          '<button type="button" class="bt-pill" data-qall="cq">全選</button>' +
+          '<button type="button" class="bt-pill" data-qnone="cq">全不選</button>' + plChips + '</div>' +
+        quadrantSvg_(pts, xAxis, yAxis) +
+        '<div class="bt-q-note">虛線是座標範圍的中線。淨奶量與救援差可能是負的，' +
+          '這時候座標軸會從最小值起算而不是從 0。點圓點可以看那個人的完整數據。</div>';
+    }
+
+    function setCqX(k) { cqX = k; renderBattleDetail(); }
+    function setCqY(k) { cqY = k; renderBattleDetail(); }
 
     /* ── 累積統計 ── */
 
