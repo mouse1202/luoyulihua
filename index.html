@@ -2128,7 +2128,9 @@
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
   var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend'];
 
-  var JOB_COLORS = { '鐵衣':'e69138','血河':'cc0000','神相':'6fa8dc','素問':'f4cccc','九靈':'d9d2e9','碎夢':'4dd0e1','龍吟':'93c47d','玄機':'ffe599','潮光':'3c78d8' };
+  // 排表匯出的職業底色。存的是不含 # 的六碼，argb() 會補上 FF。
+  // 都是淺色系，配預設的黑字才看得清楚。
+  var JOB_COLORS = { '鐵衣':'ffaf60','血河':'ff9797','神相':'2894ff','素問':'ffc1e0','九靈':'dcb5ff','碎夢':'bbffff','龍吟':'93ff93','玄機':'ffdc35','潮光':'acd6ff' };
   var GROUP_BANNER = { '團一進攻':{bg:'1c4587',fg:'ffffff'}, '團二進攻':{bg:'990000',fg:'ffffff'}, '防守團':{bg:'f1c232',fg:'000000'} };
   var DEF_BANNER = { bg:'434343', fg:'ffffff' };
   function argb(h){ return 'FF' + h.toUpperCase(); }
