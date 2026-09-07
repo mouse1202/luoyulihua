@@ -3939,10 +3939,15 @@
       if (rosterDateInput) rosterDateInput.value = value;
     }
 
-    // ── 月份分頁（含民國年）：日期下拉先用「月份」過濾，日期一多才不會一長串 ──
-    // 月份用「絕對月份索引」表示：idx = 民國年*12 + (月-1)。例如 115年08月 = 115*12+7 = 1387。
-    // 這份清單存在後端（app_settings.month_tabs），可「＋新增月份」往後加，跨年自動進位（115/12→116/01）。
-    var DEFAULT_ROC_YEAR = 115;           // 沒有年份資訊的現有月份一律先當作民國 115 年
+    // ── 月份分頁：日期下拉先用「月份」過濾，日期一多才不會一長串 ──
+    //
+    // 月份用「絕對月份索引」表示：idx = 民國年*12 + (月-1)。例如民國 115 年 08 月 = 115*12+7 = 1387。
+    // 索引本身沿用民國制沒有改 —— 這個數字已經存在後端（app_settings.month_tabs），
+    // 換算法要連同資料一起遷移，而舊分頁還開著的人會用舊算法寫回去，新舊值混在一起會很難救。
+    // 畫面上要看到西元，所以只在 monthTabText_() 顯示的時候 +1911。
+    //
+    // 可「＋新增月份」往後加，跨年自動進位（民國 115/12 → 116/01，畫面上是 2026/12 → 2027/01）。
+    var DEFAULT_ROC_YEAR = 115;           // 沒有年份資訊的現有月份一律先當作民國 115 年（西元 2026）
     var OTHER_MONTH_VALUE = '__OTHER__';  // 開頭不是 MMDD 的標籤歸這一組
     var ADD_MONTH_VALUE = '__addmonth__'; // 月份下拉最後的「＋ 新增月份」選項
     var monthTabs = [];                   // 由小到大的絕對月份索引清單
@@ -3950,11 +3955,12 @@
     var sharedMonthIdx = null;            // 目前選到的月份（數字索引，或 OTHER_MONTH_VALUE）
 
     function romMonthNum_(idx) { return idx % 12 + 1; }        // 1~12
-    function romYear_(idx) { return Math.floor(idx / 12); }    // 民國年
+    function romYear_(idx) { return Math.floor(idx / 12); }    // 民國年（索引用的）
+    function adYear_(idx) { return romYear_(idx) + 1911; }     // 西元年（畫面用的）
     function idxOf_(y, m) { return y * 12 + (m - 1); }
     function monthTabText_(idx) {
       var m = romMonthNum_(idx);
-      return romYear_(idx) + '年' + (m < 10 ? '0' : '') + m + '月';
+      return adYear_(idx) + '年' + (m < 10 ? '0' : '') + m + '月';
     }
     // 標籤的「月份數字」(1~12)；開頭不是合法 MMDD 回 null
     function labelMonthNum_(label) {
