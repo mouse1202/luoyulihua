@@ -183,8 +183,8 @@ CSV 裡沒有、算出來的六項：
 密碼寫在 `index.html` 裡（沿用醉心亭那組）：
 
 ```js
-var EXPORT_PASSWORD = '0103';   // 只解鎖「出勤匯出」
-var ADMIN_PASSWORD  = '1102';   // 總管理密碼
+var EXPORT_PASSWORD = '2024';   // 只解鎖「出勤匯出」
+var ADMIN_PASSWORD  = '1221';   // 總管理密碼
 ```
 
 **這兩組密碼跟醉心亭是同一組。** 兩邊要分開的話，改這兩行、順便更新第 2114 行說明文字裡寫的數字。

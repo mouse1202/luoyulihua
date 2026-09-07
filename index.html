@@ -2624,7 +2624,7 @@
           <button type="button" class="roster-back-btn" onclick="closeAccessAdminView()">返回出勤系統</button>
         </div>
         <div class="roster-body">
-          <p class="password-hint">這裡是完整的人員清冊：核准後對方才能使用網頁功能；已核准的人也能隨時點「剔除」立刻收回權限。「管理」才能輸入總管理密碼(1102)使用排表工具/名單管理/審核申請等所有功能；「文書」比幫眾多一項：可輸入匯出密碼(0103)匯出出勤紀錄；「幫眾」登入後只能開出勤系統改自己的出勤狀態。</p>
+          <p class="password-hint">這裡是完整的人員清冊：核准後對方才能使用網頁功能；已核准的人也能隨時點「剔除」立刻收回權限。「管理」才能輸入總管理密碼(1221)使用排表工具/名單管理/審核申請等所有功能；「文書」比幫眾多一項：可輸入匯出密碼(2024)匯出出勤紀錄；「幫眾」登入後只能開出勤系統改自己的出勤狀態。</p>
 
           <div class="access-admin-manual-add">
             <span class="access-admin-manual-title">手動新增成員（不用經過申請流程，直接核准）</span>
@@ -2829,11 +2829,11 @@
     ];
     var TEAM_ROW_GAP = 12; // px, 對應 .roster-team-row 的 gap
     var TEAM_SIZE = 6;
-    var EXPORT_PASSWORD = '0103';   // 只解鎖「出勤匯出」（文書可用）
-    var ADMIN_PASSWORD = '1102';    // 總管理密碼：解鎖所有功能
+    var EXPORT_PASSWORD = '2024';   // 只解鎖「出勤匯出」（文書可用）
+    var ADMIN_PASSWORD = '1221';    // 總管理密碼：解鎖所有功能
 
     // 目前登入者的帳號類別：'管理' / '文書' / '幫眾' / null（尚未確認身分）。
-    // 「管理」可用所有後台功能（密碼 1102）；「文書」比幫眾多一項：可匯出出勤（密碼 0103）；
+    // 「管理」可用所有後台功能（密碼 1221）；「文書」比幫眾多一項：可匯出出勤（密碼 2024）；
     // 「幫眾」登入後只能開出勤系統改自己的出勤狀態。
     var currentAccessCategory = null;
     var currentAccessName = null;
@@ -2926,8 +2926,8 @@
     // 輸入一次正確密碼後，30 分鐘內再觸發任何密碼保護的動作都不用重新輸入。
     // 這個時間也存進 localStorage，重新整理頁面後（30 分鐘內）還是算已驗證過，
     // 不用重新輸入密碼——出勤系統的「解鎖」就是靠這個機制撐過重新整理。
-    var FULL_GRACE_MS = 30 * 60 * 1000;    // 1102 總管理：30 分鐘免密
-    var EXPORT_GRACE_MS = 10 * 60 * 1000;  // 0103 匯出：10 分鐘免密
+    var FULL_GRACE_MS = 30 * 60 * 1000;    // 1221 總管理：30 分鐘免密
+    var EXPORT_GRACE_MS = 10 * 60 * 1000;  // 2024 匯出：10 分鐘免密
     var FULL_VERIFIED_KEY = 'lylh_password_verified_until';
     var EXPORT_VERIFIED_KEY = 'lylh_export_verified_until';
     var fullVerifiedUntil = 0;
@@ -2959,7 +2959,7 @@
         }
       }
 
-      // 免密期：總管理(1102)通過任何級別；匯出(0103)只通過 export 級別。
+      // 免密期：總管理(1221)通過任何級別；匯出(2024)只通過 export 級別。
       var nowTs = Date.now();
       if (nowTs < fullVerifiedUntil) { onSuccessFn(); return; }
       if (level === 'export' && nowTs < exportVerifiedUntil) { onSuccessFn(); return; }
@@ -4393,7 +4393,7 @@
 
     // 出勤調整截止時間：綁定「日期/場次標籤」本身，每個標籤各自獨立（不是綁真實日曆日期）。
     // 每個標籤存一個「完整截止時刻」(yyyy-MM-ddTHH:MM)；只有在「目前正在看這個標籤」且已過該時刻時才鎖，
-    // 其他標籤完全不受影響。輸入總管理密碼(1102)或按解鎖後可繼續編輯。
+    // 其他標籤完全不受影響。輸入總管理密碼(1221)或按解鎖後可繼續編輯。
     var attendanceDeadlines = {}; // 標籤 -> 完整截止時刻字串 'yyyy-MM-ddTHH:MM'（快取）
     var attendanceUnlocked = false; // 本機預覽（無後端）時的解鎖旗標，純前端、僅限本機測試用
     var attendanceTempUnlockUntil = {}; // 標籤 -> 臨時解鎖到期時間戳記（毫秒，後端共用）
