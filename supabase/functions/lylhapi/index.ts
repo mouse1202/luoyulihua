@@ -690,8 +690,13 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
 
   // 單人趨勢：同一組篩選條件下，某一個人每一場的數據。
   //
-  // 除了本人的值，同時回傳該場我方的人均與名次 —— 光看自己的折線
-  // 看不出是自己變強還是整團都變強，要有對照組才判斷得出來。
+  // 除了本人的值，同時回傳該場「同職業」的平均與名次當對照組 ——
+  // 光看自己的折線看不出是自己變強還是整團都變強。
+  //
+  // 對照組是同職業而不是全隊：全隊平均把素問跟血河混在一起算，
+  // 輸出職一定遠高於它、輔助職一定遠低於它，那個差距大半來自職業
+  // 而不是個人表現，拿來判斷「他打得好不好」沒有意義。
+  //
   // 沒上場的那幾場會回 played:false，前端把線斷開而不是畫成 0。
   getPlayerTrend: async (opts: any) => {
     const from = String(opts?.from ?? "").trim();
@@ -714,35 +719,50 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
 
     const KEYS = ["kills", "assists", "res", "pvp", "bld", "heal", "tank", "heavy", "feather", "bone"];
 
-    // 一場一組：全隊的人與加總，之後拿來算人均與名次
-    const byBattle: Record<string, { people: any[]; sum: Record<string, number> }> = {};
+    // 一場一組：我方全部的人，之後再從裡面挑出同職業的當對照組
+    const byBattle: Record<string, any[]> = {};
     (ps ?? []).forEach((p) => {
-      const g = byBattle[p.battle_id] ??
-        (byBattle[p.battle_id] = { people: [], sum: Object.fromEntries(KEYS.map((k) => [k, 0])) });
-      g.people.push(p);
-      KEYS.forEach((k) => { g.sum[k] += Number((p as any)[k]) || 0; });
+      (byBattle[p.battle_id] ?? (byBattle[p.battle_id] = [])).push(p);
+    });
+
+    // 主要職業：這個區間裡上場時最常用的那個。
+    // 沒上場的場次沒有 job 可用，拿它來挑對照組，那幾列才顯示得出職均。
+    const jobCount: Record<string, number> = {};
+    (ps ?? []).forEach((p) => {
+      if (p.name === name && p.job) jobCount[p.job] = (jobCount[p.job] ?? 0) + 1;
+    });
+    let mainJob = "";
+    Object.keys(jobCount).forEach((j) => {
+      if (!mainJob || jobCount[j] > jobCount[mainJob]) mainJob = j;
     });
 
     return {
       name,
       points: list.map((b) => {
-        const g = byBattle[b.id];
-        const n = g ? g.people.length : 0;
-        const me = g ? g.people.filter((x) => x.name === name)[0] : undefined;
+        const all = byBattle[b.id] ?? [];
+        const me = all.filter((x) => x.name === name)[0];
+
+        // 那一場實際用的職業；沒上場就退回主要職業
+        const cmpJob = me ? me.job : mainJob;
+        const peers = cmpJob ? all.filter((x) => x.job === cmpJob) : [];
 
         const avg: Record<string, number> = {};
-        KEYS.forEach((k) => { avg[k] = n ? g.sum[k] / n : 0; });
+        KEYS.forEach((k) => {
+          avg[k] = peers.length
+            ? peers.reduce((t, x) => t + (Number((x as any)[k]) || 0), 0) / peers.length
+            : 0;
+        });
 
         const vals: Record<string, number> | null = me
           ? Object.fromEntries(KEYS.map((k) => [k, Number((me as any)[k]) || 0]))
           : null;
 
-        // 名次：同一場我方裡排第幾。並列時算同名次（比自己高的人數 +1）
+        // 名次：同一場「同職業」裡排第幾。並列算同名次（比自己高的人數 +1）
         const rank: Record<string, number> = {};
-        if (me && g) {
+        if (me) {
           KEYS.forEach((k) => {
             const v = Number((me as any)[k]) || 0;
-            rank[k] = g.people.filter((x) => (Number((x as any)[k]) || 0) > v).length + 1;
+            rank[k] = peers.filter((x) => (Number((x as any)[k]) || 0) > v).length + 1;
           });
         }
 
@@ -750,9 +770,11 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
           id: b.id, date: b.battle_date, time: b.battle_time, type: b.battle_type,
           oppGuild: b.opp_guild, result: b.result,
           myKills: b.my_kills, oppKills: b.opp_kills,
-          people: n,
+          people: all.length,        // 我方總人數（顯示用）
+          jobPeople: peers.length,   // 同職業人數＝職均與名次的分母
           played: !!me,
           job: me ? me.job : "",
+          cmpJob,
           vals, avg, rank,
         };
       }),

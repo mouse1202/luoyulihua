@@ -7179,8 +7179,10 @@
           '<span>勝敗</span><span>人數</span><span>' + f.zh + '</span></div>' + rows;
     }
 
-    /* 單人：本人每一場的折線，外加同場我方人均當對照。
-       只看自己那條線分不出是自己變強還是整團都變強，要有對照組才判斷得出來。 */
+    /* 單人：本人每一場的折線，外加同場「同職業」的平均當對照。
+       只看自己那條線分不出是自己變強還是整團都變強，要有對照組才判斷得出來。
+       對照組用同職業而不是全隊：全隊平均把素問跟血河混在一起，輸出職一定
+       遠高於它、輔助職一定遠低於它，那個差距大半來自職業而不是個人表現。 */
     function renderSoloTrend_() {
       if (trendLoading) return '<div class="access-admin-empty">讀取中…</div>';
       var d = trendPlayerCache;
@@ -7189,7 +7191,7 @@
       }
       var pts = d.points, f = BATTLE_KEY_ZH[trendKey];
       var mine = pts.map(function (x) { return x.played ? (Number(x.vals[trendKey]) || 0) : null; });
-      var avgs = pts.map(function (x) { return x.people ? (Number(x.avg[trendKey]) || 0) : null; });
+      var avgs = pts.map(function (x) { return x.jobPeople ? (Number(x.avg[trendKey]) || 0) : null; });
       var played = pts.filter(function (x) { return x.played; });
 
       if (!played.length) {
@@ -7265,14 +7267,16 @@
         }
         return head + '<span>' + battleFmt(x.vals[trendKey], trendKey) + '</span>' +
           '<span>' + battleFmt(x.avg[trendKey], trendKey) + '</span>' +
-          '<span>' + x.rank[trendKey] + ' / ' + x.people + '</span></div>';
+          '<span>' + x.rank[trendKey] + ' / ' + x.jobPeople + '</span></div>';
       }).join('');
 
-      return '<div class="bt-sec-title">📈 單人趨勢（' + escapeBattleHtml(d.name) + '・' + f.zh + '）</div>' +
+      var cmpJob = played[played.length - 1].job || '';
+      return '<div class="bt-sec-title">📈 單人趨勢（' + escapeBattleHtml(d.name) + '・' + f.zh +
+          '　對照組：同場' + escapeBattleHtml(cmpJob || '同職業') + '）</div>' +
         sumBar +
         '<div class="bt-trend-legend">' +
           '<span><i style="border-top-style:solid;border-color:#d4af37"></i>本人</span>' +
-          '<span><i style="border-top-style:dashed;border-color:#9a9a9a"></i>我方人均</span>' +
+          '<span><i style="border-top-style:dashed;border-color:#9a9a9a"></i>同職業平均</span>' +
           '<span>空心點＝那場沒上</span>' +
         '</div>' +
         '<div class="bt-trend-chart"><svg viewBox="0 0 100 44" preserveAspectRatio="none">' +
@@ -7280,7 +7284,7 @@
         '</svg><span class="bt-trend-max">最高 ' + battleFmt(max, trendKey) + '</span></div>' +
         '<div class="bt-trend-head bt-trend-row bt-trend-solo"><span>日期</span><span>類型</span>' +
           '<span>對手</span><span>勝敗</span><span>' + f.zh + '</span>' +
-          '<span>隊均</span><span>名次</span></div>' + rows;
+          '<span>職均</span><span>職業名次</span></div>' + rows;
     }
 
     /* ── 最高紀錄：每個項目的單場最佳 ── */
