@@ -1902,6 +1902,30 @@
       border: 0; color: #d4af37; font-weight: 700; padding-bottom: 2px; margin-bottom: 2px;
     }
 
+    /* 單人趨勢：多了「隊均」與「名次」兩欄 */
+    .bt-trend-solo { grid-template-columns: 1.2fr .6fr 1.3fr .5fr .9fr .9fr .7fr; }
+    .bt-trend-absent { opacity: .42; }
+    .bt-trend-pick {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      color: #FFFFEF; font-size: 12.5px; margin-bottom: 8px;
+    }
+    .bt-trend-pick select { min-width: 190px; max-width: 260px; }
+    .bt-trend-legend {
+      display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+      color: #FFFFEF; font-size: 12px; opacity: .8; margin: 0 0 4px;
+    }
+    .bt-trend-legend i {
+      display: inline-block; width: 18px; height: 0; margin-right: 6px;
+      vertical-align: middle; border-top-width: 2px;
+    }
+    .bt-trend-sum {
+      display: flex; flex-wrap: wrap; gap: 6px 18px;
+      border: 1px solid #6B1023; border-radius: 8px; background: #0A0A0A;
+      padding: 9px 12px; margin-bottom: 12px; color: #FFFFEF; font-size: 12.5px;
+    }
+    .bt-trend-sum b { color: #d4af37; font-weight: 700; }
+    .bt-trend-sum span { white-space: nowrap; }
+
     /* 最高紀錄 */
     .bt-rec-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px;
@@ -2102,7 +2126,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend'];
 
   var JOB_COLORS = { '鐵衣':'e69138','血河':'cc0000','神相':'6fa8dc','素問':'f4cccc','九靈':'d9d2e9','碎夢':'4dd0e1','龍吟':'93c47d','玄機':'ffe599','潮光':'3c78d8' };
   var GROUP_BANNER = { '團一進攻':{bg:'1c4587',fg:'ffffff'}, '團二進攻':{bg:'990000',fg:'ffffff'}, '防守團':{bg:'f1c232',fg:'000000'} };
@@ -6729,31 +6753,117 @@
     function loadBattleAggregate() {
       var box = document.getElementById('battle-agg');
       box.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
-      var opts = {
-        from: document.getElementById('battle-from').value.trim(),
-        to: document.getElementById('battle-to').value.trim(),
-        type: document.getElementById('battle-type-filter').value
-      };
+      var opts = battleFilterOpts_();
       // 個人累積與趨勢／最高紀錄共用同一組條件，一次抓回來
-      Promise.all([battleApi('getBattleAggregate', opts), battleApi('getBattleHistory', opts)])
+      var jobs = [battleApi('getBattleAggregate', opts), battleApi('getBattleHistory', opts)];
+      // 單人趨勢正開著的話一起更新，否則換了日期範圍圖還停在舊區間
+      if (trendPlayer) jobs.push(battleApi('getPlayerTrend', battleFilterOpts_(trendPlayer)));
+      Promise.all(jobs)
         .then(function (r) {
           battleAggCache = r[0];
           battleHistCache = r[1];
+          trendPlayerCache = r[2] || null;
           renderBattleAggregate();
         }).catch(function (err) {
           box.innerHTML = '<div class="access-admin-empty">讀取失敗：' + escapeBattleHtml(err.message) + '</div>';
         });
     }
 
-    /* ── 趨勢：每一場我方合計的折線 ── */
+    /* ── 趨勢 ── */
 
     var trendKey = 'pvp';
+    var trendPlayer = '';          // 空字串 = 全隊合計
+    var trendPlayerCache = null;   // getPlayerTrend 的結果
+    var trendLoading = false;
+
     function setTrendKey(k) { trendKey = k; renderBattleAggregate(); }
+
+    // 日期起訖與類型是整個累積統計共用的一組條件，趨勢也吃同一組
+    function battleFilterOpts_(name) {
+      var o = {
+        from: document.getElementById('battle-from').value.trim(),
+        to: document.getElementById('battle-to').value.trim(),
+        type: document.getElementById('battle-type-filter').value
+      };
+      if (name) o.name = name;
+      return o;
+    }
+
+    function setTrendPlayer(name) {
+      trendPlayer = name || '';
+      trendPlayerCache = null;
+      if (!trendPlayer) { renderBattleAggregate(); return; }
+      trendLoading = true;
+      renderBattleAggregate();
+      var want = trendPlayer;
+      battleApi('getPlayerTrend', battleFilterOpts_(trendPlayer)).then(function (r) {
+        // 連續換人時，慢回來的那一份不能蓋掉後選的
+        if (want !== trendPlayer) return;
+        trendLoading = false;
+        trendPlayerCache = r;
+        renderBattleAggregate();
+      }).catch(function (err) {
+        if (want !== trendPlayer) return;
+        trendLoading = false;
+        renderBattleAggregate();
+        showAlertModal('讀取單人趨勢失敗：' + err.message);
+      });
+    }
+
+    // 人員下拉：照職業分組，組內出賽多的排前面
+    function trendPlayerPickerHtml_() {
+      var rows = (battleAggCache && battleAggCache.rows) ? battleAggCache.rows : [];
+      var body = '';
+      JOB_ORDER.concat(['']).forEach(function (job) {
+        var group = rows.filter(function (x) {
+          // 最後一輪收沒列在 JOB_ORDER 裡的職業（含空白）
+          return job ? x.job === job : JOB_ORDER.indexOf(x.job) < 0;
+        });
+        if (!group.length) return;
+        group.sort(function (x, y) {
+          return y.games - x.games || (Number(y.pvp) || 0) - (Number(x.pvp) || 0);
+        });
+        body += '<optgroup label="' + escapeBattleHtml(job || '其他') + '">' +
+          group.map(function (x) {
+            return '<option value="' + escapeBattleHtml(x.name) + '"' +
+              (x.name === trendPlayer ? ' selected' : '') + '>' +
+              escapeBattleHtml(x.name) + '（' + x.games + ' 場）</option>';
+          }).join('') + '</optgroup>';
+      });
+
+      // 選了人之後又把日期範圍縮到他沒出賽的區間，下拉裡就找不到他了。
+      // 補一個 option，不然畫面停在他身上、選單卻顯示「全隊合計」。
+      var known = rows.filter(function (x) { return x.name === trendPlayer; }).length > 0;
+      var orphan = (trendPlayer && !known)
+        ? '<option value="' + escapeBattleHtml(trendPlayer) + '" selected>' +
+            escapeBattleHtml(trendPlayer) + '（此範圍無出賽）</option>'
+        : '';
+
+      return '<div class="bt-trend-pick"><label class="bt-pick">看誰' +
+        '<select class="modal-input" onchange="setTrendPlayer(this.value)">' +
+          '<option value="">全隊合計</option>' + orphan + body +
+        '</select></label></div>';
+    }
+
+    function trendKeyPillsHtml_() {
+      return '<div class="bt-pillbar">' + BATTLE_KEYS.map(function (k) {
+        return '<button type="button" class="bt-pill' + (trendKey === k.k ? ' on' : '') +
+          '" onclick="setTrendKey(&#39;' + k.k + '&#39;)">' + k.zh + '</button>';
+      }).join('') + '</div>';
+    }
+
+    function resultColor_(r) { return r === '勝' ? '#7bd88f' : (r === '敗' ? '#ef8f8f' : '#cfcfcf'); }
+    function resultCls_(r) { return r === '勝' ? 'battle-win' : (r === '敗' ? 'battle-lose' : ''); }
 
     function renderTrend() {
       var t = battleHistCache ? battleHistCache.trend : [];
       if (t.length === 0) return '<div class="access-admin-empty">這個範圍內沒有戰績</div>';
+      return trendPlayerPickerHtml_() + trendKeyPillsHtml_() +
+        (trendPlayer ? renderSoloTrend_() : renderTeamTrend_(t));
+    }
 
+    /* 全隊：每一場我方合計的折線 */
+    function renderTeamTrend_(t) {
       var f = BATTLE_KEY_ZH[trendKey];
       var vals = t.map(function (x) { return Number(x.totals[trendKey]) || 0; });
       var max = Math.max.apply(null, vals) || 1;
@@ -6763,35 +6873,131 @@
 
       var line = vals.map(function (v, i) { return xAt(i).toFixed(1) + ',' + yAt(v).toFixed(1); }).join(' ');
       var dots = t.map(function (x, i) {
-        var c = x.result === '勝' ? '#7bd88f' : (x.result === '敗' ? '#ef8f8f' : '#cfcfcf');
         return '<circle cx="' + xAt(i).toFixed(1) + '" cy="' + yAt(vals[i]).toFixed(1) +
-          '" r="1.3" fill="' + c + '"><title>' + escapeBattleHtml(x.date) + ' ' +
+          '" r="1.3" fill="' + resultColor_(x.result) + '"><title>' + escapeBattleHtml(x.date) + ' ' +
           escapeBattleHtml(x.result) + '</title></circle>';
       }).join('');
 
-      var picker = BATTLE_KEYS.map(function (k) {
-        return '<button type="button" class="bt-pill' + (trendKey === k.k ? ' on' : '') +
-          '" onclick="setTrendKey(&#39;' + k.k + '&#39;)">' + k.zh + '</button>';
-      }).join('');
-
       var rows = t.slice().reverse().map(function (x) {
-        var cls = x.result === '勝' ? 'battle-win' : (x.result === '敗' ? 'battle-lose' : '');
         return '<div class="bt-trend-row"><span>' + escapeBattleHtml(x.date) +
           (x.time ? ' ' + escapeBattleHtml(x.time) : '') + '</span>' +
           '<span>' + escapeBattleHtml(x.type) + '</span>' +
           '<span>' + escapeBattleHtml(x.oppGuild) + '</span>' +
-          '<span class="' + cls + '">' + escapeBattleHtml(x.result) + '</span>' +
+          '<span class="' + resultCls_(x.result) + '">' + escapeBattleHtml(x.result) + '</span>' +
           '<span>' + x.totals.people + ' 人</span>' +
           '<span>' + battleFmt(x.totals[trendKey], trendKey) + '</span></div>';
       }).join('');
 
       return '<div class="bt-sec-title">📈 趨勢（我方每場合計・' + f.zh + '）</div>' +
-        '<div class="bt-pillbar">' + picker + '</div>' +
         '<div class="bt-trend-chart"><svg viewBox="0 0 100 44" preserveAspectRatio="none">' +
           '<polyline points="' + line + '" fill="none" stroke="#d4af37" stroke-width="0.7"/>' + dots +
         '</svg><span class="bt-trend-max">最高 ' + battleFmt(max, trendKey) + '</span></div>' +
         '<div class="bt-trend-head bt-trend-row"><span>日期</span><span>類型</span><span>對手</span>' +
           '<span>勝敗</span><span>人數</span><span>' + f.zh + '</span></div>' + rows;
+    }
+
+    /* 單人：本人每一場的折線，外加同場我方人均當對照。
+       只看自己那條線分不出是自己變強還是整團都變強，要有對照組才判斷得出來。 */
+    function renderSoloTrend_() {
+      if (trendLoading) return '<div class="access-admin-empty">讀取中…</div>';
+      var d = trendPlayerCache;
+      if (!d || !d.points || !d.points.length) {
+        return '<div class="access-admin-empty">這個範圍內沒有戰績</div>';
+      }
+      var pts = d.points, f = BATTLE_KEY_ZH[trendKey];
+      var mine = pts.map(function (x) { return x.played ? (Number(x.vals[trendKey]) || 0) : null; });
+      var avgs = pts.map(function (x) { return x.people ? (Number(x.avg[trendKey]) || 0) : null; });
+      var played = pts.filter(function (x) { return x.played; });
+
+      if (!played.length) {
+        return '<div class="bt-sec-title">📈 單人趨勢（' + escapeBattleHtml(d.name) + '）</div>' +
+          '<div class="access-admin-empty">' + escapeBattleHtml(d.name) +
+          ' 在這個範圍的 ' + pts.length + ' 場裡都沒有上場紀錄</div>';
+      }
+
+      var pool = mine.concat(avgs).filter(function (v) { return v !== null; });
+      var max = Math.max.apply(null, pool.concat([0])) || 1;
+      var W = 100, H = 44, pad = 3;
+      var xAt = function (i) { return pts.length < 2 ? W / 2 : pad + i * (W - pad * 2) / (pts.length - 1); };
+      var yAt = function (v) { return H - pad - (v / max) * (H - pad * 2); };
+
+      // 沒上場的那幾場要把線斷開；畫成 0 會讓人以為那場打得很爛
+      var segs = function (arr) {
+        var out = [], cur = [];
+        arr.forEach(function (v, i) {
+          if (v === null) { if (cur.length > 1) out.push(cur); cur = []; return; }
+          cur.push(xAt(i).toFixed(1) + ',' + yAt(v).toFixed(1));
+        });
+        if (cur.length > 1) out.push(cur);
+        return out;
+      };
+      var poly = function (arr, stroke, dash) {
+        return segs(arr).map(function (seg) {
+          return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="' + stroke +
+            '" stroke-width="0.7"' + (dash ? ' stroke-dasharray="1.6 1.4"' : '') + '/>';
+        }).join('');
+      };
+
+      var dots = pts.map(function (x, i) {
+        var tip = escapeBattleHtml(x.date) + ' vs ' + escapeBattleHtml(x.oppGuild);
+        if (!x.played) {
+          return '<circle cx="' + xAt(i).toFixed(1) + '" cy="' + (H - pad).toFixed(1) +
+            '" r="0.9" fill="none" stroke="#6f6f6f" stroke-width="0.4">' +
+            '<title>' + tip + '　缺席</title></circle>';
+        }
+        return '<circle cx="' + xAt(i).toFixed(1) + '" cy="' + yAt(mine[i]).toFixed(1) +
+          '" r="1.3" fill="' + resultColor_(x.result) + '"><title>' + tip + '　' +
+          escapeBattleHtml(x.result) + '　' + f.zh + ' ' +
+          Math.round(mine[i]).toLocaleString('en-US') + (f.w ? '萬' : '') + '</title></circle>';
+      }).join('');
+
+      var myVals = played.map(function (x) { return Number(x.vals[trendKey]) || 0; });
+      var sum = myVals.reduce(function (a, b) { return a + b; }, 0);
+      var bestI = 0;
+      myVals.forEach(function (v, i) { if (v > myVals[bestI]) bestI = i; });
+      var best = played[bestI];
+      var w = played.filter(function (x) { return x.result === '勝'; }).length;
+      var l = played.filter(function (x) { return x.result === '敗'; }).length;
+      var dr = played.length - w - l;
+
+      var sumBar = '<div class="bt-trend-sum">' +
+        '<span>' + jobChip(played[played.length - 1].job) + ' ' + escapeBattleHtml(d.name) + '</span>' +
+        '<span>出賽 <b>' + played.length + '</b> / ' + pts.length + ' 場</span>' +
+        '<span>' + w + ' 勝 ' + l + ' 敗' + (dr ? ' ' + dr + ' 平' : '') + '</span>' +
+        '<span>場均 <b>' + battleFmt(sum / played.length, trendKey) + '</b></span>' +
+        '<span>最高 <b>' + battleFmt(myVals[bestI], trendKey) + '</b>（' +
+          escapeBattleHtml(best.date) + ' vs ' + escapeBattleHtml(best.oppGuild) + '）</span>' +
+        '</div>';
+
+      var rows = pts.slice().reverse().map(function (x) {
+        var head = '<div class="bt-trend-row bt-trend-solo' + (x.played ? '' : ' bt-trend-absent') + '">' +
+          '<span>' + escapeBattleHtml(x.date) + (x.time ? ' ' + escapeBattleHtml(x.time) : '') + '</span>' +
+          '<span>' + escapeBattleHtml(x.type) + '</span>' +
+          '<span>' + escapeBattleHtml(x.oppGuild) + '</span>' +
+          '<span class="' + resultCls_(x.result) + '">' + escapeBattleHtml(x.result) + '</span>';
+        if (!x.played) {
+          return head + '<span>缺席</span>' +
+            '<span>' + battleFmt(x.avg[trendKey], trendKey) + '</span>' +
+            '<span><span class="bt-dash">—</span></span></div>';
+        }
+        return head + '<span>' + battleFmt(x.vals[trendKey], trendKey) + '</span>' +
+          '<span>' + battleFmt(x.avg[trendKey], trendKey) + '</span>' +
+          '<span>' + x.rank[trendKey] + ' / ' + x.people + '</span></div>';
+      }).join('');
+
+      return '<div class="bt-sec-title">📈 單人趨勢（' + escapeBattleHtml(d.name) + '・' + f.zh + '）</div>' +
+        sumBar +
+        '<div class="bt-trend-legend">' +
+          '<span><i style="border-top-style:solid;border-color:#d4af37"></i>本人</span>' +
+          '<span><i style="border-top-style:dashed;border-color:#9a9a9a"></i>我方人均</span>' +
+          '<span>空心點＝那場沒上</span>' +
+        '</div>' +
+        '<div class="bt-trend-chart"><svg viewBox="0 0 100 44" preserveAspectRatio="none">' +
+          poly(avgs, '#9a9a9a', true) + poly(mine, '#d4af37', false) + dots +
+        '</svg><span class="bt-trend-max">最高 ' + battleFmt(max, trendKey) + '</span></div>' +
+        '<div class="bt-trend-head bt-trend-row bt-trend-solo"><span>日期</span><span>類型</span>' +
+          '<span>對手</span><span>勝敗</span><span>' + f.zh + '</span>' +
+          '<span>隊均</span><span>名次</span></div>' + rows;
     }
 
     /* ── 最高紀錄：每個項目的單場最佳 ── */

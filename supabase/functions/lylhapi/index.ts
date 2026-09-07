@@ -688,6 +688,77 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     };
   },
 
+  // 單人趨勢：同一組篩選條件下，某一個人每一場的數據。
+  //
+  // 除了本人的值，同時回傳該場我方的人均與名次 —— 光看自己的折線
+  // 看不出是自己變強還是整團都變強，要有對照組才判斷得出來。
+  // 沒上場的那幾場會回 played:false，前端把線斷開而不是畫成 0。
+  getPlayerTrend: async (opts: any) => {
+    const from = String(opts?.from ?? "").trim();
+    const to = String(opts?.to ?? "").trim();
+    const type = String(opts?.type ?? "").trim();
+    const name = String(opts?.name ?? "").trim();
+    if (!name) return { name: "", points: [] };
+
+    let q = db.from("battles").select("*");
+    if (from) q = q.gte("battle_date", from);
+    if (to) q = q.lte("battle_date", to);
+    if (type) q = q.eq("battle_type", type);
+    const { data: battles } = await q;
+    const list = (battles ?? []).sort((a, b) =>
+      (a.battle_date + a.battle_time) < (b.battle_date + b.battle_time) ? -1 : 1);
+    if (list.length === 0) return { name, points: [] };
+
+    const ids = list.map((b) => b.id);
+    const { data: ps } = await db.from("battle_players").select("*").in("battle_id", ids).eq("side", "my");
+
+    const KEYS = ["kills", "assists", "res", "pvp", "bld", "heal", "tank", "heavy", "feather", "bone"];
+
+    // 一場一組：全隊的人與加總，之後拿來算人均與名次
+    const byBattle: Record<string, { people: any[]; sum: Record<string, number> }> = {};
+    (ps ?? []).forEach((p) => {
+      const g = byBattle[p.battle_id] ??
+        (byBattle[p.battle_id] = { people: [], sum: Object.fromEntries(KEYS.map((k) => [k, 0])) });
+      g.people.push(p);
+      KEYS.forEach((k) => { g.sum[k] += Number((p as any)[k]) || 0; });
+    });
+
+    return {
+      name,
+      points: list.map((b) => {
+        const g = byBattle[b.id];
+        const n = g ? g.people.length : 0;
+        const me = g ? g.people.filter((x) => x.name === name)[0] : undefined;
+
+        const avg: Record<string, number> = {};
+        KEYS.forEach((k) => { avg[k] = n ? g.sum[k] / n : 0; });
+
+        const vals: Record<string, number> | null = me
+          ? Object.fromEntries(KEYS.map((k) => [k, Number((me as any)[k]) || 0]))
+          : null;
+
+        // 名次：同一場我方裡排第幾。並列時算同名次（比自己高的人數 +1）
+        const rank: Record<string, number> = {};
+        if (me && g) {
+          KEYS.forEach((k) => {
+            const v = Number((me as any)[k]) || 0;
+            rank[k] = g.people.filter((x) => (Number((x as any)[k]) || 0) > v).length + 1;
+          });
+        }
+
+        return {
+          id: b.id, date: b.battle_date, time: b.battle_time, type: b.battle_type,
+          oppGuild: b.opp_guild, result: b.result,
+          myKills: b.my_kills, oppKills: b.opp_kills,
+          people: n,
+          played: !!me,
+          job: me ? me.job : "",
+          vals, avg, rank,
+        };
+      }),
+    };
+  },
+
   // 累積統計：把區間內每個人的場次與各項數據加總，只算我方。
   getBattleAggregate: async (opts: any) => {
     const from = String(opts?.from ?? "").trim();
