@@ -1882,6 +1882,8 @@
     .bt-pick { display: flex; flex-direction: column; gap: 4px; color: #FFFFEF; font-size: 12px; }
     .bt-pick select { min-width: 200px; max-width: 260px; }
 
+    .roster-data-time { color: #d4af37; font-size: 12px; opacity: .75; align-self: center; }
+
     /* 象限圖 */
     .bt-q-wrap { display: flex; flex-wrap: wrap; gap: 10px; }
     .bt-q-chart {
@@ -2417,6 +2419,8 @@
             </div>
             <button type="button" class="roster-back-btn hidden" id="roster-copy-session1-btn" onclick="copyFromFirstSession()">複製第一場</button>
             <button type="button" class="roster-back-btn" id="roster-copy-other-btn" onclick="openCopyRosterConfigDialog()">複製其他天配置</button>
+            <button type="button" class="roster-back-btn" id="roster-reload-btn" onclick="reloadRosterFromServer()">🔄 重新讀取</button>
+            <span class="roster-data-time" id="roster-data-time"></span>
           </div>
           <div class="attendance-date-row">
             <span class="attendance-summary" id="roster-date-hint">姓名下拉選單只列出當天出勤系統標記「出勤」的人</span>
@@ -3403,7 +3407,7 @@
     // 把一份排表結果（rows/commanders）套用到畫面上目前的表單。
     // applyRosterDataForDate（切換日期／場次）跟「複製第一場」按鈕都共用這個函式，
     // 差別只在於資料來源不同。
-    function applyRosterResultToForm(result, hintText) {
+    function applyRosterResultToForm(result, hintText, persisted) {
       result = result || {};
       var rows = result.rows || [];
       var commanders = result.commanders || [];
@@ -3439,9 +3443,31 @@
         input.value = byGroup[input.dataset.group] || '';
       });
 
+      // 存檔要能只送「改過的格子」，就得知道載進來的原始狀態長什麼樣。
+      // persisted 為 false 代表畫面上這份還沒存進這個日期／場次（自動帶入或複製過來的），
+      // 那種情況要整份寫進去，所以把基準設成 null＝全部視為有改動。
+      rosterBaseline = persisted ? snapshotRosterForm_() : null;
+      setRosterDataTime(persisted ? (result.updatedAt || '') : '');
+
       var hint = document.getElementById('roster-date-hint');
       delete hint.dataset.baseText; // 這裡設定的才是新的「基準文字」，蓋掉舊的暫存
       hint.textContent = hintText || '姓名下拉選單只列出當天出勤系統標記「出勤」的人';
+    }
+
+    // 目前表單的完整快照：{ 'group|team|slot': {name,job,note}, 指揮另外一包 }
+    function snapshotRosterForm_() {
+      var slots = {};
+      collectRosterData().forEach(function (r) {
+        slots[r.group + '|' + r.team + '|' + r.slot] = { name: r.name, job: r.job, note: r.note };
+      });
+      var cmds = {};
+      collectCommanders().forEach(function (c) { cmds[c.group] = c.name; });
+      return { slots: slots, commanders: cmds };
+    }
+
+    function rosterRowSame_(a, b) {
+      if (!a || !b) return false;
+      return a.name === b.name && a.job === b.job && a.note === b.note;
     }
 
     function applyRosterDataForDate(date, session) {
@@ -3450,7 +3476,8 @@
         var hintText = result.copiedFrom
           ? '這天還沒排過，已自動帶入 ' + result.copiedFrom + ' 的排表，改動會自動存檔'
           : null;
-        applyRosterResultToForm(result, hintText);
+        // 帶入別天的內容時，這份還不是這個日期／場次的資料，要整份寫進去
+        applyRosterResultToForm(result, hintText, !result.copiedFrom);
       }
 
       if (window.google && google.script && google.script.run) {
@@ -3479,7 +3506,7 @@
           showAlertModal('第一場目前沒有排表資料可以複製');
           return;
         }
-        applyRosterResultToForm(result);
+        applyRosterResultToForm(result, null, false); // 複製過來的還沒存過，整份寫進去
         saveRosterData(); // 複製後立即存檔，變成第二場自己的資料（存檔成功會顯示「已自動儲存」）
       }
 
@@ -3550,7 +3577,8 @@
         if (pending > 0) return;
         var hasAny = (result.rows || []).some(function (r) { return r.name || r.job || r.note; });
         if (!hasAny) { showAlertModal('「' + srcDate + '」的這一場沒有排表資料可以複製'); return; }
-        applyRosterResultToForm(result, '已複製「' + srcDate + '」的配置，改動會自動存檔');
+        // 複製過來的還沒存進目前這天這場，整份寫進去
+        applyRosterResultToForm(result, '已複製「' + srcDate + '」的配置，改動會自動存檔', false);
         saveRosterData(); // 複製後立即存檔，變成目前這天這場自己的資料
       }
       google.script.run
@@ -3678,6 +3706,10 @@
     // 就會（延遲一下再）自動存檔，不需要另外按儲存按鈕。
     var rosterAutoSaveTimer = null;
 
+    // 載入當下的表單快照，用來算出哪些格子被改過。
+    // null＝畫面上這份還沒存進目前的日期／場次，存檔時要整份寫進去。
+    var rosterBaseline = null;
+
     function scheduleRosterAutoSave() {
       if (rosterAutoSaveTimer) clearTimeout(rosterAutoSaveTimer);
       rosterAutoSaveTimer = setTimeout(saveRosterData, 500);
@@ -3695,6 +3727,38 @@
       }
     }
 
+    // 排表沒有即時同步：別人改了什麼，這邊要重讀才看得到。
+    // 先把還在 debounce 裡的改動存掉再重讀，不然自己剛打的字會被蓋回去。
+    function reloadRosterFromServer() {
+      var btn = document.getElementById('roster-reload-btn');
+      flushPendingRosterSave();
+      if (btn) { btn.disabled = true; btn.textContent = '讀取中…'; }
+      var date = getSharedDate(), session = currentRosterSession;
+      applyRosterDataForDate(date, session);
+      // applyRosterDataForDate 沒有回呼，用一個短延遲把按鈕放開就好；
+      // 真的失敗的話畫面上的提示文字會說明。
+      setTimeout(function () {
+        if (btn) { btn.disabled = false; btn.textContent = '🔄 重新讀取'; }
+      }, 800);
+    }
+
+    // 後端的 updated_at 是 UTC，一律在這裡轉成本地時間再顯示，
+    // 不然重新讀取顯示的時間會跟剛存檔顯示的差八小時。
+    function hmsOf_(iso) {
+      var d = iso ? new Date(iso) : new Date();
+      if (isNaN(d.getTime())) return '';
+      var z = function (v) { return (v < 10 ? '0' : '') + v; };
+      return z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds());
+    }
+
+    // 「資料時間」＝畫面上這份是什麼時候的，方便判斷手上的東西是不是已經舊了
+    function setRosterDataTime(iso) {
+      var el = document.getElementById('roster-data-time');
+      if (!el) return;
+      var t = iso ? hmsOf_(iso) : '';
+      el.textContent = t ? ('資料時間 ' + t) : '尚未存檔';
+    }
+
     function showRosterAutoSaveHint(text) {
       var hint = document.getElementById('roster-date-hint');
       var original = hint.dataset.baseText || hint.textContent;
@@ -3709,22 +3773,54 @@
     // 這時候畫面上的欄位（DOM）還是切換前的內容，但 document.getElementById('roster-date').value
     // 或 currentRosterSession 可能已經先被改成新的了，所以要能指定「存到哪一天／哪一場」，
     // 不然會把切換前的內容誤存到切換後的日期/場次去。
+    // 存檔只送「跟載入時不一樣」的格子。
+    //
+    // 以前每次都送整張 60 格，兩個人一起排的時候，後存的人會拿他畫面上的
+    // 舊資料把對方剛改好的格子整片蓋掉 —— 就算兩人碰的位置完全不重疊。
+    // 只送差異之後，沒碰到的格子不會被寫進去，也就蓋不掉別人的東西。
+    //
+    // rosterBaseline 為 null 代表畫面上這份還沒存進這個日期／場次
+    // （自動帶入或複製過來的），那種情況還是要整份寫進去。
     function saveRosterData(dateOverride, sessionOverride) {
       var date = dateOverride || document.getElementById('roster-date').value;
       var session = sessionOverride || currentRosterSession;
-      var rows = collectRosterData(); // 完整 60 個位置（含空白），這樣被清空的位置也會被存成空白
-      var hasAny = rows.some(function (r) { return r.name || r.job || r.note; });
+      var all = collectRosterData(); // 完整 60 個位置（含空白）
+      var cmds = collectCommanders();
 
-      if (!hasAny) return; // 自動儲存：沒填任何東西就先不存，避免一直寫空白資料
+      var rows, commanders;
+      if (!rosterBaseline) {
+        var hasAny = all.some(function (r) { return r.name || r.job || r.note; });
+        if (!hasAny) return; // 整張都空白就先不存，避免一直寫空白資料
+        rows = all;
+        commanders = cmds;
+      } else {
+        rows = all.filter(function (r) {
+          return !rosterRowSame_(rosterBaseline.slots[r.group + '|' + r.team + '|' + r.slot], r);
+        });
+        commanders = cmds.filter(function (c) {
+          return (rosterBaseline.commanders[c.group] || '') !== c.name;
+        });
+        if (!rows.length && !commanders.length) return; // 什麼都沒改就不用打後端
+      }
 
-      var payload = {
-        date: date,
-        session: session,
-        rows: rows,
-        commanders: collectCommanders()
-      };
+      var payload = { date: date, session: session, rows: rows, commanders: commanders };
+
+      // 存出去的內容先留一份：成功之後把它併進基準，
+      // 而不是重讀表單 —— 請求在路上時使用者可能又改了別的格子，
+      // 重讀會把那些新改動也當成「已存」，下次就不會送出去了。
+      var sentRows = rows.slice(), sentCmds = commanders.slice();
 
       function onSuccess(res) {
+        if (rosterBaseline) {
+          sentRows.forEach(function (r) {
+            rosterBaseline.slots[r.group + '|' + r.team + '|' + r.slot] =
+              { name: r.name, job: r.job, note: r.note };
+          });
+          sentCmds.forEach(function (c) { rosterBaseline.commanders[c.group] = c.name; });
+        } else {
+          rosterBaseline = snapshotRosterForm_();
+        }
+        setRosterDataTime(new Date().toISOString());
         showRosterAutoSaveHint('已自動儲存');
       }
 

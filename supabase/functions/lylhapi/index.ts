@@ -92,6 +92,18 @@ async function getRosterByDate(date: string, session: string) {
     .eq("date_label", date).eq("session", String(session)).order("id");
   return (data ?? []).map((r) => ({ group: r.grp, team: r.team, slot: r.slot, name: r.name, job: r.job, note: r.note }));
 }
+
+// 這一份排表最後被誰動過是什麼時候。前端拿來顯示「資料時間」，
+// 讓人看得出手上這份是不是已經被別人改新了。
+async function getRosterUpdatedAt(date: string, session: string): Promise<string> {
+  const { data } = await db.from("roster_slots").select("updated_at")
+    .eq("date_label", date).eq("session", String(session))
+    .order("updated_at", { ascending: false }).limit(1);
+  // 回原始時間戳就好，格式化交給前端 —— 這裡是 UTC，
+  // 在後端切成 HH:MM:SS 會跟前端的本地時間差 8 小時。
+  const t = data && data.length ? data[0].updated_at : null;
+  return t ? String(t) : "";
+}
 async function getCommandersByDate(date: string, session: string) {
   const { data } = await db.from("roster_commanders").select("grp,name")
     .eq("date_label", date).eq("session", String(session)).order("id");
@@ -342,7 +354,12 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const session = sessionIn || "1";
     const rows = await getRosterByDate(date, session);
     const hasAny = rows.some((r) => r.name || r.job || r.note);
-    if (hasAny) return { rows, commanders: await getCommandersByDate(date, session), copiedFrom: null };
+    if (hasAny) {
+      return {
+        rows, commanders: await getCommandersByDate(date, session),
+        copiedFrom: null, updatedAt: await getRosterUpdatedAt(date, session),
+      };
+    }
     const { data } = await db.from("roster_slots").select("date_label,updated_at").eq("session", session);
     let best: { date: string; time: number } | null = null;
     (data ?? []).forEach((r) => {
