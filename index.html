@@ -1883,6 +1883,11 @@
     .bt-pick select { min-width: 200px; max-width: 260px; }
 
     .roster-data-time { color: #d4af37; font-size: 12px; opacity: .75; align-self: center; }
+    .roster-stale {
+      color: #ffca28; font-size: 12px; align-self: center;
+      border: 1px solid #ffca28; border-radius: 4px; padding: 2px 8px;
+      background: rgba(255,202,40,0.08);
+    }
 
     /* 象限圖 */
     .bt-q-wrap { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -2421,6 +2426,7 @@
             <button type="button" class="roster-back-btn" id="roster-copy-other-btn" onclick="openCopyRosterConfigDialog()">複製其他天配置</button>
             <button type="button" class="roster-back-btn" id="roster-reload-btn" onclick="reloadRosterFromServer()">🔄 重新讀取</button>
             <span class="roster-data-time" id="roster-data-time"></span>
+            <span class="roster-stale hidden" id="roster-stale-note"></span>
           </div>
           <div class="attendance-date-row">
             <span class="attendance-summary" id="roster-date-hint">姓名下拉選單只列出當天出勤系統標記「出勤」的人</span>
@@ -2849,6 +2855,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+  <!-- 只用來做排表的即時通知（Realtime broadcast）。載不進來的話網站照常運作，
+       只是排表不會自動提醒有人改過，還是可以按「重新讀取」。 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
   <script>
     var JOB_OPTIONS = ['龍吟', '碎夢', '素問', '九靈', '神相', '玄機', '潮光', '鐵衣', '血河'];
 
@@ -3448,6 +3457,7 @@
       // 那種情況要整份寫進去，所以把基準設成 null＝全部視為有改動。
       rosterBaseline = persisted ? snapshotRosterForm_() : null;
       setRosterDataTime(persisted ? (result.updatedAt || '') : '');
+      clearRosterStale();   // 畫面上這份已經是最新的了
 
       var hint = document.getElementById('roster-date-hint');
       delete hint.dataset.baseText; // 這裡設定的才是新的「基準文字」，蓋掉舊的暫存
@@ -3471,6 +3481,7 @@
     }
 
     function applyRosterDataForDate(date, session) {
+      subscribeRosterChannel_(date, session);
       function applyResult(result) {
         result = result || {};
         var hintText = result.copiedFrom
@@ -3685,6 +3696,8 @@
     }
 
     function closeRosterView() {
+      unsubscribeRosterChannel_();
+      clearRosterStale();
       showView('attendance-view');
     }
 
@@ -3725,6 +3738,97 @@
         rosterAutoSaveTimer = null;
         saveRosterData(dateOverride, sessionOverride);
       }
+    }
+
+    /* ── 排表的即時通知 ──
+       用 Supabase Realtime 的 broadcast，只送一則「有人改過了」的通知，
+       不送任何排表內容。收到之後一律走原本的 Edge Function 重新讀取。
+
+       之所以不用 Postgres Changes 直接同步資料表：那需要開 roster_slots 的
+       RLS 讀取權限給 anon，等於任何人拿 anon key 就能把整份名單撈走，
+       跟現在「anon 什麼都讀不到」的設計衝突。
+
+       也不直接採信 broadcast 裡的內容：頻道是公開的，訊息可以被偽造。
+       只當成「去重讀一次」的信號，最壞的情況也只是多讀一次而已。 */
+
+    var SUPA_URL = 'https://ggjdradkqlsncilqkovd.supabase.co';
+    var SUPA_PUBLISHABLE_KEY = 'sb_publishable_ZMf4HA4zeriX7GJuQ5R_kw_HK8tQVif';
+    var supaClient = null;
+    var rosterChannel = null;
+    var rosterChannelKey = '';
+
+    function supa_() {
+      if (supaClient) return supaClient;
+      if (!(window.supabase && window.supabase.createClient)) return null;
+      supaClient = window.supabase.createClient(SUPA_URL, SUPA_PUBLISHABLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false }
+      });
+      return supaClient;
+    }
+
+    function unsubscribeRosterChannel_() {
+      if (rosterChannel) {
+        try { rosterChannel.unsubscribe(); } catch (e) { /* 已經斷線就算了 */ }
+        rosterChannel = null;
+        rosterChannelKey = '';
+      }
+    }
+
+    // 每個「日期＋場次」各自一個頻道，才不會被別場的改動吵到
+    function subscribeRosterChannel_(date, session) {
+      var key = date + '|' + session;
+      if (key === rosterChannelKey) return;
+      unsubscribeRosterChannel_();
+      var c = supa_();
+      if (!c || !date) return;
+
+      rosterChannelKey = key;
+      rosterChannel = c.channel('roster:' + key, { config: { broadcast: { self: false } } })
+        .on('broadcast', { event: 'changed' }, function (msg) {
+          // payload 只拿來顯示是誰，資料一律重讀，不採信訊息內容
+          var who = (msg && msg.payload && typeof msg.payload.by === 'string')
+            ? msg.payload.by.slice(0, 20) : '';
+          onRosterChangedElsewhere_(who);
+        })
+        .subscribe();
+    }
+
+    function broadcastRosterChanged_() {
+      if (!rosterChannel) return;
+      try {
+        rosterChannel.send({
+          type: 'broadcast', event: 'changed',
+          payload: { by: currentAccessRoleName || '' }
+        });
+      } catch (e) { /* 送不出去不影響存檔本身 */ }
+    }
+
+    // 別人改過了。正在打字或還有沒存的改動就不要硬把畫面抽換掉，
+    // 改成亮一個提示讓人自己決定什麼時候重讀。
+    function onRosterChangedElsewhere_(who) {
+      var view = document.getElementById('roster-view');
+      if (!view || view.classList.contains('hidden')) return;
+
+      var focused = document.activeElement;
+      var busy = !!(focused && focused.closest && focused.closest('#roster-view') &&
+        /^(INPUT|SELECT|TEXTAREA)$/.test(focused.tagName));
+      var dirty = !!rosterAutoSaveTimer;
+
+      if (busy || dirty) { showRosterStale(who); return; }
+      showRosterStale(who);
+      reloadRosterFromServer();
+    }
+
+    function showRosterStale(who) {
+      var el = document.getElementById('roster-stale-note');
+      if (!el) return;
+      el.textContent = who ? ('⚠ ' + who + ' 剛改過') : '⚠ 有人剛改過';
+      el.classList.remove('hidden');
+    }
+
+    function clearRosterStale() {
+      var el = document.getElementById('roster-stale-note');
+      if (el) el.classList.add('hidden');
     }
 
     // 排表沒有即時同步：別人改了什麼，這邊要重讀才看得到。
@@ -3821,6 +3925,7 @@
           rosterBaseline = snapshotRosterForm_();
         }
         setRosterDataTime(new Date().toISOString());
+        broadcastRosterChanged_();   // 通知其他人重讀，不送內容
         showRosterAutoSaveHint('已自動儲存');
       }
 
