@@ -329,9 +329,11 @@
     #attendance-view .attendance-summary,
     #attendance-view .attendance-name,
     #attendance-view .attendance-job,
+    #attendance-view .attendance-job2,
     #attendance-view .attendance-status,
     #attendance-view .attendance-name.attendance-name-display,
     #attendance-view .attendance-job.attendance-job-display,
+    #attendance-view .attendance-job2.attendance-job-display,
     #attendance-view .attendance-header-row span,
     #attendance-view .attendance-empty,
     #attendance-view .member-section-title,
@@ -339,6 +341,7 @@
     #member-view .attendance-header-row span,
     #member-view .attendance-name,
     #member-view .attendance-job,
+    #member-view .attendance-job2,
     #member-view .password-hint,
     #member-view .attendance-add-btn,
     #password-view .password-hint,
@@ -354,8 +357,10 @@
     #attendance-view .attendance-status,
     #attendance-view .attendance-name.attendance-name-display,
     #attendance-view .attendance-job.attendance-job-display,
+    #attendance-view .attendance-job2.attendance-job-display,
     #member-view .attendance-name,
     #member-view .attendance-job,
+    #member-view .attendance-job2,
     #password-view .password-input {
       background: #0A0A0A;
       border-color: #6B1023;
@@ -956,6 +961,7 @@
 
     .attendance-name,
     .attendance-job,
+    .attendance-job2,
     .attendance-status {
       background: #1a1206;
       border: 1px solid #6e5e30;
@@ -972,6 +978,7 @@
     }
 
     .attendance-job,
+    .attendance-job2,
     .attendance-status {
       flex: 1;
     }
@@ -1001,9 +1008,10 @@
       border-color: #f0d060;
     }
 
-    /* 出勤系統顯示模式：姓名/職業為後台名單帶出的唯讀顯示 */
+    /* 出勤系統顯示模式：姓名/職業/二職為後台名單帶出的唯讀顯示 */
     .attendance-name.attendance-name-display,
-    .attendance-job.attendance-job-display {
+    .attendance-job.attendance-job-display,
+    .attendance-job2.attendance-job-display {
       background: rgba(212, 168, 40, 0.06);
       border: 1px solid rgba(212, 168, 40, 0.18);
       color: #f5e8c0;
@@ -2506,6 +2514,8 @@
                 <div class="roster-substitutes-list" id="roster-trial-substitutes-list"></div>
                 <div class="roster-substitutes-title">俱樂部<span id="roster-club-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-club-substitutes-list"></div>
+                <div class="roster-substitutes-title">二職候補<span id="roster-second-substitutes-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-second-substitutes-list"></div>
               </div>
             </div>
             <div class="roster-list" id="roster-list"></div>
@@ -2583,6 +2593,7 @@
             <span class="attendance-col-job">職業
               <select id="attendance-job-filter" class="attendance-job-filter" onchange="applyAttendanceJobFilter()"></select>
             </span>
+            <span class="attendance-col-job">二職</span>
             <span class="attendance-col-status">是否出勤</span>
           </div>
           <div class="attendance-list" id="attendance-list"></div>
@@ -2592,6 +2603,7 @@
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
             <span class="attendance-col-job">職業</span>
+            <span class="attendance-col-job">二職</span>
             <span class="attendance-col-status">是否出勤</span>
           </div>
           <div class="attendance-list" id="attendance-guest-list"></div>
@@ -2601,6 +2613,7 @@
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
             <span class="attendance-col-job">職業</span>
+            <span class="attendance-col-job">二職</span>
             <span class="attendance-col-status">是否出勤</span>
           </div>
           <div class="attendance-list" id="attendance-trial-list"></div>
@@ -2610,6 +2623,7 @@
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
             <span class="attendance-col-job">職業</span>
+            <span class="attendance-col-job">二職</span>
             <span class="attendance-col-status">是否出勤</span>
           </div>
           <div class="attendance-list" id="attendance-club-list"></div>
@@ -2653,6 +2667,7 @@
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
             <span class="attendance-col-job">職業</span>
+            <span class="attendance-col-job">二職</span>
             <span class="attendance-col-spacer"></span>
           </div>
           <div class="attendance-list" id="member-list"></div>
@@ -2662,6 +2677,7 @@
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
             <span class="attendance-col-job">職業</span>
+            <span class="attendance-col-job">二職</span>
             <span class="attendance-col-spacer"></span>
           </div>
           <div class="attendance-list" id="guest-list"></div>
@@ -2671,6 +2687,7 @@
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
             <span class="attendance-col-job">職業</span>
+            <span class="attendance-col-job">二職</span>
             <span class="attendance-col-spacer"></span>
           </div>
           <div class="attendance-list" id="trial-list"></div>
@@ -2680,6 +2697,7 @@
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
             <span class="attendance-col-job">職業</span>
+            <span class="attendance-col-job">二職</span>
             <span class="attendance-col-spacer"></span>
           </div>
           <div class="attendance-list" id="club-list"></div>
@@ -3162,23 +3180,62 @@
       return m.name;
     }
 
-    function buildRosterNameOptionsHtml(job, excludeNames) {
+    // 判斷某格（姓名 + 這格職業）是不是「用二職排上」：這個人主職不是這格職業、但二職是。
+    function isSecondPlacement_(name, slotJob) {
+      if (!name || !slotJob) return false;
+      var m = currentRosterAttendees.filter(function (x) { return x.name === name; })[0];
+      if (!m) return false;
+      return !!m.job2 && m.job2 === slotJob && m.job !== slotJob;
+    }
+
+    // 目前表單裡「用二職排上」的人名清單
+    function getSecondPlacedNames() {
+      var rows = Array.prototype.slice.call(document.querySelectorAll('#roster-list .roster-person-row'));
+      var out = [];
+      rows.forEach(function (row) {
+        var name = row.querySelector('.roster-name').value;
+        var job = row.querySelector('.roster-job').value;
+        if (name && isSecondPlacement_(name, job)) out.push(name);
+      });
+      return out;
+    }
+
+    // 姓名選項：主職==這格職業的人（正常顯示）＋ 二職==這格職業的人（標「（二職）」）。
+    // excludeMainNames＝已排上的人（主職選項排掉，保持乾淨）；excludeSecondNames＝已用二職排上的人。
+    // 主職已排上的人「仍會」出現在二職選項裡（讓指揮看得到、選了會被防呆擋下）。
+    function buildRosterNameOptionsHtml(job, excludeMainNames, excludeSecondNames) {
       var html = '<option value=""></option>';
       // 用「消耗一個名額」的方式排除：萬一剛好有兩個人同名，只會排除掉其中一個名額，
       // 不會因為同名就把所有同名的人一次都排除掉。
-      var remaining = excludeNames ? excludeNames.slice() : null;
+      var remMain = excludeMainNames ? excludeMainNames.slice() : null;
       currentRosterAttendees
         .filter(function (m) { return !job || m.job === job; })
         .filter(function (m) {
-          if (!remaining) return true;
-          var idx = remaining.indexOf(m.name);
+          if (!remMain) return true;
+          var idx = remMain.indexOf(m.name);
           if (idx === -1) return true;
-          remaining.splice(idx, 1);
+          remMain.splice(idx, 1);
           return false;
         })
         .forEach(function (m) {
           html += '<option value="' + m.name + '">' + rosterDisplayName_(m) + '</option>';
         });
+
+      if (job) {
+        var remSecond = excludeSecondNames ? excludeSecondNames.slice() : null;
+        currentRosterAttendees
+          .filter(function (m) { return m.job2 && m.job2 === job && m.job2 !== m.job; })
+          .filter(function (m) {
+            if (!remSecond) return true;
+            var idx = remSecond.indexOf(m.name);
+            if (idx === -1) return true;
+            remSecond.splice(idx, 1);
+            return false;
+          })
+          .forEach(function (m) {
+            html += '<option value="' + m.name + '" data-second="1">' + m.name + '（二職）</option>';
+          });
+      }
       return html;
     }
 
@@ -3197,14 +3254,17 @@
       var nameSelect = row.querySelector('.roster-name');
       var currentValue = nameSelect.value;
       var baseNames = allSelectedNames || getAllRosterNameValues();
-      var excludeNames = baseNames.filter(function (v) { return v !== currentValue; });
+      var excludeMain = baseNames.filter(function (v) { return v !== currentValue; });
+      var excludeSecond = getSecondPlacedNames().filter(function (v) { return v !== currentValue; });
 
-      nameSelect.innerHTML = buildRosterNameOptionsHtml(jobSelect.value, excludeNames);
+      nameSelect.innerHTML = buildRosterNameOptionsHtml(jobSelect.value, excludeMain, excludeSecond);
 
+      // 用二職排上的人，主職不等於這格職業也算有效，不然重建選項時會被清掉
       var stillValid = currentRosterAttendees.some(function (m) {
         return m.name === currentValue &&
-          (!jobSelect.value || m.job === jobSelect.value) &&
-          excludeNames.indexOf(currentValue) === -1;
+          (!jobSelect.value || m.job === jobSelect.value ||
+            (m.job2 === jobSelect.value && m.job2 !== m.job)) &&
+          excludeMain.indexOf(currentValue) === -1;
       });
       nameSelect.value = stillValid ? currentValue : '';
 
@@ -3349,6 +3409,20 @@
 
       // 姓名如果是在職業還沒選的情況下直接挑的，順便把職業帶出來，方便對照
       nameSelect.onchange = function () {
+        var picked = nameSelect.value;
+        // 一個人只能排一格。用二職選同一個人時最容易踩到 ——
+        // 主職排上的人仍然會出現在二職選項裡，所以這裡一定要擋。
+        if (picked) {
+          var dupCount = getAllRosterNameValues().filter(function (v) { return v === picked; }).length;
+          if (dupCount > 1) {
+            showAlertModal('「' + picked + '」已經在排表名單上了');
+            nameSelect.value = '';
+            syncRosterNameCustomUI(row);
+            refreshAllRosterNameOptions();
+            scheduleRosterAutoSave();
+            return;
+          }
+        }
         if (!jobSelect.value) {
           var member = currentRosterAttendees.filter(function (m) { return m.name === nameSelect.value; })[0];
           if (member) jobSelect.value = member.job;
@@ -3432,6 +3506,17 @@
       renderRosterSubstituteList('roster-trial-substitutes-list', 'roster-trial-substitutes-count', trialSubstitutes, '目前沒有試訓');
       var clubSubstitutes = unassigned.filter(function (m) { return m.category === 'club'; }).sort(compareByJob_);
       renderRosterSubstituteList('roster-club-substitutes-list', 'roster-club-substitutes-count', clubSubstitutes, '目前沒有俱樂部成員');
+
+      // 二職候補：當天出勤、有設二職的人，用「二職」顯示。
+      // 用主職排上的人仍留著（提醒他還能改當二職用），只有「已經用二職排上」的才移除。
+      var secondPlaced = getSecondPlacedNames();
+      var secondPool = currentRosterAttendees
+        .filter(function (m) { return m.job2 && m.job2 !== m.job; })
+        .filter(function (m) { return secondPlaced.indexOf(m.name) === -1; })
+        .map(function (m) { return { name: m.name, job: m.job2 }; })
+        .sort(compareByJob_);
+      renderRosterSubstituteList('roster-second-substitutes-list', 'roster-second-substitutes-count',
+        secondPool, '目前沒有二職候補');
     }
 
     function loadRosterAttendeesForDate(date, callback) {
@@ -3529,7 +3614,8 @@
     function snapshotRosterForm_() {
       var slots = {};
       collectRosterData().forEach(function (r) {
-        slots[r.group + '|' + r.team + '|' + r.slot] = { name: r.name, job: r.job, note: r.note };
+        slots[r.group + '|' + r.team + '|' + r.slot] =
+          { name: r.name, job: r.job, note: r.note, isSecond: r.isSecond };
       });
       var cmds = {};
       collectCommanders().forEach(function (c) { cmds[c.group] = c.name; });
@@ -3538,7 +3624,9 @@
 
     function rosterRowSame_(a, b) {
       if (!a || !b) return false;
-      return a.name === b.name && a.job === b.job && a.note === b.note;
+      // isSecond 也要比：有人事後改了二職設定時，格子本身沒動但旗標會變
+      return a.name === b.name && a.job === b.job && a.note === b.note &&
+        !!a.isSecond === !!b.isSecond;
     }
 
     function applyRosterDataForDate(date, session) {
@@ -3765,13 +3853,16 @@
     function collectRosterData() {
       var rows = Array.prototype.slice.call(document.querySelectorAll('#roster-list .roster-person-row'));
       return rows.map(function (row) {
+        var nm = row.querySelector('.roster-name').value.trim();
+        var jb = row.querySelector('.roster-job').value;
         return {
           group: row.dataset.group,
           team: row.dataset.team,
           slot: row.dataset.slot,
-          name: row.querySelector('.roster-name').value.trim(),
-          job: row.querySelector('.roster-job').value,
-          note: row.querySelector('.roster-note').value.trim()
+          name: nm,
+          job: jb,
+          note: row.querySelector('.roster-note').value.trim(),
+          isSecond: isSecondPlacement_(nm, jb)
         };
       });
     }
@@ -3979,7 +4070,7 @@
         if (rosterBaseline) {
           sentRows.forEach(function (r) {
             rosterBaseline.slots[r.group + '|' + r.team + '|' + r.slot] =
-              { name: r.name, job: r.job, note: r.note };
+              { name: r.name, job: r.job, note: r.note, isSecond: r.isSecond };
           });
           sentCmds.forEach(function (c) { rosterBaseline.commanders[c.group] = c.name; });
         } else {
@@ -4037,11 +4128,13 @@
       // 註記，跟畫面上排表顯示（rosterDisplayName_）一致。
       var exportCatMap = {};
       (currentRosterAttendees || []).forEach(function (m) { exportCatMap[m.name] = m.category; });
-      function exportAnnotateName(name) {
+      function exportAnnotateName(name, isSecond) {
         if (!name) return name;
-        if (exportCatMap[name] === 'guest') return name + '（外援）';
-        if (exportCatMap[name] === 'trial') return name + '（試訓）';
-        return name;
+        var out = name;
+        if (exportCatMap[name] === 'guest') out += '（外援）';
+        else if (exportCatMap[name] === 'trial') out += '（試訓）';
+        if (isSecond) out += '（二職）';
+        return out;
       }
       function buildSessionPayload(label, result) {
         result = result || {};
@@ -4052,7 +4145,7 @@
           rows: rows.map(function (r) {
             var c = {};
             for (var k in r) { if (Object.prototype.hasOwnProperty.call(r, k)) c[k] = r[k]; }
-            c.name = exportAnnotateName(r.name);
+            c.name = exportAnnotateName(r.name, r.isSecond);
             return c;
           }),
           commanders: result.commanders || [],
@@ -4144,7 +4237,7 @@
     // 使用者只能選「是否出勤」，不能自行新增/刪除人名。
     // 選了狀態就依「目前選的日期」自動存到後端（不用另外按儲存）。
     // 主要成員跟外援現在分成兩個窗格顯示，不用再靠文字標註「（外援）」區分。
-    function createAttendanceDisplayRow(name, job) {
+    function createAttendanceDisplayRow(name, job, job2) {
       var row = document.createElement('div');
       row.className = 'attendance-row';
       row.dataset.name = name;
@@ -4157,6 +4250,10 @@
       var jobSpan = document.createElement('span');
       jobSpan.className = 'attendance-job attendance-job-display';
       jobSpan.textContent = job || '—';
+
+      var job2Span = document.createElement('span');
+      job2Span.className = 'attendance-job2 attendance-job-display';
+      job2Span.textContent = job2 || '—';
 
       var statusSelect = document.createElement('select');
       statusSelect.className = 'attendance-status';
@@ -4198,6 +4295,7 @@
 
       row.appendChild(nameSpan);
       row.appendChild(jobSpan);
+      row.appendChild(job2Span);
       row.appendChild(statusSelect);
       return row;
     }
@@ -4976,7 +5074,7 @@
       } else {
         emptyEl.classList.add('hidden');
         people.forEach(function (m) {
-          listEl.appendChild(createAttendanceDisplayRow(m.name, m.job));
+          listEl.appendChild(createAttendanceDisplayRow(m.name, m.job, m.job2));
         });
       }
     }
@@ -5747,7 +5845,7 @@
     }
 
     /* ── 名單管理（需管理員密碼）── */
-    function createMemberRow(name, job) {
+    function createMemberRow(name, job, job2) {
       var row = document.createElement('div');
       row.className = 'attendance-row';
 
@@ -5763,6 +5861,12 @@
       if (job) jobSelect.value = job;
       jobSelect.onchange = function () { updateMemberJobCounts(); };
 
+      // 二職（可留空）。職業人數統計只算主職，所以這個不用掛 onchange。
+      var job2Select = document.createElement('select');
+      job2Select.className = 'attendance-job2';
+      job2Select.innerHTML = buildJobOptionsHtml();
+      if (job2) job2Select.value = job2;
+
       var delBtn = document.createElement('button');
       delBtn.type = 'button';
       delBtn.className = 'attendance-del-btn';
@@ -5771,32 +5875,33 @@
 
       row.appendChild(nameInput);
       row.appendChild(jobSelect);
+      row.appendChild(job2Select);
       row.appendChild(delBtn);
       return row;
     }
 
-    function addMemberRow(name, job) {
+    function addMemberRow(name, job, job2) {
       var list = document.getElementById('member-list');
-      list.appendChild(createMemberRow(name, job));
+      list.appendChild(createMemberRow(name, job, job2));
       updateMemberJobCounts();
     }
 
-    function addGuestRow(name, job) {
+    function addGuestRow(name, job, job2) {
       var list = document.getElementById('guest-list');
-      list.appendChild(createMemberRow(name, job));
+      list.appendChild(createMemberRow(name, job, job2));
       updateMemberJobCounts();
     }
 
-    function addClubRow(name, job) {
+    function addClubRow(name, job, job2) {
       var list = document.getElementById('club-list');
       if (!list) return;
-      list.appendChild(createMemberRow(name, job));
+      list.appendChild(createMemberRow(name, job, job2));
       updateMemberJobCounts();
     }
 
-    function addTrialRow(name, job) {
+    function addTrialRow(name, job, job2) {
       var list = document.getElementById('trial-list');
-      list.appendChild(createMemberRow(name, job));
+      list.appendChild(createMemberRow(name, job, job2));
       updateMemberJobCounts();
     }
 
@@ -5857,7 +5962,7 @@
 
       var list = document.getElementById('member-list');
       list.innerHTML = '';
-      imported.forEach(function (m) { addMemberRow(m.name, m.job); });
+      imported.forEach(function (m) { addMemberRow(m.name, m.job, m.job2); });
 
       showAlertModal('已匯入 ' + imported.length + ' 筆資料，確認無誤後記得按「儲存名單」');
     }
@@ -5882,7 +5987,7 @@
         if (!guests || guests.length === 0) {
           for (var i = 0; i < 3; i++) addGuestRow();
         } else {
-          guests.forEach(function (g) { addGuestRow(g.name, g.job); });
+          guests.forEach(function (g) { addGuestRow(g.name, g.job, g.job2); });
         }
       }
 
@@ -5890,7 +5995,7 @@
         if (!trials || trials.length === 0) {
           for (var i = 0; i < 3; i++) addTrialRow();
         } else {
-          trials.forEach(function (t) { addTrialRow(t.name, t.job); });
+          trials.forEach(function (t) { addTrialRow(t.name, t.job, t.job2); });
         }
       }
 
@@ -5900,7 +6005,7 @@
         if (!clubs || clubs.length === 0) {
           for (var i = 0; i < 3; i++) addClubRow();
         } else {
-          clubs.forEach(function (c) { addClubRow(c.name, c.job); });
+          clubs.forEach(function (c) { addClubRow(c.name, c.job, c.job2); });
         }
       }
 
@@ -6130,9 +6235,11 @@
     function collectListRows_(containerId) {
       var rows = Array.prototype.slice.call(document.querySelectorAll('#' + containerId + ' .attendance-row'));
       return rows.map(function (row) {
+        var j2 = row.querySelector('.attendance-job2');
         return {
           name: row.querySelector('.attendance-name').value.trim(),
-          job: row.querySelector('.attendance-job').value
+          job: row.querySelector('.attendance-job').value,
+          job2: j2 ? j2.value : ''
         };
       }).filter(function (r) { return r.name; });
     }

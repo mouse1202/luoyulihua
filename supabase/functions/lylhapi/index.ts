@@ -66,20 +66,20 @@ async function appendVideoLog(actorEmail: string, actorRole: string, description
 }
 
 async function listByCategory(category: string) {
-  const { data } = await db.from("roster_members").select("name,job").eq("category", category).order("sort_order");
-  return (data ?? []).map((r) => ({ name: r.name, job: r.job }));
+  const { data } = await db.from("roster_members").select("name,job,job2").eq("category", category).order("sort_order");
+  return (data ?? []).map((r) => ({ name: r.name, job: r.job, job2: r.job2 ?? "" }));
 }
 async function saveByCategory(category: string, rows: any[]) {
   await chk(db.from("roster_members").delete().eq("category", category).select("id"));
   const clean = (rows ?? []).filter((r) => r && r.name)
-    .map((r, i) => ({ category, name: r.name, job: r.job ?? "", sort_order: i }));
+    .map((r, i) => ({ category, name: r.name, job: r.job ?? "", job2: r.job2 ?? "", sort_order: i }));
   if (clean.length > 0) await chk(db.from("roster_members").insert(clean).select("id"));
   return { success: true, count: clean.length };
 }
 
 async function getAttendanceCandidates() {
-  const { data } = await db.from("roster_members").select("name,job,category").order("category").order("sort_order");
-  return (data ?? []).map((r) => ({ name: r.name, job: r.job, category: r.category }));
+  const { data } = await db.from("roster_members").select("name,job,job2,category").order("category").order("sort_order");
+  return (data ?? []).map((r) => ({ name: r.name, job: r.job, job2: r.job2 ?? "", category: r.category }));
 }
 
 async function getAttendanceByDate(date: string) {
@@ -88,9 +88,12 @@ async function getAttendanceByDate(date: string) {
 }
 
 async function getRosterByDate(date: string, session: string) {
-  const { data } = await db.from("roster_slots").select("grp,team,slot,name,job,note")
+  const { data } = await db.from("roster_slots").select("grp,team,slot,name,job,note,is_second")
     .eq("date_label", date).eq("session", String(session)).order("id");
-  return (data ?? []).map((r) => ({ group: r.grp, team: r.team, slot: r.slot, name: r.name, job: r.job, note: r.note }));
+  return (data ?? []).map((r) => ({
+    group: r.grp, team: r.team, slot: r.slot, name: r.name, job: r.job, note: r.note,
+    isSecond: !!r.is_second,
+  }));
 }
 
 // 這一份排表最後被誰動過是什麼時候。前端拿來顯示「資料時間」，
@@ -277,7 +280,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     records.forEach((r) => { statusByName[r.name] = r.status; });
     const cands = await getAttendanceCandidates();
     return cands.filter((c) => (statusByName[c.name] || "出勤") === "出勤")
-      .map((c) => ({ name: c.name, job: c.job, category: c.category }));
+      .map((c) => ({ name: c.name, job: c.job, job2: c.job2 ?? "", category: c.category }));
   },
   // 讀舊值與寫新值走同一個資料庫函式（0007 migration），中間不會被插隊。
   // 以前是分兩步，兩個請求靠得近時會雙雙讀到「還沒有紀錄」，
@@ -501,7 +504,14 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const now = new Date().toISOString();
     if (rows.length > 0) {
       await chk(db.from("roster_slots").upsert(
-        rows.map((r: any) => ({ date_label: date, session, grp: r.group, team: r.team, slot: r.slot, name: r.name, job: r.job, note: r.note, updated_at: now })),
+        rows.map((r: any) => ({
+          date_label: date, session, grp: r.group, team: r.team, slot: r.slot,
+          name: r.name, job: r.job, note: r.note,
+          // 排這一格當下他是不是用二職上的。之後他改二職或離開名單，
+          // 歷史排表還是看得出來，所以這個旗標要存不能只用算的。
+          is_second: !!r.isSecond,
+          updated_at: now,
+        })),
         { onConflict: "date_label,session,grp,team,slot" },
       ).select("id"));
     }
