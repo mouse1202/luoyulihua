@@ -4370,6 +4370,62 @@
         if (currentValue && labelsForMonth.indexOf(currentValue) !== -1) select.value = currentValue;
         else if (sharedDate && labelsForMonth.indexOf(sharedDate) !== -1) select.value = sharedDate;
       });
+
+      // 上面兩個條件都不成立時（例如月份分頁停在十月、sharedDate 卻是九月的場次），
+      // select 會自己掉到清單的第一個選項，但 sharedDate 不會跟著改。
+      // 以前就這樣一路分岔下去：openAttendanceView 用 sharedDate 設畫面、
+      // saveAttendanceStatus 卻讀 select 的值，結果「畫面顯示 A 天、存檔寫進 B 天」。
+      // 這裡強制把 sharedDate 拉回選單真正選到的值，兩邊只留一個真相。
+      var attendanceSelect = document.getElementById('attendance-date');
+      var landed = attendanceSelect ? attendanceSelect.value : '';
+      if (landed === NEW_DATE_LABEL_VALUE) landed = ''; // 這個月一場都沒有時只剩「＋新增」
+      if (landed !== sharedDate) setSharedDate(landed);
+    }
+
+    /* ── 進出勤系統要跳到哪一天 ──
+       先找今天；今天沒有場次就找日期最接近的那一場。
+       一樣近的話取未來那一場 —— 出勤是事前登記的，通常比較想看還沒打的那場。
+       開頭不是 MMDD 的標籤（歸在「其他」那組）不參與。 */
+    function pickDefaultAttendanceLabel_() {
+      var now = new Date();
+      var todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      var best = null, bestKey = null;
+
+      (knownDateLabels || []).forEach(function (label) {
+        var iso = guessRealDateFromLabel_(label);   // 已經處理過跨年（12月看到 0105 算明年）
+        if (!iso) return;
+        var parts = iso.split('-');
+        var t = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
+        if (isNaN(t)) return;
+
+        var diff = Math.round((t - todayOnly) / 86400000);
+        // 排序鍵：先比絕對天數，再讓未來的贏過過去的，最後同一天多場次時依標籤
+        var key = [Math.abs(diff), diff < 0 ? 1 : 0, label];
+        if (!best || compareJumpKey_(key, bestKey) < 0) { best = label; bestKey = key; }
+      });
+      return best;
+    }
+
+    function compareJumpKey_(a, b) {
+      if (a[0] !== b[0]) return a[0] - b[0];
+      if (a[1] !== b[1]) return a[1] - b[1];
+      return a[2] < b[2] ? -1 : (a[2] > b[2] ? 1 : 0);
+    }
+
+    // 跳過去的時候月份分頁一定要一起切，只設日期不切月份的話，
+    // 下次重建選單時那個日期不在清單裡，選單又會自己掉到別場。
+    function jumpToDefaultAttendanceDate_() {
+      var target = pickDefaultAttendanceLabel_();
+      if (!target) {
+        var sel = document.getElementById('attendance-date');
+        if (sel) sel.value = getSharedDate();
+        return;
+      }
+      var mm = labelMonthNum_(target);
+      var tab = mm !== null ? tabForMonthNum_(mm) : null;
+      if (tab !== null) sharedMonthIdx = tab;
+      refreshDateSelectOptions();
+      setSharedDate(target);
     }
 
     // 新增一個日期/場次標籤，加進共用清單並切到它所在的月份分頁
@@ -5281,7 +5337,9 @@
 
     function openAttendanceView() {
       ensureDateLabelsLoaded(function () {
-        document.getElementById('attendance-date').value = getSharedDate();
+        // 每次從首頁進來都跳到今天的場次（沒有就跳最接近的那一場）。
+        // 從排表工具按「返回出勤系統」不會經過這裡，所以不會把人正在排的場次拉走。
+        jumpToDefaultAttendanceDate_();
         loadAttendanceFromMembers();
       });
       refreshAttendanceLockForToday();

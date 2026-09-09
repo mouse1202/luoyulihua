@@ -266,17 +266,21 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     return cands.filter((c) => (statusByName[c.name] || "出勤") === "出勤")
       .map((c) => ({ name: c.name, job: c.job, category: c.category }));
   },
+  // 讀舊值與寫新值走同一個資料庫函式（0007 migration），中間不會被插隊。
+  // 以前是分兩步，兩個請求靠得近時會雙雙讀到「還沒有紀錄」，
+  // 操作記錄就兩筆都寫成「設為 X」，看不出前一個狀態 —— 要查
+  // 「誰把我的請假改掉」的時候查不準。
   saveAttendanceRecord: async (record: any) => {
     const actorLabel = record.actorRoleName || record.actorEmail || "有人";
-    const { data: existing } = await db.from("attendance_records").select("status")
-      .eq("date_label", record.date).eq("name", record.name).maybeSingle();
-    await chk(db.from("attendance_records").upsert(
-      { date_label: record.date, name: record.name, job: record.job, status: record.status, updated_at: new Date().toISOString() },
-      { onConflict: "date_label,name" },
-    ).select("id"));
+    const { data: oldStatus, error } = await db.rpc("save_attendance_record", {
+      p_date: record.date,
+      p_name: record.name,
+      p_job: record.job ?? "",
+      p_status: record.status,
+    });
+    if (error) throw new Error(error.message);
     if (record.isManual) {
-      const oldStatus = existing?.status;
-      if (!existing) {
+      if (oldStatus === null || oldStatus === undefined) {
         await appendActivityLog(record.actorEmail, record.actorRoleName,
           `${actorLabel} 把「${record.name}」（${record.date}）的出勤狀態設為「${record.status}」`);
       } else if (oldStatus !== record.status) {
