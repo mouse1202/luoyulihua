@@ -137,6 +137,19 @@ async function getAllDateLabels(): Promise<string[]> {
   return labels;
 }
 
+// 曾用名 → 現在的名字。
+//
+// 戰績是從遊戲 CSV 反覆匯入的歷史紀錄，改名時不會去改寫它（改了下次重匯
+// 又會被寫回舊名字），而是記一筆別名，讀取的時候在這裡換算。
+// 這樣同一個人改名前後的戰績才會被算成同一個人。
+async function getAliasMap(): Promise<Record<string, string>> {
+  const { data } = await db.from("player_aliases").select("alias_name,canonical_name");
+  const m: Record<string, string> = {};
+  (data ?? []).forEach((r) => { m[r.alias_name] = r.canonical_name; });
+  return m;
+}
+const canon = (m: Record<string, string>, name: string) => m[name] ?? name;
+
 function parseMonthFromLabel(label: string): number | null {
   const m = String(label ?? "").match(/^(\d{2})(\d{2})/);
   if (!m) return null;
@@ -324,6 +337,54 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     };
   },
 
+  // 玩家改名。實際動作在資料庫函式 rename_player 裡（0008 migration）：
+  // 名單／出勤／排表／指揮／影片／登入身分直接改掉，戰績留著不動改記別名。
+  // 新名字已經有資料時整個不做，把衝突列出來讓人自己決定。
+  renamePlayer: async (oldName: string, newName: string, actorName?: string) => {
+    const oldN = normName(oldName), newN = normName(newName);
+    if (!oldN || !newN) return { success: false, message: "名字不能是空白" };
+    if (oldN === OWNER_NAME) {
+      return { success: false, message: "擁有者的名字寫死在程式裡，要改得改 OWNER_NAME 再重新部署" };
+    }
+    const { data, error } = await db.rpc("rename_player", {
+      p_old: oldN, p_new: newN, p_actor: actorName ?? "",
+    });
+    if (error) throw new Error(error.message);
+    const res = data as any;
+    if (res && res.success) {
+      const who = actorName || "有人";
+      await appendActivityLog(actorName || "", actorName || "",
+        `${who} 把「${oldN}」改名為「${newN}」（名單 ${res.roster} 筆、出勤 ${res.attendance} 筆、` +
+        `排表 ${res.slots} 筆、指揮 ${res.commanders} 筆、影片 ${res.videos} 筆、登入身分 ${res.access} 筆；` +
+        `戰績 ${res.battles} 筆改用別名對照，沒有改寫）`);
+    }
+    return res;
+  },
+
+  // 目前登記的所有曾用名
+  getPlayerAliases: async () => {
+    const { data } = await db.from("player_aliases")
+      .select("alias_name,canonical_name,created_at,created_by")
+      .order("created_at", { ascending: false });
+    return (data ?? []).map((r) => ({
+      alias: r.alias_name, canonical: r.canonical_name,
+      time: r.created_at ? String(r.created_at).slice(0, 16).replace("T", " ") : "",
+      by: r.created_by || "",
+    }));
+  },
+
+  // 拆掉一筆別名對照（登記錯了的時候用）
+  deletePlayerAlias: async (alias: string, actorName?: string) => {
+    const a = normName(alias);
+    if (!a) return { success: false, message: "缺少名字" };
+    const { data } = await db.from("player_aliases").delete().eq("alias_name", a).select("alias_name");
+    if (data && data.length) {
+      await appendActivityLog(actorName || "", actorName || "",
+        `${actorName || "有人"} 移除了曾用名對照「${a}」`);
+    }
+    return { success: true, removed: data?.length ?? 0 };
+  },
+
   // 對不上的名字：有出勤／排表／影片／戰績紀錄，但名單上已經找不到這個人。
   //
   // 名字在這套系統裡就是識別碼，而且八張表之間沒有任何外鍵，
@@ -336,6 +397,10 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   getUnmatchedNames: async () => {
     const { data: roster } = await db.from("roster_members").select("name");
     const known = new Set((roster ?? []).map((r) => r.name));
+
+    // 已經登記過曾用名的就不算「對不上」了 —— 它讀取時會被換算成現在的名字
+    const alias = await getAliasMap();
+    Object.keys(alias).forEach((a) => known.add(a));
 
     // 名字常常只差一個裝飾字元（「煙恆、」對「煙恆丶」就是實際發生過的例子，
     // 名單與出勤用頓號、戰績用丶，10 場戰績完全接不上）。
@@ -681,6 +746,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const { data: roster } = await db.from("roster_members").select("name,category");
     const cat: Record<string, string> = {};
     (roster ?? []).forEach((r) => { cat[r.name] = r.category; });
+    // 改過名的人要顯示現在的名字，不然同一個人在不同場的戰報會是兩個名字
+    const alias = await getAliasMap();
     return {
       found: true,
       battle: {
@@ -689,13 +756,18 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
         myKills: b.my_kills, oppKills: b.opp_kills, result: b.result,
         dateLabel: b.date_label || "", note: b.note,
       },
-      players: (ps ?? []).map((p) => ({
-        side: p.side, guildName: p.guild_name, name: p.name, job: p.job,
-        kills: p.kills, assists: p.assists, res: p.res,
-        pvp: Number(p.pvp), bld: Number(p.bld), heal: Number(p.heal), tank: Number(p.tank),
-        heavy: p.heavy, feather: p.feather, bone: p.bone,
-        rosterCategory: p.side === "my" ? (cat[p.name] || "") : "",
-      })),
+      players: (ps ?? []).map((p) => {
+        // 只換我方：對方公會的人跟我們的曾用名無關
+        const shown = p.side === "my" ? canon(alias, p.name) : p.name;
+        return {
+          side: p.side, guildName: p.guild_name, name: shown, job: p.job,
+          formerName: shown !== p.name ? p.name : "",
+          kills: p.kills, assists: p.assists, res: p.res,
+          pvp: Number(p.pvp), bld: Number(p.bld), heal: Number(p.heal), tank: Number(p.tank),
+          heavy: p.heavy, feather: p.feather, bone: p.bone,
+          rosterCategory: p.side === "my" ? (cat[shown] || "") : "",
+        };
+      }),
     };
   },
 
@@ -836,6 +908,10 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
 
     const KEYS = ["kills", "assists", "res", "pvp", "bld", "heal", "tank", "heavy", "feather", "bone"];
 
+    // 傳進來的是現在的名字，但戰績裡可能是曾用名，兩邊都換算過再比對
+    const alias = await getAliasMap();
+    const target = canon(alias, name);
+
     // 一場一組：我方全部的人，之後再從裡面挑出同職業的當對照組
     const byBattle: Record<string, any[]> = {};
     (ps ?? []).forEach((p) => {
@@ -846,7 +922,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     // 沒上場的場次沒有 job 可用，拿它來挑對照組，那幾列才顯示得出職均。
     const jobCount: Record<string, number> = {};
     (ps ?? []).forEach((p) => {
-      if (p.name === name && p.job) jobCount[p.job] = (jobCount[p.job] ?? 0) + 1;
+      if (canon(alias, p.name) === target && p.job) jobCount[p.job] = (jobCount[p.job] ?? 0) + 1;
     });
     let mainJob = "";
     Object.keys(jobCount).forEach((j) => {
@@ -857,7 +933,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       name,
       points: list.map((b) => {
         const all = byBattle[b.id] ?? [];
-        const me = all.filter((x) => x.name === name)[0];
+        const me = all.filter((x) => canon(alias, x.name) === target)[0];
 
         // 那一場實際用的職業；沒上場就退回主要職業
         const cmpJob = me ? me.job : mainJob;
@@ -917,11 +993,15 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const cat: Record<string, string> = {};
     (roster ?? []).forEach((r) => { cat[r.name] = r.category; });
 
+    // 改名前後要算成同一個人，所以先把名字換算成現在的再分組
+    const alias = await getAliasMap();
+
     const KEYS = ["kills", "assists", "res", "pvp", "bld", "heal", "tank", "heavy", "feather", "bone"];
     const acc: Record<string, any> = {};
     (ps ?? []).forEach((p) => {
-      const a = acc[p.name] ?? (acc[p.name] = {
-        name: p.name, job: p.job, games: 0,
+      const nm = canon(alias, p.name);
+      const a = acc[nm] ?? (acc[nm] = {
+        name: nm, job: p.job, games: 0,
         ...Object.fromEntries(KEYS.map((k) => [k, 0])),
       });
       a.games += 1;

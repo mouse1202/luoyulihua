@@ -1904,6 +1904,25 @@
     .nc-zero { opacity: .3; }
     .nc-dates { color: #FFFFEF; opacity: .5; font-size: 11px; padding: 0 12px 10px; }
     .nc-suspect { color: #ffca28; }
+    .nc-row-act { grid-template-columns: 1.3fr .7fr .5fr .5fr .5fr .5fr .5fr 64px; }
+    .nc-btn {
+      cursor: pointer; border: 1px solid #d4af37; border-radius: 4px;
+      background: rgba(212,175,55,0.1); color: #d4af37;
+      font-size: 11.5px; font-family: inherit; padding: 3px 8px;
+    }
+    .nc-btn:hover { background: rgba(212,175,55,0.2); }
+    .nc-btn-del { border-color: #6B1023; color: #d98a8a; background: transparent; }
+    .nc-alias-row {
+      display: grid; grid-template-columns: 1fr 24px 1fr 1fr 64px;
+      gap: 8px; align-items: center; padding: 8px 12px;
+      border: 1px solid #2a0a12; border-radius: 6px; margin-bottom: 6px;
+      color: #FFFFEF; font-size: 12.5px;
+    }
+    .nc-arrow { color: #d4af37; text-align: center; }
+    @media (max-width: 700px) {
+      .nc-row-act { grid-template-columns: 1fr 1fr 1fr; }
+      .nc-alias-row { grid-template-columns: 1fr 20px 1fr; }
+    }
     .nc-sec {
       color: #d4af37; font-weight: 700; font-size: 13.5px;
       margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #6B1023;
@@ -2185,7 +2204,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias'];
 
   // 排表匯出的職業底色。存的是不含 # 的六碼，argb() 會補上 FF。
   // 都是淺色系，配預設的黑字才看得清楚。
@@ -5161,15 +5180,68 @@
         box.innerHTML = '<div class="access-admin-empty">本機預覽模式，未連接後端</div>';
         return;
       }
-      google.script.run.withSuccessHandler(renderUnmatchedNames)
+      // 兩份一起等：對不上的名字，以及已經登記過的曾用名
+      var pending = 2, unmatched = null, aliases = null;
+      var done = function () {
+        if (--pending > 0) return;
+        renderUnmatchedNames(unmatched, aliases || []);
+      };
+      google.script.run.withSuccessHandler(function (r) { unmatched = r; done(); })
         .withFailureHandler(function (err) {
           box.innerHTML = '<div class="access-admin-empty">檢查失敗：' + escapeBattleHtml(err.message) + '</div>';
+          pending = -99;
         }).getUnmatchedNames();
+      google.script.run.withSuccessHandler(function (r) { aliases = r; done(); })
+        .withFailureHandler(function () { aliases = []; done(); }).getPlayerAliases();
     }
 
-    function renderUnmatchedNames(res) {
+    /* 改名：名單／出勤／排表／指揮／影片／登入身分直接改掉；
+       戰績留著不動，改記一筆曾用名，讀取時再換算 —— 戰績是 CSV 反覆匯入的
+       歷史紀錄，直接改寫它下次重匯又會被寫回舊名字。 */
+    function startRenamePlayer(oldName, suggest) {
+      openTextInputModal({
+        title: '改名',
+        hint: '把「' + oldName + '」的所有紀錄改成哪個名字？',
+        initialValue: suggest || oldName
+      }, function (newName) {
+        newName = (newName || '').trim();
+        if (!newName || newName === oldName) return;
+
+        google.script.run.withSuccessHandler(function (res) {
+          if (!res || !res.success) {
+            var msg = (res && res.message) ? res.message : '未知錯誤';
+            if (res && res.conflicts && res.conflicts.length) {
+              msg += '\n\n衝突的地方：\n' + res.conflicts.map(function (c) {
+                return '・' + c.type + '：' + c.detail;
+              }).join('\n');
+            }
+            showAlertModal('改名失敗：' + msg);
+            return;
+          }
+          showAlertModal('已把「' + oldName + '」改成「' + newName + '」\n\n' +
+            '名單 ' + res.roster + ' 筆、出勤 ' + res.attendance + ' 筆、排表 ' + res.slots +
+            ' 筆、指揮 ' + res.commanders + ' 筆、影片 ' + res.videos + ' 筆、登入身分 ' + res.access + ' 筆\n' +
+            '戰績 ' + res.battles + ' 筆改用曾用名對照，沒有改寫原始資料');
+          loadUnmatchedNames();
+        }).withFailureHandler(function (err) {
+          showAlertModal('改名失敗：' + err.message);
+        }).renamePlayer(oldName, newName, currentAccessRoleName);
+      });
+    }
+
+    function removePlayerAlias(alias) {
+      showConfirmModal('移除曾用名', '移除之後，「' + alias +
+        '」名下的戰績就不會再算到現在的名字上了。確定嗎？', function () {
+        google.script.run.withSuccessHandler(function () { loadUnmatchedNames(); })
+          .withFailureHandler(function (err) { showAlertModal('移除失敗：' + err.message); })
+          .deletePlayerAlias(alias, currentAccessRoleName);
+      });
+    }
+
+    function renderUnmatchedNames(res, aliases) {
       var box = document.getElementById('name-check-body');
       res = res || {};
+      aliases = aliases || [];
       var rows = res.rows || [];
       var need = rows.filter(function (r) { return r.likelyMember; });
       var maybe = rows.filter(function (r) { return !r.likelyMember; });
@@ -5186,8 +5258,9 @@
         return;
       }
 
-      var head = '<div class="nc-row nc-head"><span>名字</span><span>職業</span>' +
-        '<span>出勤</span><span>排表</span><span>指揮</span><span>影片</span><span>戰績</span></div>';
+      var head = '<div class="nc-row nc-row-act nc-head"><span>名字</span><span>職業</span>' +
+        '<span>出勤</span><span>排表</span><span>指揮</span><span>影片</span><span>戰績</span>' +
+        '<span></span></div>';
 
       var num = function (v) {
         return '<span' + (v ? '' : ' class="nc-zero"') + '>' + (v || '—') + '</span>';
@@ -5203,10 +5276,12 @@
           if ((r.dates || []).length) {
             tips.push('出現在：' + r.dates.map(escapeBattleHtml).join('、'));
           }
-          return '<div class="nc-row">' +
+          return '<div class="nc-row nc-row-act">' +
               '<span class="nc-name">' + escapeBattleHtml(r.name) + '</span>' +
               '<span>' + (r.job ? jobChip(r.job) : '<span class="nc-zero">—</span>') + '</span>' +
               num(r.attendance) + num(r.slots) + num(r.commanders) + num(r.videos) + num(r.battles) +
+              '<span><button type="button" class="nc-btn" data-rename="' + escapeBattleHtml(r.name) +
+                '" data-suggest="' + escapeBattleHtml(r.suspect || '') + '">改名</button></span>' +
             '</div>' +
             (tips.length ? '<div class="nc-dates">' + tips.join('　') + '</div>' : '');
         }).join('');
@@ -5227,6 +5302,30 @@
         '如果其中有自己人，代表他改過名。' +
         '</div>';
       html += maybe.length ? head + renderGroup(maybe) : '';
+
+      // 已經登記過的曾用名：戰績讀取時會照這張表換算成現在的名字
+      html += '<div class="nc-sec">曾用名對照（' + aliases.length + '）</div>';
+      if (!aliases.length) {
+        html += '<div class="nc-note" style="margin-top:0">還沒有登記任何曾用名。' +
+          '在上面按「改名」就會自動建立一筆。</div>';
+      } else {
+        html += '<div class="nc-note" style="margin-top:0">' +
+          '戰績是 CSV 反覆匯入的歷史紀錄，改名時<b>不會改寫它</b>，而是照這張表在讀取時換算。' +
+          '所以就算之後重新匯入同一份舊 CSV，也還是會算到現在的名字上。</div>';
+        html += '<div class="nc-alias-row nc-head"><span>曾用名</span><span></span>' +
+          '<span>現在的名字</span><span>登記時間</span><span></span></div>';
+        html += aliases.map(function (a) {
+          return '<div class="nc-alias-row">' +
+            '<span>' + escapeBattleHtml(a.alias) + '</span>' +
+            '<span class="nc-arrow">→</span>' +
+            '<span class="nc-name">' + escapeBattleHtml(a.canonical) + '</span>' +
+            '<span class="nc-zero">' + escapeBattleHtml(a.time) +
+              (a.by ? '　' + escapeBattleHtml(a.by) : '') + '</span>' +
+            '<span><button type="button" class="nc-btn nc-btn-del" data-unalias="' +
+              escapeBattleHtml(a.alias) + '">移除</button></span>' +
+          '</div>';
+        }).join('');
+      }
 
       box.innerHTML = html;
     }
@@ -6555,6 +6654,12 @@
       // 職業列要先判斷：它跟成員列都在同一張表裡
       var jr = e.target.closest('[data-jobrow]');
       if (jr) { setJobAvgOpen(jr.dataset.jobrow); return; }
+      // 名字對照那一頁的按鈕
+      var rn = e.target.closest('[data-rename]');
+      if (rn) { startRenamePlayer(rn.dataset.rename, rn.dataset.suggest); return; }
+      var ua = e.target.closest('[data-unalias]');
+      if (ua) { removePlayerAlias(ua.dataset.unalias); return; }
+
       // 象限圖的開關要先攔：它們不是 .bt-clickable，但點在同一張圖裡
       var qa = e.target.closest('[data-qall]');
       if (qa) { quadrantSetAll_(qa.dataset.qall, true); return; }
