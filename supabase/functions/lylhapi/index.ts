@@ -324,6 +324,102 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     };
   },
 
+  // 對不上的名字：有出勤／排表／影片／戰績紀錄，但名單上已經找不到這個人。
+  //
+  // 名字在這套系統裡就是識別碼，而且八張表之間沒有任何外鍵，
+  // 所以一改名（或從名單移除）就會留下一堆對不上的孤兒紀錄：
+  // 出勤看不到過去的請假、戰績被當成另一個人、排表格子會變空白。
+  // 這支只負責「讓問題被看見」，不會動任何資料。
+  //
+  // 戰績限定 side='my'：battle_players 裡有一半是敵對公會的人，
+  // 他們本來就不在我們名單上，全撈出來只會淹掉真正要看的東西。
+  getUnmatchedNames: async () => {
+    const { data: roster } = await db.from("roster_members").select("name");
+    const known = new Set((roster ?? []).map((r) => r.name));
+
+    // 名字常常只差一個裝飾字元（「煙恆、」對「煙恆丶」就是實際發生過的例子，
+    // 名單與出勤用頓號、戰績用丶，10 場戰績完全接不上）。
+    // 去掉這些字元之後如果對得上名單，就標出來當提示 —— 只提示，不自動合併。
+    const strip = (v: string) => String(v ?? "").replace(/[丶、丷乄・･．\s]/g, "");
+    const byStripped: Record<string, string> = {};
+    (roster ?? []).forEach((r) => {
+      const k = strip(r.name);
+      if (k) byStripped[k] = r.name;
+    });
+
+    type Row = {
+      name: string; jobs: Set<string>;
+      attendance: number; slots: number; commanders: number; videos: number; battles: number;
+      dates: Set<string>;
+    };
+    const acc: Record<string, Row> = {};
+    const touch = (name: string): Row | null => {
+      const n = String(name ?? "").trim();
+      if (!n || known.has(n)) return null;
+      return acc[n] ?? (acc[n] = {
+        name: n, jobs: new Set(), attendance: 0, slots: 0, commanders: 0, videos: 0, battles: 0,
+        dates: new Set(),
+      });
+    };
+
+    const att = await db.from("attendance_records").select("name,job,date_label");
+    (att.data ?? []).forEach((r) => {
+      const t = touch(r.name); if (!t) return;
+      t.attendance += 1; if (r.job) t.jobs.add(r.job); if (r.date_label) t.dates.add(String(r.date_label));
+    });
+
+    const slots = await db.from("roster_slots").select("name,job,date_label");
+    (slots.data ?? []).forEach((r) => {
+      const t = touch(r.name); if (!t) return;
+      t.slots += 1; if (r.job) t.jobs.add(r.job); if (r.date_label) t.dates.add(String(r.date_label));
+    });
+
+    const cmd = await db.from("roster_commanders").select("name,date_label");
+    (cmd.data ?? []).forEach((r) => {
+      const t = touch(r.name); if (!t) return;
+      t.commanders += 1; if (r.date_label) t.dates.add(String(r.date_label));
+    });
+
+    const vid = await db.from("video_uploads").select("name,job,date_label");
+    (vid.data ?? []).forEach((r) => {
+      const t = touch(r.name); if (!t) return;
+      t.videos += 1; if (r.job) t.jobs.add(r.job); if (r.date_label) t.dates.add(String(r.date_label));
+    });
+
+    const bp = await db.from("battle_players").select("name,job,battle_id").eq("side", "my");
+    (bp.data ?? []).forEach((r) => {
+      const t = touch(r.name); if (!t) return;
+      t.battles += 1; if (r.job) t.jobs.add(r.job);
+    });
+
+    const rows = Object.values(acc).map((r) => {
+      // 只有戰績、沒有出勤／排表／影片的，多半是打過我方的外援，不是改名
+      const nonBattle = r.attendance + r.slots + r.commanders + r.videos;
+      const suspect = byStripped[strip(r.name)] ?? "";
+      return {
+        name: r.name,
+        job: Array.from(r.jobs).join("／"),
+        attendance: r.attendance, slots: r.slots, commanders: r.commanders,
+        videos: r.videos, battles: r.battles,
+        total: nonBattle + r.battles,
+        nonBattle,
+        suspect,                       // 疑似就是名單上的這個人（只差裝飾字元）
+        likelyMember: !!suspect || nonBattle > 0,
+        dates: Array.from(r.dates).sort(),
+      };
+    }).sort((a, b) => {
+      if (!!a.suspect !== !!b.suspect) return a.suspect ? -1 : 1;
+      if (a.likelyMember !== b.likelyMember) return a.likelyMember ? -1 : 1;
+      return b.total - a.total || (a.name < b.name ? -1 : 1);
+    });
+
+    return {
+      rosterCount: known.size,
+      rows,
+      needAction: rows.filter((r) => r.likelyMember).length,
+    };
+  },
+
   getActivityLog: async () => {
     const { data } = await db.from("activity_log").select("*").order("id", { ascending: false });
     return (data ?? []).map((r) => ({

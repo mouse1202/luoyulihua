@@ -1883,6 +1883,34 @@
     .bt-pick select { min-width: 200px; max-width: 260px; }
 
     .roster-data-time { color: #d4af37; font-size: 12px; opacity: .75; align-self: center; }
+
+    /* 名字對照 */
+    .nc-note {
+      border: 1px solid #6B1023; border-radius: 8px; background: #0A0A0A;
+      padding: 10px 14px; margin-bottom: 12px; color: #FFFFEF;
+      font-size: 12.5px; line-height: 1.7;
+    }
+    .nc-note b { color: #d4af37; }
+    .nc-row {
+      display: grid; grid-template-columns: 1.4fr .8fr .6fr .6fr .6fr .6fr .6fr;
+      gap: 8px; align-items: center; padding: 9px 12px;
+      border: 1px solid #2a0a12; border-radius: 6px; margin-bottom: 6px;
+      color: #FFFFEF; font-size: 12.5px;
+    }
+    .nc-head {
+      border: 0; color: #d4af37; font-weight: 700; padding-bottom: 2px; margin-bottom: 2px;
+    }
+    .nc-name { font-weight: 700; }
+    .nc-zero { opacity: .3; }
+    .nc-dates { color: #FFFFEF; opacity: .5; font-size: 11px; padding: 0 12px 10px; }
+    .nc-suspect { color: #ffca28; }
+    .nc-sec {
+      color: #d4af37; font-weight: 700; font-size: 13.5px;
+      margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #6B1023;
+    }
+    @media (max-width: 700px) {
+      .nc-row { grid-template-columns: 1fr 1fr 1fr; font-size: 12px; }
+    }
     .roster-stale {
       color: #ffca28; font-size: 12px; align-self: center;
       border: 1px solid #ffca28; border-radius: 4px; padding: 2px 8px;
@@ -2157,7 +2185,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames'];
 
   // 排表匯出的職業底色。存的是不含 # 的六碼，argb() 會補上 FF。
   // 都是淺色系，配預設的黑字才看得清楚。
@@ -2321,6 +2349,19 @@
     </div>
 
     <!-- Video report view -->
+    <div class="view hidden" id="name-check-view">
+      <div class="roster-section">
+        <div class="roster-header">
+          <span class="roster-title">名字對照</span>
+          <button type="button" class="roster-back-btn" onclick="closeNameCheckView()">返回出勤系統</button>
+          <button type="button" class="roster-back-btn" onclick="loadUnmatchedNames()">🔄 重新檢查</button>
+        </div>
+        <div class="roster-body">
+          <div id="name-check-body"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="view hidden" id="video-view">
       <div class="video-report-row">
         <div class="roster-section">
@@ -2474,6 +2515,7 @@
             <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openMemberView, 'attendance-view', false)">管理名單</button>
             <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openAccessAdminView, 'attendance-view', false)">審核申請</button>
             <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openActivityLogView, 'attendance-view', false)">操作記錄</button>
+            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openNameCheckView, 'attendance-view', false)">名字對照</button>
             <button type="button" class="roster-back-btn" onclick="closeAttendanceView()">回首頁</button>
           </div>
         </div>
@@ -2900,7 +2942,7 @@
     var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', 'X'];
 
     // 所有可切換的畫面，以及各畫面是否要用「一頁寬」樣式
-    var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view', 'video-roster-view', 'battle-view'];
+    var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view', 'video-roster-view', 'battle-view', 'name-check-view'];
     var VIEW_WIDE = {
       'main-view': false,
       'roster-view': true,
@@ -5099,6 +5141,94 @@
       var html = placeholder ? '<option value="">' + placeholder + '</option>' : '';
       labels.forEach(function (l) { html += '<option value="' + l.replace(/"/g, '&quot;') + '">' + l + '</option>'; });
       sel.innerHTML = html;
+    }
+
+    /* ── 名字對照 ──
+       名字在這套系統裡就是識別碼，八張表之間又沒有外鍵，所以有人改名
+       （或從名單移除）之後，舊名字底下的紀錄就變成對不上的孤兒：
+       出勤看不到過去的請假、戰績被當成另一個人、排表格子會變空白。
+       這一頁只負責把問題攤開來，不會動任何資料。 */
+    function openNameCheckView() {
+      showView('name-check-view');
+      loadUnmatchedNames();
+    }
+    function closeNameCheckView() { showView('attendance-view'); }
+
+    function loadUnmatchedNames() {
+      var box = document.getElementById('name-check-body');
+      box.innerHTML = '<div class="access-admin-empty">檢查中…</div>';
+      if (!(window.google && google.script && google.script.run)) {
+        box.innerHTML = '<div class="access-admin-empty">本機預覽模式，未連接後端</div>';
+        return;
+      }
+      google.script.run.withSuccessHandler(renderUnmatchedNames)
+        .withFailureHandler(function (err) {
+          box.innerHTML = '<div class="access-admin-empty">檢查失敗：' + escapeBattleHtml(err.message) + '</div>';
+        }).getUnmatchedNames();
+    }
+
+    function renderUnmatchedNames(res) {
+      var box = document.getElementById('name-check-body');
+      res = res || {};
+      var rows = res.rows || [];
+      var need = rows.filter(function (r) { return r.likelyMember; });
+      var maybe = rows.filter(function (r) { return !r.likelyMember; });
+
+      var note = '<div class="nc-note">' +
+        '名單上有 <b>' + (res.rosterCount || 0) + '</b> 個人。下面是<b>有紀錄、但名單上找不到</b>的名字。' +
+        '<br>這些紀錄沒有消失，只是對不上人：出勤看不到他過去的請假、戰績會被當成兩個人、' +
+        '排表已排好的格子會變空白。' +
+        '<br>這一頁只是檢查，<b>不會動到任何資料</b>。' +
+        '</div>';
+
+      if (!rows.length) {
+        box.innerHTML = note + '<div class="access-admin-empty">很好，沒有對不上的名字。</div>';
+        return;
+      }
+
+      var head = '<div class="nc-row nc-head"><span>名字</span><span>職業</span>' +
+        '<span>出勤</span><span>排表</span><span>指揮</span><span>影片</span><span>戰績</span></div>';
+
+      var num = function (v) {
+        return '<span' + (v ? '' : ' class="nc-zero"') + '>' + (v || '—') + '</span>';
+      };
+
+      var renderGroup = function (list) {
+        return list.map(function (r) {
+          var tips = [];
+          if (r.suspect) {
+            tips.push('<span class="nc-suspect">⚠ 疑似就是名單上的「' +
+              escapeBattleHtml(r.suspect) + '」，只差裝飾字元</span>');
+          }
+          if ((r.dates || []).length) {
+            tips.push('出現在：' + r.dates.map(escapeBattleHtml).join('、'));
+          }
+          return '<div class="nc-row">' +
+              '<span class="nc-name">' + escapeBattleHtml(r.name) + '</span>' +
+              '<span>' + (r.job ? jobChip(r.job) : '<span class="nc-zero">—</span>') + '</span>' +
+              num(r.attendance) + num(r.slots) + num(r.commanders) + num(r.videos) + num(r.battles) +
+            '</div>' +
+            (tips.length ? '<div class="nc-dates">' + tips.join('　') + '</div>' : '');
+        }).join('');
+      };
+
+      var html = note;
+
+      // 有出勤／排表／指揮／影片紀錄的，或名字跟名單上某人只差裝飾字元的 —— 這些才要處理
+      html += '<div class="nc-sec">要處理（' + need.length + '）</div>';
+      html += need.length
+        ? head + renderGroup(need)
+        : '<div class="access-admin-empty">沒有需要處理的。</div>';
+
+      // 只有戰績紀錄的多半是打過我方的外援，不是自己人改名
+      html += '<div class="nc-sec">只有戰績紀錄（' + maybe.length + '）</div>' +
+        '<div class="nc-note" style="margin-top:0">' +
+        '這些人只出現在戰績、沒有出勤或排表紀錄，<b>多半是外援</b>，本來就不在名單上，通常可以不用管。' +
+        '如果其中有自己人，代表他改過名。' +
+        '</div>';
+      html += maybe.length ? head + renderGroup(maybe) : '';
+
+      box.innerHTML = html;
     }
 
     function openVideoView() {
