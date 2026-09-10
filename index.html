@@ -1947,6 +1947,24 @@
       background: rgba(255,202,40,0.08);
     }
 
+    /* 素問專頁 */
+    .bt-sw-row {
+      display: grid;
+      grid-template-columns: 42px 1.5fr .95fr .6fr .95fr 1fr .6fr .6fr .7fr .7fr;
+      gap: 6px; align-items: center; padding: 8px 10px;
+      border: 1px solid #2a0a12; border-radius: 6px; margin-bottom: 5px;
+      color: #FFFFEF; font-size: 12.5px; text-align: center;
+    }
+    .bt-sw-row > span:nth-child(2) { text-align: left; }
+    .bt-sw-head { border: 0; color: #d4af37; font-weight: 700; padding-bottom: 2px; margin-bottom: 2px; }
+    .bt-sw-pos { color: #7bd88f; }
+    .bt-sw-neg { color: #ef8f8f; }
+    .bt-sw-note { color: #FFFFEF; opacity: .55; font-size: 11.5px; margin: 6px 0 10px; }
+    .bt-sw-note b { color: #d4af37; }
+    @media (max-width: 700px) {
+      .bt-sw-row { grid-template-columns: 32px 1fr 1fr 1fr; font-size: 12px; }
+    }
+
     /* 象限圖 */
     .bt-q-wrap { display: flex; flex-wrap: wrap; gap: 10px; }
     .bt-q-chart {
@@ -7481,7 +7499,7 @@
         ['overview', '📊 總覽'], ['roster', '📋 出戰紀錄'], ['lineup', '⚔ 陣容對比'],
         ['stats', '📊 數據對比'], ['jobavg', '✦ 各職業平均'], ['radar', '📡 職業雷達'],
         ['heat', '🌡 貢獻熱力'], ['pick', '🔀 自選對比'],
-        ['suwen', '🎯 素問象限'], ['cquad', '📍 自選象限']
+        ['suwentab', '💚 素問'], ['suwen', '🎯 素問象限'], ['cquad', '📍 自選象限']
       ].map(function (t) {
         return '<button type="button" class="bt-tab' + (battleTab === t[0] ? ' on' : '') +
           '" onclick="setBattleTab(\'' + t[0] + '\')">' + t[1] + '</button>';
@@ -7491,7 +7509,7 @@
       var needFilter = ['roster', 'radar', 'heat', 'jobavg'].indexOf(battleTab) >= 0;
       // 象限圖要能切左右陣營，但不要搜尋框與職業藥丸：
       // 自選象限自己就有一排職業開關，再來一組只會互相打架。
-      var sideOnly = ['suwen', 'cquad'].indexOf(battleTab) >= 0;
+      var sideOnly = ['suwen', 'cquad', 'suwentab'].indexOf(battleTab) >= 0;
       var jobs = ['all'].concat(JOB_ORDER.filter(function (j) {
         return res.players.some(function (p) { return p.job === j; });
       }));
@@ -7521,6 +7539,7 @@
         battleTab === 'jobavg'   ? renderJobAvg(b) :
         battleTab === 'radar'    ? renderRadar(b) :
         battleTab === 'pick'     ? renderPick(b) :
+        battleTab === 'suwentab' ? renderSuwenTable(b) :
         battleTab === 'suwen'    ? renderSuwen(b) :
         battleTab === 'cquad'    ? renderCQuad(b) :
                                    renderHeatmap();
@@ -7652,6 +7671,94 @@
         '" data-qname="' + escapeBattleHtml(name) + '"' +
         (on ? ' style="border-color:' + color + ';color:' + color + '"' : '') + '>' +
         escapeBattleHtml(name.slice(0, 6)) + '</span>';
+    }
+
+    /* ── 💚 素問：素問專用的數據表 ──
+       欄位跟戰績視覺化工具那邊一致。兩個衍生欄位：
+         淨奶量 = 治療 － 承傷   （正的代表奶得比自己吃的傷多）
+         救援差 = 化羽 － 重傷   （正的代表救起來的比自己被打趴的多）
+       佔比是「這個人的治療 ÷ 這一邊全隊的治療」，不是素問之間的佔比 ——
+       想看的是他扛了全隊多少奶量，分母用素問總和會失真。 */
+    var suwenSort = { key: 'feather', dir: -1 };
+    function sortSuwenTable(k) {
+      suwenSort = { key: k, dir: suwenSort.key === k ? -suwenSort.dir : -1 };
+      renderBattleDetail();
+    }
+
+    var SUWEN_COLS = [
+      { k: 'heal',       zh: '治療',   w: true },
+      { k: 'healPct',    zh: '佔比',   pct: true },
+      { k: 'tank',       zh: '承傷',   w: true },
+      { k: 'netHeal',    zh: '淨奶量', w: true, signed: true },
+      { k: 'feather',    zh: '化羽' },
+      { k: 'heavy',      zh: '重傷' },
+      { k: 'rescueDiff', zh: '救援差', signed: true },
+      { k: 'assists',    zh: '助攻' }
+    ];
+
+    function renderSuwenTable(b) {
+      var side = battleSide;
+      var all = battleDetailCache.players.filter(function (p) { return p.side === side; });
+      var sw = all.filter(function (p) { return p.job === '素問'; });
+      var who = escapeBattleHtml(side === 'my' ? b.myGuild : b.oppGuild);
+
+      if (!sw.length) {
+        return '<div class="bt-sec-title">💚 素問（' + who + '）</div>' +
+          '<div class="access-admin-empty">' + who + ' 這一場沒有素問。</div>';
+      }
+
+      var healTotal = battleSum(all, 'heal');
+      var rows = sw.map(function (p) {
+        var d = derivedOf(p, all);
+        return {
+          p: p,
+          heal: p.heal, tank: p.tank, feather: p.feather, heavy: p.heavy, assists: p.assists,
+          healPct: healTotal ? p.heal / healTotal : 0,
+          netHeal: d.netHeal, rescueDiff: d.rescueDiff
+        };
+      });
+
+      var k = suwenSort.key, dir = suwenSort.dir;
+      rows.sort(function (x, y) {
+        var a = Number(x[k]) || 0, c = Number(y[k]) || 0;
+        if (a === c) return (Number(y.heal) || 0) - (Number(x.heal) || 0);
+        return a < c ? -dir : dir;
+      });
+
+      var head = '<div class="bt-sw-row bt-sw-head"><span>#</span><span>玩家</span>' +
+        SUWEN_COLS.map(function (f) {
+          return '<span class="bt-sortable' + (k === f.k ? ' on' : '') +
+            '" onclick="sortSuwenTable(&#39;' + f.k + '&#39;)">' + f.zh +
+            (k === f.k ? (dir < 0 ? ' ▼' : ' ▲') : ' ↕') + '</span>';
+        }).join('') + '</div>';
+
+      var cell = function (r, f) {
+        var v = r[f.k];
+        if (f.pct) return '<span>' + (v * 100).toFixed(1) + '%</span>';
+        if (f.signed) {
+          var num = Math.round(v);
+          if (!num) return '<span class="bt-dash">—</span>';
+          var txt = (num > 0 ? '+' : '') + num.toLocaleString('en-US') + (f.w ? '萬' : '');
+          return '<span class="' + (num > 0 ? 'bt-sw-pos' : 'bt-sw-neg') + '">' + txt + '</span>';
+        }
+        return '<span>' + battleFmt(v, f.k) + '</span>';
+      };
+
+      return '<div class="bt-sec-title">💚 素問（' + who + '・' + sw.length + ' 位）</div>' +
+        '<div class="bt-sw-note">' +
+          '<b>淨奶量</b> ＝ 治療 － 承傷　　<b>救援差</b> ＝ 化羽 － 重傷　' +
+          '（<span class="bt-sw-pos">綠色</span>為正、<span class="bt-sw-neg">紅色</span>為負）<br>' +
+          '<b>佔比</b> ＝ 這個人的治療佔' + who + '全隊治療的比例。點欄位名可以換排序，點整列看完整數據。' +
+        '</div>' +
+        head + rows.map(function (r, i) {
+          return '<div class="bt-sw-row bt-clickable" data-side="' + r.p.side +
+              '" data-name="' + escapeBattleHtml(r.p.name) + '">' +
+            '<span>' + rankBadge(i) + '</span>' +
+            '<span class="bt-name">' + escapeBattleHtml(r.p.name) +
+              (r.p.side === 'my' ? rosterTag(r.p.rosterCategory) : '') + '</span>' +
+            SUWEN_COLS.map(function (f) { return cell(r, f); }).join('') +
+          '</div>';
+        }).join('');
     }
 
     /* ── 🎯 素問象限：左 治療×承傷、右 化羽×重傷 ── */
