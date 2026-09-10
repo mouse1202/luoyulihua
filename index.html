@@ -3100,9 +3100,10 @@
     }
 
     /* ── 左邊那排管理導覽 ──
-       要同時滿足兩件事才顯示：身分是「管理」、而且現在不在整頁寬的那兩頁。
-       排表工具跟戰績會用到整個視窗寬度，左邊那一條會直接壓在表格上。 */
-    var SIDE_NAV_OFF_VIEWS = ['roster-view', 'battle-view'];
+       要同時滿足兩件事才顯示：身分是「管理」、而且現在不在下面這幾頁。
+       排表工具跟戰績會用到整個視窗寬度，左邊那一條會直接壓在表格上；
+       首頁是底圖的主視覺，不要有東西掛在旁邊。 */
+    var SIDE_NAV_OFF_VIEWS = ['main-view', 'roster-view', 'battle-view'];
     var sideNavViewId = 'main-view';
 
     function updateSideNav(viewId) {
