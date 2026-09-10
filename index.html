@@ -1912,7 +1912,9 @@
     .nc-zero { opacity: .3; }
     .nc-dates { color: #FFFFEF; opacity: .5; font-size: 11px; padding: 0 12px 10px; }
     .nc-suspect { color: #ffca28; }
-    .nc-row-act { grid-template-columns: 1.3fr .7fr .5fr .5fr .5fr .5fr .5fr 64px; }
+    .nc-row-act { grid-template-columns: 1.2fr .6fr .45fr .45fr .45fr .45fr .45fr 132px; }
+    .nc-acts { display: flex; gap: 4px; justify-content: flex-end; }
+    .nc-btn-left { border-color: #8a6a2a; color: #c8a45a; background: transparent; }
     .nc-btn {
       cursor: pointer; border: 1px solid #d4af37; border-radius: 4px;
       background: rgba(212,175,55,0.1); color: #d4af37;
@@ -1929,6 +1931,7 @@
     .nc-arrow { color: #d4af37; text-align: center; }
     @media (max-width: 700px) {
       .nc-row-act { grid-template-columns: 1fr 1fr 1fr; }
+      .nc-acts { grid-column: 1 / -1; justify-content: flex-start; }
       .nc-alias-row { grid-template-columns: 1fr 20px 1fr; }
     }
     .nc-sec {
@@ -2212,7 +2215,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias','markPlayerLeft','getPlayerLeftPreview'];
 
   // 排表匯出的職業底色。存的是不含 # 的六碼，argb() 會補上 FF。
   // 都是淺色系，配預設的黑字才看得清楚。
@@ -5327,6 +5330,57 @@
       });
     }
 
+    /* 「已退出」：這個人離開了，不是改名。
+       把戰績以外的紀錄清掉（出勤／排表／指揮／影片），清完他就只剩戰績，
+       自動落到「只有戰績紀錄」那一組，不會再每次檢查都跳出來。
+       戰績刻意留著 —— 那是打完的歷史，刪掉會讓那幾場的人數與統計對不起來。
+
+       這是不可逆的刪除，所以先把每一項的筆數抓回來給人看過再送出。 */
+    function startMarkPlayerLeft(name) {
+      google.script.run.withSuccessHandler(function (pv) {
+        pv = pv || {};
+        if (pv.inRoster) {
+          showAlertModal('「' + name + '」還在名單上。\n\n' +
+            '請先到「管理名單」把他移除，再回來標成已退出。');
+          return;
+        }
+        var items = [
+          ['出勤紀錄', pv.attendance],
+          ['排表格子', pv.slots],
+          ['指揮紀錄', pv.commanders],
+          ['影片', pv.videos]
+        ].filter(function (x) { return x[1] > 0; });
+
+        if (!items.length) {
+          showAlertModal('「' + name + '」已經沒有出勤／排表／指揮／影片紀錄了，不用再清。');
+          return;
+        }
+
+        showConfirmModal('標成已退出',
+          '確定「' + name + '」已經退出了嗎？\n\n' +
+          '會刪掉：\n' + items.map(function (x) { return '・' + x[0] + '　' + x[1] + ' 筆'; }).join('\n') +
+          '\n\n戰績 ' + (pv.battlesKept || 0) + ' 筆會保留（那是打完的歷史）。\n' +
+          '刪掉之後救不回來。',
+          function () {
+            google.script.run.withSuccessHandler(function (res) {
+              if (!res || !res.success) {
+                showAlertModal('失敗：' + ((res && res.message) || '未知錯誤'));
+                return;
+              }
+              showAlertModal('已把「' + name + '」標成退出\n\n' +
+                '清掉出勤 ' + res.attendance + ' 筆、排表 ' + res.slots +
+                ' 筆、指揮 ' + res.commanders + ' 筆、影片 ' + res.videos + ' 筆\n' +
+                '戰績 ' + res.battlesKept + ' 筆保留');
+              loadUnmatchedNames();
+            }).withFailureHandler(function (err) {
+              showAlertModal('失敗：' + err.message);
+            }).markPlayerLeft(name, currentAccessRoleName);
+          });
+      }).withFailureHandler(function (err) {
+        showAlertModal('讀取失敗：' + err.message);
+      }).getPlayerLeftPreview(name);
+    }
+
     function removePlayerAlias(alias) {
       showConfirmModal('移除曾用名', '移除之後，「' + alias +
         '」名下的戰績就不會再算到現在的名字上了。確定嗎？', function () {
@@ -5348,7 +5402,8 @@
         '名單上有 <b>' + (res.rosterCount || 0) + '</b> 個人。下面是<b>有紀錄、但名單上找不到</b>的名字。' +
         '<br>這些紀錄沒有消失，只是對不上人：出勤看不到他過去的請假、戰績會被當成兩個人、' +
         '排表已排好的格子會變空白。' +
-        '<br>這一頁只是檢查，<b>不會動到任何資料</b>。' +
+        '<br><b>改名</b>＝他換了名字，紀錄整批接到新名字上。' +
+        '<b>已退出</b>＝他離開了，清掉戰績以外的紀錄。' +
         '</div>';
 
       if (!rows.length) {
@@ -5378,8 +5433,14 @@
               '<span class="nc-name">' + escapeBattleHtml(r.name) + '</span>' +
               '<span>' + (r.job ? jobChip(r.job) : '<span class="nc-zero">—</span>') + '</span>' +
               num(r.attendance) + num(r.slots) + num(r.commanders) + num(r.videos) + num(r.battles) +
-              '<span><button type="button" class="nc-btn" data-rename="' + escapeBattleHtml(r.name) +
-                '" data-suggest="' + escapeBattleHtml(r.suspect || '') + '">改名</button></span>' +
+              '<span class="nc-acts">' +
+                '<button type="button" class="nc-btn" data-rename="' + escapeBattleHtml(r.name) +
+                  '" data-suggest="' + escapeBattleHtml(r.suspect || '') + '">改名</button>' +
+                (r.nonBattle > 0
+                  ? '<button type="button" class="nc-btn nc-btn-left" data-left="' +
+                      escapeBattleHtml(r.name) + '">已退出</button>'
+                  : '') +
+              '</span>' +
             '</div>' +
             (tips.length ? '<div class="nc-dates">' + tips.join('　') + '</div>' : '');
         }).join('');
@@ -6764,6 +6825,8 @@
       // 名字對照那一頁的按鈕
       var rn = e.target.closest('[data-rename]');
       if (rn) { startRenamePlayer(rn.dataset.rename, rn.dataset.suggest); return; }
+      var lf = e.target.closest('[data-left]');
+      if (lf) { startMarkPlayerLeft(lf.dataset.left); return; }
       var ua = e.target.closest('[data-unalias]');
       if (ua) { removePlayerAlias(ua.dataset.unalias); return; }
 

@@ -364,6 +364,69 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     return res;
   },
 
+  // 「已退出」：這個人離開了，不是改名。
+  //
+  // 把戰績以外的紀錄清掉 —— 出勤、排表格子、指揮、影片。清完之後他在
+  // 「名字對照」就只剩戰績，自動落到「只有戰績紀錄」那一組，不會再每次
+  // 檢查都跳出來要人判斷。
+  //
+  // 戰績刻意留著：那是已經打完的歷史，他當時確實在場上，刪掉會讓那幾場的
+  // 人數與統計對不起來。
+  //
+  // 這是不可逆的刪除，所以回傳每一項刪了幾筆，前端要先把數字給人看過再送出。
+  markPlayerLeft: async (nameIn: string, actorName?: string) => {
+    const name = normName(nameIn);
+    if (!name) return { success: false, message: "缺少名字" };
+    if (name === OWNER_NAME) return { success: false, message: "不能把擁有者標成已退出" };
+
+    // 還在名單上的人不該走這條路：先從名單移除，才算真的退出
+    const { data: still } = await db.from("roster_members").select("name").eq("name", name).maybeSingle();
+    if (still) {
+      return { success: false, message: "「" + name + "」還在名單上。請先在「管理名單」把他移除，再標成已退出。" };
+    }
+
+    const a = await db.from("attendance_records").delete().eq("name", name).select("id");
+    const r = await db.from("roster_slots").delete().eq("name", name).select("id");
+    const c = await db.from("roster_commanders").delete().eq("name", name).select("id");
+    const v = await db.from("video_uploads").delete().eq("name", name).select("id");
+
+    const na = a.data?.length ?? 0, nr = r.data?.length ?? 0;
+    const nc = c.data?.length ?? 0, nv = v.data?.length ?? 0;
+    const { count: battles } = await db.from("battle_players")
+      .select("id", { count: "exact", head: true }).eq("name", name).eq("side", "my");
+
+    await appendActivityLog(actorName || "", actorName || "",
+      `${actorName || "有人"} 把「${name}」標成已退出（清掉出勤 ${na} 筆、排表 ${nr} 筆、` +
+      `指揮 ${nc} 筆、影片 ${nv} 筆；戰績 ${battles ?? 0} 筆保留）`);
+
+    return {
+      success: true,
+      attendance: na, slots: nr, commanders: nc, videos: nv,
+      battlesKept: battles ?? 0,
+    };
+  },
+
+  // 「已退出」之前先問清楚要刪掉哪些東西，數字給人看過再動手
+  getPlayerLeftPreview: async (nameIn: string) => {
+    const name = normName(nameIn);
+    if (!name) return { name: "", attendance: 0, slots: 0, commanders: 0, videos: 0, battlesKept: 0 };
+    const one = async (table: string, extra?: (q: any) => any) => {
+      let q = db.from(table).select("id", { count: "exact", head: true }).eq("name", name);
+      if (extra) q = extra(q);
+      const { count } = await q;
+      return count ?? 0;
+    };
+    return {
+      name,
+      inRoster: !!(await db.from("roster_members").select("name").eq("name", name).maybeSingle()).data,
+      attendance: await one("attendance_records"),
+      slots: await one("roster_slots"),
+      commanders: await one("roster_commanders"),
+      videos: await one("video_uploads"),
+      battlesKept: await one("battle_players", (q) => q.eq("side", "my")),
+    };
+  },
+
   // 目前登記的所有曾用名
   getPlayerAliases: async () => {
     const { data } = await db.from("player_aliases")
