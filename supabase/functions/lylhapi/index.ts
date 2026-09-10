@@ -789,17 +789,25 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const now = new Date().toISOString();
     const vis = record.visibility === "public" ? "public" : "private";
     const prev1 = ex?.url1 ?? "", prev2 = ex?.url2 ?? "";
+
+    // 空白的欄位是「這一場不動」，不是「把這一場清掉」。
+    // 上傳表單每次打開都是空的（重新整理、登出再登入都一樣），照字面寫進去的話，
+    // 只補傳第二場就會把已經交的第一場洗掉，而且不會有任何提示。
+    // 要清掉某一場請按那一場的「刪除此影片」，那條路徑才是真的刪。
+    const n1 = u1 || prev1;
+    const n2 = u2 || prev2;
+
     let t1 = ex?.uploaded_at1 ?? null, t2 = ex?.uploaded_at2 ?? null;
-    if (u1) { if (prev1 !== u1 || !t1) t1 = now; } else { t1 = null; }
-    if (u2) { if (prev2 !== u2 || !t2) t2 = now; } else { t2 = null; }
+    if (n1) { if (prev1 !== n1 || !t1) t1 = now; } else { t1 = null; }
+    if (n2) { if (prev2 !== n2 || !t2) t2 = now; } else { t2 = null; }
     await chk(db.from("video_uploads").upsert(
-      { date_label: date, name, job, url1: u1, url2: u2, uploaded_at1: t1, uploaded_at2: t2, visibility: vis, updated_at: now },
+      { date_label: date, name, job, url1: n1, url2: n2, uploaded_at1: t1, uploaded_at2: t2, visibility: vis, updated_at: now },
       { onConflict: "date_label,name" },
     ).select("id"));
     const actorLabel = record.actorRoleName || record.actorEmail || "有人";
     const parts: string[] = [];
-    if (prev1 !== u1) parts.push(u1 ? "第一場" : "清除第一場");
-    if (prev2 !== u2) parts.push(u2 ? "第二場" : "清除第二場");
+    if (prev1 !== n1) parts.push(n1 ? "第一場" : "清除第一場");
+    if (prev2 !== n2) parts.push(n2 ? "第二場" : "清除第二場");
     if (parts.length) {
       await appendVideoLog(record.actorEmail, record.actorRoleName,
         `${actorLabel} 上傳了「${name}」（${date}）的${parts.join("、")}影片`);

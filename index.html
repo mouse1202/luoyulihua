@@ -2236,6 +2236,14 @@
     .vr-vis-tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; margin-left: 4px; vertical-align: middle; }
     .vr-vis-public { background: #123a1a; border: 1px solid #4caf50; color: #8bd17c; }
     .vr-vis-private { background: #2a2340; border: 1px solid #7a6ab0; color: #c9bdf0; }
+    .vr-status-note {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #FFFFEF;
+      opacity: 0.6;
+    }
+
     .vr-status-line { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
     .vr-del-btn { background: #2a0a0a; border: 1px solid #FF0000; color: #ff8a80; border-radius: 6px; padding: 3px 12px; font-size: 12px; font-family: inherit; cursor: pointer; letter-spacing: 1px; }
     .vr-del-btn:hover { background: #4a0f0f; color: #ffb3ac; }
@@ -5727,9 +5735,17 @@
       names.forEach(function (n) { html += '<option value="' + n.replace(/"/g, '&quot;') + '">' + n + '</option>'; });
       nameSel.innerHTML = html; nameSel.disabled = false;
     }
+    // 選好角色就直接查一次。
+    // 以前要自己按「查詢是否已繳交」才看得到狀態，表單重開又是空的，
+    // 所以登出再登入回來會以為影片不見了，然後整份重傳一次。
     function onVrNameChange() {
       var n = document.getElementById('vr-name').value;
-      if (n) document.getElementById('vr-status').textContent = '已選擇「' + n + '」，可按「查詢是否已繳交」。';
+      if (!n) return;
+      if (!document.getElementById('vr-session').value) {
+        document.getElementById('vr-status').textContent = '已選擇「' + n + '」，請先選擇場次。';
+        return;
+      }
+      queryVideoStatus();
     }
 
     function submitVideoReport() {
@@ -5785,6 +5801,12 @@
       var h = '「' + name + '」（' + session + '）' + tag;
       h += vrStatusLine('第一場', 1, s1, isPublic, url1);
       h += vrStatusLine('第二場', 2, s2, isPublic, url2);
+      // 私人影片的網址不會回傳到這裡（誰都能在上面選別人的名字），
+      // 所以「已繳」而看不到網址是正常的，不是資料掉了。
+      if (s1 || s2) {
+        h += '<div class="vr-status-note">影片已經存在系統裡了，這裡不顯示私人網址。' +
+             '重新上傳只會覆蓋你這次填的那一場，沒填的那一場不會被動到。</div>';
+      }
       document.getElementById('vr-status').innerHTML = h;
     }
     function vrStatusLine(label, which, submitted, isPublic, url) {
