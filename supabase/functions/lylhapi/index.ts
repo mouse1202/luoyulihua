@@ -153,6 +153,103 @@ async function getAliasMap(): Promise<Record<string, string>> {
 }
 const canon = (m: Record<string, string>, name: string) => m[name] ?? name;
 
+/* ── 通行證 ──────────────────────────────────────────────
+   密碼只存在資料庫（app_secrets，RLS 開著沒有 policy，只有這支函式讀得到）。
+   前端把使用者打的字送上來問「對不對」，對了就發一張有期限、有簽章的通行證，
+   之後的管理操作都要帶著它。
+
+   以前密碼是寫在 index.html 的字串常數，每個開過網頁的人都拿得到 ——
+   檢視原始碼、存檔、curl 都看得到，封 F12 一點用都沒有。
+   ──────────────────────────────────────────────────────── */
+
+const te = new TextEncoder();
+
+async function sha256Hex(str: string): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", te.encode(str));
+  return Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacHex(keyStr: string, msg: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw", te.encode(keyStr), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, te.encode(msg));
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function b64urlEncode(str: string): string {
+  let bin = "";
+  te.encode(str).forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlDecode(str: string): string {
+  const b = str.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+// 密碼可能被換掉（set_app_password），所以快取只留一分鐘
+let secretCache: { at: number; map: Record<string, string> } | null = null;
+async function secrets(): Promise<Record<string, string>> {
+  if (secretCache && Date.now() - secretCache.at < 60_000) return secretCache.map;
+  const { data } = await db.from("app_secrets").select("key,value");
+  const map: Record<string, string> = {};
+  (data ?? []).forEach((r) => { map[r.key] = r.value; });
+  secretCache = { at: Date.now(), map };
+  return map;
+}
+
+// 免密期沿用原本的：管理 30 分鐘、匯出 10 分鐘
+const TOKEN_MINUTES: Record<string, number> = { admin: 30, export: 10 };
+
+async function issueToken(lvl: string, name: string): Promise<string> {
+  const sec = await secrets();
+  const body = b64urlEncode(JSON.stringify({
+    lvl, name: name || "", exp: Date.now() + (TOKEN_MINUTES[lvl] ?? 10) * 60_000,
+  }));
+  return body + "." + await hmacHex(sec.token_secret ?? "", body);
+}
+
+async function verifyToken(tok: string): Promise<{ lvl: string; name: string } | null> {
+  if (!tok || typeof tok !== "string") return null;
+  const dot = tok.lastIndexOf(".");
+  if (dot <= 0) return null;
+  const body = tok.slice(0, dot), sig = tok.slice(dot + 1);
+  const sec = await secrets();
+  // 簽章不對就代表這張是自己捏的
+  if (await hmacHex(sec.token_secret ?? "", body) !== sig) return null;
+  try {
+    const p = JSON.parse(b64urlDecode(body));
+    if (!p || typeof p.exp !== "number" || p.exp < Date.now()) return null;
+    return { lvl: String(p.lvl || ""), name: String(p.name || "") };
+  } catch {
+    return null;
+  }
+}
+
+/* 哪些 API 需要通行證。admin 的通行證同時滿足 export。
+   沒列在這裡的就是一般幫眾日常要用的（登記出勤、看戰績、上傳自己的影片…），
+   維持開放，不然一般人會整個不能用。 */
+const NEED_LEVEL: Record<string, "admin" | "export"> = {
+  // 名單覆寫是「先刪光再寫入」，一次呼叫就能把整份名單清掉，最危險
+  saveMemberList: "admin", saveGuestList: "admin", saveTrialList: "admin", saveClubList: "admin",
+  saveRoster: "admin",
+  deleteAllRecordsForDate: "admin", renameDateLabel: "admin",
+  saveAttendanceDeadlineTime: "admin", clearAttendanceDeadlineTime: "admin",
+  setAttendanceTempUnlock: "admin",
+  addAccessMember: "admin", getAllAccessRequests: "admin", setAccessRequestStatus: "admin",
+  setAccessRequestCategory: "admin", deleteAccessRequest: "admin", purgeRejected: "admin",
+  getActivityLog: "admin",
+  saveBattle: "admin", deleteBattle: "admin", updateBattle: "admin",
+  renamePlayer: "admin", markPlayerLeft: "admin", getPlayerLeftPreview: "admin",
+  deletePlayerAlias: "admin", getUnmatchedNames: "admin", getPlayerAliases: "admin",
+  // 文書也能做的
+  exportAttendanceAll: "export", saveAnnouncement: "export",
+  getVideoRoster: "export", getVideoActivityLog: "export",
+};
+
 function parseMonthFromLabel(label: string): number | null {
   const m = String(label ?? "").match(/^(\d{2})(\d{2})/);
   if (!m) return null;
@@ -1092,18 +1189,88 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   },
 };
 
+// 用來限制登入頻率的來源識別。拿不到 IP 就退回一個共用桶子 ——
+// 寧可全部人共用一個上限，也不要完全沒有限制。
+function rateBucket(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for") || "";
+  const ip = xff.split(",")[0].trim() || req.headers.get("cf-connecting-ip") || "";
+  return ip || "unknown";
+}
+
+// 輸入密碼換通行證。四位數密碼只有一萬種組合，所以一定要限制頻率，
+// 不然直接對這支硬試幾分鐘就會被試出來。
+async function doUnlock(req: Request, levelIn: unknown, passwordIn: unknown, nameIn: unknown) {
+  const level = String(levelIn ?? "").trim();
+  const password = String(passwordIn ?? "");
+  const name = normName(nameIn);
+  if (level !== "admin" && level !== "export") {
+    return { ok: false, error: "BAD_LEVEL", message: "解鎖層級不正確" };
+  }
+
+  const bucket = rateBucket(req);
+  const { data: rate } = await db.rpc("check_login_rate", { p_bucket: bucket });
+  if (rate && rate.allowed === false) {
+    const secs = Number(rate.retryAfterSec ?? 0);
+    return {
+      ok: false, error: "RATE_LIMITED",
+      message: "密碼錯太多次了，請 " + Math.ceil(secs / 60) + " 分鐘後再試",
+    };
+  }
+
+  const sec = await secrets();
+  const want = level === "admin" ? sec.pw_admin : sec.pw_export;
+  const got = await sha256Hex((sec.pw_salt ?? "") + password);
+
+  // 管理密碼同時能解匯出：跟原本前端的行為一致
+  const adminOk = sec.pw_admin ? (await sha256Hex((sec.pw_salt ?? "") + password)) === sec.pw_admin : false;
+  const pass = got === want || (level === "export" && adminOk);
+
+  if (!pass) {
+    await db.rpc("note_login_fail", { p_bucket: bucket });
+    return { ok: false, error: "BAD_PASSWORD", message: "密碼不正確" };
+  }
+
+  await db.rpc("clear_login_fails", { p_bucket: bucket });
+  const lvl = adminOk ? "admin" : level;
+  return { ok: true, result: { token: await issueToken(lvl, name), level: lvl } };
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
   if (req.method !== "POST") return json({ ok: false, error: "只接受 POST" }, 405);
 
-  let payload: { fn?: string; args?: any[] };
+  let payload: { fn?: string; args?: any[]; token?: string };
   try { payload = await req.json(); } catch { return json({ ok: false, error: "格式錯誤" }, 400); }
   const fn = payload.fn ?? "";
   const args = Array.isArray(payload.args) ? payload.args : [];
+
+  if (fn === "unlock") {
+    try {
+      const r = await doUnlock(req, args[0], args[1], args[2]);
+      return json(r, r.ok ? 200 : 200);   // 密碼錯不是伺服器錯，用 200 帶訊息就好
+    } catch (e) {
+      return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  }
+
   const handler = handlers[fn];
   if (!handler) return json({ ok: false, error: `未知的函式：${fn}` }, 404);
+
+  // 需要權限的 API 一律在這裡擋掉。前端的身分組判斷只是畫面，
+  // 真正的關卡在這裡 —— 直接打 API 也過不去。
+  const need = NEED_LEVEL[fn];
+  if (need) {
+    const t = await verifyToken(payload.token ?? "");
+    if (!t) {
+      return json({ ok: false, error: "NEED_UNLOCK", message: "請重新輸入密碼" }, 401);
+    }
+    if (need === "admin" && t.lvl !== "admin") {
+      return json({ ok: false, error: "NEED_ADMIN", message: "這個功能只有管理能用" }, 403);
+    }
+  }
+
   try {
     const result = await handler(...args);
     return json({ ok: true, result });

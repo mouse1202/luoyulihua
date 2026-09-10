@@ -2226,9 +2226,37 @@
   function solid(bg){ return { fill:{ patternType:'solid', fgColor:{ rgb:argb(bg) } } }; }
   function banner(bg,fg){ return { fill:{ patternType:'solid', fgColor:{ rgb:argb(bg) } }, font:{ color:{ rgb:argb(fg) }, bold:true } }; }
 
-  function callServer(fn, args) {
-    return fetch(API, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ fn:fn, args:args }) }).then(function (r) { return r.json(); });
+  // 通行證：輸入管理／匯出密碼之後由後端發的，有簽章也有期限。
+  // 密碼本身不會出現在這個檔案裡，也不會存進瀏覽器 —— 只有這張證。
+  var TOKEN_KEY = 'lylh_unlock_token';
+  function getUnlockToken() {
+    try { return window.localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
   }
+  function setUnlockToken(t) {
+    try {
+      if (t) window.localStorage.setItem(TOKEN_KEY, t);
+      else window.localStorage.removeItem(TOKEN_KEY);
+    } catch (e) { /* 無痕模式忽略 */ }
+  }
+  window.__lylhSetToken = setUnlockToken;
+  window.__lylhGetToken = getUnlockToken;
+
+  function callServer(fn, args) {
+    return fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fn: fn, args: args, token: getUnlockToken() })
+    }).then(function (r) { return r.json(); });
+  }
+
+  // 輸入密碼換通行證。密碼送到後端比對，前端從頭到尾看不到正確答案。
+  window.__lylhUnlock = function (level, password, name) {
+    return fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fn: 'unlock', args: [level, password, name] })
+    }).then(function (r) { return r.json(); });
+  };
 
   function buildRosterBlobUrl(payload) {
     var sessions = (payload && payload.sessions) || [];
@@ -2313,8 +2341,13 @@
             return runner;
           }
           callServer(fn, args).then(function (j) {
-            if (j && j.ok) { if (onOk) onOk(j.result, userObj); }
-            else if (onErr) { onErr(new Error((j && j.error) || 'API error'), userObj); }
+            if (j && j.ok) { if (onOk) onOk(j.result, userObj); return; }
+            // 通行證過期或層級不夠：清掉手上這張，下次會重新問密碼
+            if (j && (j.error === 'NEED_UNLOCK' || j.error === 'NEED_ADMIN')) {
+              setUnlockToken('');
+              if (window.__lylhOnAuthLost) window.__lylhOnAuthLost(j.message || '');
+            }
+            if (onErr) onErr(new Error((j && (j.message || j.error)) || 'API error'), userObj);
           }).catch(function (e) { if (onErr) onErr(e, userObj); });
         } catch (e) { if (onErr) onErr(e, userObj); }
         return runner;
@@ -2742,7 +2775,7 @@
           <button type="button" class="roster-back-btn" onclick="closeAccessAdminView()">返回出勤系統</button>
         </div>
         <div class="roster-body">
-          <p class="password-hint">這裡是完整的人員清冊：核准後對方才能使用網頁功能；已核准的人也能隨時點「剔除」立刻收回權限。「管理」才能輸入總管理密碼(1221)使用排表工具/名單管理/審核申請等所有功能；「文書」比幫眾多一項：可輸入匯出密碼(2024)匯出出勤紀錄；「幫眾」登入後只能開出勤系統改自己的出勤狀態。</p>
+          <p class="password-hint">這裡是完整的人員清冊：核准後對方才能使用網頁功能；已核准的人也能隨時點「剔除」立刻收回權限。「管理」才能輸入總管理密碼使用排表工具/名單管理/審核申請等所有功能；「文書」比幫眾多一項：可輸入匯出密碼匯出出勤紀錄；「幫眾」登入後只能開出勤系統改自己的出勤狀態。</p>
 
           <div class="access-admin-manual-add">
             <span class="access-admin-manual-title">手動新增成員（不用經過申請流程，直接核准）</span>
@@ -2950,11 +2983,20 @@
     ];
     var TEAM_ROW_GAP = 12; // px, 對應 .roster-team-row 的 gap
     var TEAM_SIZE = 6;
-    var EXPORT_PASSWORD = '2024';   // 只解鎖「出勤匯出」（文書可用）
-    var ADMIN_PASSWORD = '1221';    // 總管理密碼：解鎖所有功能
+    // 密碼不在這裡了。
+    //
+    // 以前這兩行是 EXPORT_PASSWORD / ADMIN_PASSWORD 的字串常數，也就是每個
+    // 開過網頁的人都拿得到 —— 檢視原始碼、存檔、curl 都看得到，封 F12 沒有用。
+    // 現在密碼只存在後端資料庫，前端把使用者打的字送上去問「對不對」，
+    // 對了才拿到一張有期限的通行證（見 __lylhUnlock）。
+    //
+    // 要換密碼：在 Supabase 執行
+    //   select public.set_app_password('admin', '新密碼');
+    //   select public.set_app_password('export', '新密碼');
+    // 不用改程式碼也不用重新部署。
 
     // 目前登入者的帳號類別：'管理' / '文書' / '幫眾' / null（尚未確認身分）。
-    // 「管理」可用所有後台功能（密碼 1221）；「文書」比幫眾多一項：可匯出出勤（密碼 2024）；
+    // 「管理」可用所有後台功能；「文書」比幫眾多一項：可匯出出勤；
     // 「幫眾」登入後只能開出勤系統改自己的出勤狀態。
     var currentAccessCategory = null;
     var currentAccessName = null;
@@ -3047,8 +3089,9 @@
     // 輸入一次正確密碼後，30 分鐘內再觸發任何密碼保護的動作都不用重新輸入。
     // 這個時間也存進 localStorage，重新整理頁面後（30 分鐘內）還是算已驗證過，
     // 不用重新輸入密碼——出勤系統的「解鎖」就是靠這個機制撐過重新整理。
-    var FULL_GRACE_MS = 30 * 60 * 1000;    // 1221 總管理：30 分鐘免密
-    var EXPORT_GRACE_MS = 10 * 60 * 1000;  // 2024 匯出：10 分鐘免密
+    // 免密期跟後端發的通行證效期一致（後端 TOKEN_MINUTES）
+    var FULL_GRACE_MS = 30 * 60 * 1000;    // 總管理：30 分鐘
+    var EXPORT_GRACE_MS = 10 * 60 * 1000;  // 匯出：10 分鐘
     var FULL_VERIFIED_KEY = 'lylh_password_verified_until';
     var EXPORT_VERIFIED_KEY = 'lylh_export_verified_until';
     var fullVerifiedUntil = 0;
@@ -3080,7 +3123,7 @@
         }
       }
 
-      // 免密期：總管理(1221)通過任何級別；匯出(2024)只通過 export 級別。
+      // 免密期：總管理通過任何級別；匯出只通過 export 級別。
       var nowTs = Date.now();
       if (nowTs < fullVerifiedUntil) { onSuccessFn(); return; }
       if (level === 'export' && nowTs < exportVerifiedUntil) { onSuccessFn(); return; }
@@ -3100,31 +3143,58 @@
       showView(passwordContext.cancelView, passwordContext.cancelWide);
     }
 
+    // 密碼送到後端比對，對了才拿到通行證。前端沒有正確答案可以比。
     function checkRosterPassword() {
       var input = document.getElementById('password-input');
       var val = input.value;
       var level = passwordContext.level || 'admin';
-      var ok = false;
-      if (val === ADMIN_PASSWORD) {
-        // 總管理密碼：解鎖所有功能 30 分鐘（任何級別都算通過）
-        fullVerifiedUntil = Date.now() + FULL_GRACE_MS;
-        try { window.localStorage.setItem(FULL_VERIFIED_KEY, String(fullVerifiedUntil)); } catch (e) { /* 忽略 */ }
-        ok = true;
-      } else if (val === EXPORT_PASSWORD && level === 'export') {
-        // 匯出密碼：只在 export 級別有效，只解鎖匯出 10 分鐘，不能用於其他後台
-        exportVerifiedUntil = Date.now() + EXPORT_GRACE_MS;
-        try { window.localStorage.setItem(EXPORT_VERIFIED_KEY, String(exportVerifiedUntil)); } catch (e) { /* 忽略 */ }
-        ok = true;
-      }
-      if (ok) {
-        document.getElementById('password-error').classList.add('hidden');
-        if (passwordContext.onSuccess) passwordContext.onSuccess();
-      } else {
-        document.getElementById('password-error').classList.remove('hidden');
+      var errBox = document.getElementById('password-error');
+
+      var fail = function (msg) {
+        errBox.textContent = msg || '密碼不正確';
+        errBox.classList.remove('hidden');
         input.value = '';
         input.focus();
-      }
+      };
+
+      if (!window.__lylhUnlock) { fail('本機預覽模式，無法驗證密碼'); return; }
+
+      errBox.classList.add('hidden');
+      input.disabled = true;
+
+      window.__lylhUnlock(level, val, currentAccessRoleName || '').then(function (j) {
+        input.disabled = false;
+        if (!j || !j.ok) {
+          fail((j && j.message) || '密碼不正確');
+          return;
+        }
+        window.__lylhSetToken(j.result.token);
+
+        // 免密期跟著後端發的層級走：管理 30 分鐘、匯出 10 分鐘
+        if (j.result.level === 'admin') {
+          fullVerifiedUntil = Date.now() + FULL_GRACE_MS;
+          try { window.localStorage.setItem(FULL_VERIFIED_KEY, String(fullVerifiedUntil)); } catch (e) { /* 忽略 */ }
+        } else {
+          exportVerifiedUntil = Date.now() + EXPORT_GRACE_MS;
+          try { window.localStorage.setItem(EXPORT_VERIFIED_KEY, String(exportVerifiedUntil)); } catch (e) { /* 忽略 */ }
+        }
+        if (passwordContext.onSuccess) passwordContext.onSuccess();
+      }).catch(function (e) {
+        input.disabled = false;
+        fail('連線失敗：' + e.message);
+      });
     }
+
+    // 通行證過期時後端會回 NEED_UNLOCK，這裡把前端的免密期一起歸零，
+    // 下次點管理功能才會重新跳密碼框，而不是以為還解著鎖卻一直失敗。
+    window.__lylhOnAuthLost = function () {
+      fullVerifiedUntil = 0;
+      exportVerifiedUntil = 0;
+      try {
+        window.localStorage.removeItem(FULL_VERIFIED_KEY);
+        window.localStorage.removeItem(EXPORT_VERIFIED_KEY);
+      } catch (e) { /* 忽略 */ }
+    };
 
     // 後端時間戳是 UTC（Supabase 預設時區），顯示時 +8 小時轉成台灣時間。
     // 支援 'YYYY-MM-DD HH:MM' 與 'YYYY-MM-DD HH:MM:SS' 兩種精度，維持原精度輸出。
@@ -4844,7 +4914,7 @@
 
     // 出勤調整截止時間：綁定「日期/場次標籤」本身，每個標籤各自獨立（不是綁真實日曆日期）。
     // 每個標籤存一個「完整截止時刻」(yyyy-MM-ddTHH:MM)；只有在「目前正在看這個標籤」且已過該時刻時才鎖，
-    // 其他標籤完全不受影響。輸入總管理密碼(1221)或按解鎖後可繼續編輯。
+    // 其他標籤完全不受影響。輸入總管理密碼或按解鎖後可繼續編輯。
     var attendanceDeadlines = {}; // 標籤 -> 完整截止時刻字串 'yyyy-MM-ddTHH:MM'（快取）
     var attendanceUnlocked = false; // 本機預覽（無後端）時的解鎖旗標，純前端、僅限本機測試用
     var attendanceTempUnlockUntil = {}; // 標籤 -> 臨時解鎖到期時間戳記（毫秒，後端共用）
@@ -8137,6 +8207,7 @@
           // 下一個用這台裝置的人一登入就直接是已解鎖狀態。
           window.localStorage.removeItem(FULL_VERIFIED_KEY);
           window.localStorage.removeItem(EXPORT_VERIFIED_KEY);
+          window.localStorage.removeItem('lylh_unlock_token');
         } catch (e) { /* 無痕模式等情況忽略 */ }
 
         currentAccessName = null;
