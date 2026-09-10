@@ -2893,11 +2893,11 @@
     <div class="view hidden" id="activity-log-view">
       <div class="roster-section">
         <div class="roster-header">
-          <span class="roster-title">操作記錄</span>
-          <button type="button" class="roster-back-btn" onclick="closeActivityLogView()">返回出勤系統</button>
+          <span class="roster-title" id="activity-log-title">操作記錄</span>
+          <button type="button" class="roster-back-btn" id="activity-log-back" onclick="closeActivityLogView()">返回出勤系統</button>
         </div>
         <div class="roster-body">
-          <p class="password-hint">記錄誰在什麼時候把誰的出勤狀態改成什麼（只算手動點選，系統自動補的預設值不算），只保留最近 500 筆，最新的排最上面。</p>
+          <p class="password-hint" id="activity-log-hint"></p>
           <div class="activity-log-list" id="activity-log-list"></div>
         </div>
       </div>
@@ -3136,8 +3136,13 @@
       return 'main-view';
     }
 
+    // 從左邊那排點進後台之前，先記下當時人在哪一頁。
+    // 操作記錄要靠它決定看哪一份記錄；密碼頁按取消也要回到這裡。
+    var adminNavFrom = 'attendance-view';
+
     function gotoAdminView(fn, wide) {
-      openPasswordGate(fn, currentViewId(), !!wide);
+      adminNavFrom = currentViewId();
+      openPasswordGate(fn, adminNavFrom, !!wide);
     }
 
     // 「X」原本叫「臨時請假」。資料庫存的就是這個字串，
@@ -6465,13 +6470,44 @@
     }
 
     /* ── 操作記錄（需管理員密碼）：後台記事本，誰把誰的出勤狀態改成什麼 ── */
+    /* 操作記錄分兩份，各看各的，不混在一起：
+         影片上傳／影片清冊 → video_activity_log（誰上傳、刪除了誰的影片）
+         其他後台頁面      → activity_log（出勤狀態、名單、場次、改名、戰績）
+       在哪一頁按左邊的「操作記錄」，看到的就是那一頁的記錄。 */
+    var activityLogCtx = { kind: 'main', back: 'attendance-view' };
+
+    var ACTIVITY_LOG_VIEWS = {
+      video: {
+        title: '操作記錄（影片）',
+        back: '返回影片上傳',
+        backView: 'video-view',
+        hint: '記錄誰在什麼時候上傳或刪除了誰的影片，只保留最近 500 筆，最新的排最上面。' +
+              '出勤與名單的記錄不在這裡，要看請從出勤系統那邊開。',
+      },
+      main: {
+        title: '操作記錄（出勤・名單）',
+        back: '返回出勤系統',
+        backView: 'attendance-view',
+        hint: '記錄出勤狀態的手動更動（系統自動補的預設值不算），以及名單、場次改名、' +
+              '玩家改名／已退出、戰績修改。只保留最近 500 筆，最新的排最上面。' +
+              '影片的上傳記錄不在這裡，要看請從影片上傳那邊開。',
+      },
+    };
+
     function openActivityLogView() {
+      var from = adminNavFrom;
+      var kind = (from === 'video-view' || from === 'video-roster-view') ? 'video' : 'main';
+      var cfg = ACTIVITY_LOG_VIEWS[kind];
+      activityLogCtx = { kind: kind, back: cfg.backView };
+      document.getElementById('activity-log-title').textContent = cfg.title;
+      document.getElementById('activity-log-back').textContent = cfg.back;
+      document.getElementById('activity-log-hint').textContent = cfg.hint;
       showView('activity-log-view');
       loadActivityLog();
     }
 
     function closeActivityLogView() {
-      showView('attendance-view');
+      showView(activityLogCtx.back);
     }
 
     function loadActivityLog() {
@@ -6491,10 +6527,13 @@
       }
 
       if (window.google && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(render).withFailureHandler(function (err) {
+        listEl.innerHTML = '<div class="activity-log-empty">讀取中…</div>';
+        var runner = google.script.run.withSuccessHandler(render).withFailureHandler(function (err) {
           showAlertModal('讀取操作記錄失敗：' + err.message);
           render([]);
-        }).getActivityLog();
+        });
+        if (activityLogCtx.kind === 'video') runner.getVideoActivityLog();
+        else runner.getActivityLog();
       } else {
         render([]);
       }
