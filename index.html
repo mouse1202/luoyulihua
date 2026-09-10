@@ -281,6 +281,61 @@
       display: none !important;
     }
 
+    /* ── 管理專用的側邊導覽 ──────────────────────────────
+       這幾頁本來就只有「管理」看得到，擠在出勤系統的標題列裡會把那一排撐得很長，
+       所以改成固定貼在視窗最左邊、由上往下排的純文字，沒有框、白字。
+       排表工具與戰績是整頁寬的版面，這條會壓到內容，那兩頁不顯示（見 updateSideNav）。 */
+    .side-nav {
+      position: fixed;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 15px;
+    }
+
+    .side-nav-link {
+      background: none;
+      border: 0;
+      padding: 0;
+      font-family: inherit;
+      font-size: 15px;
+      letter-spacing: 2px;
+      color: #FFFFFF;
+      cursor: pointer;
+      /* 底圖是照片，沒有這層陰影在亮的地方會看不見白字 */
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+      opacity: 0.82;
+      transition: opacity 0.15s, text-shadow 0.15s;
+      white-space: nowrap;
+    }
+
+    .side-nav-link:hover {
+      opacity: 1;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
+    }
+
+    /* 窄畫面左邊沒有空位（面板本身就佔滿寬度），改成貼在最上面的一橫排。
+       寧可讓它橫向捲動也不換行，這樣才好抓 body 要空出多少高度。 */
+    @media (max-width: 900px) {
+      .side-nav {
+        top: 0; left: 0; right: 0;
+        transform: none;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        justify-content: center;
+        gap: 16px;
+        padding: 8px 12px;
+        background: rgba(0, 0, 0, 0.72);
+      }
+      .side-nav-link { font-size: 13px; letter-spacing: 1px; }
+      body.has-side-nav { padding-top: 38px; }
+    }
+
     /* 切換畫面時的淡出／淡入轉場：先把目前畫面淡出，換完內容後再淡入 */
     .view.fade-out {
       opacity: 0;
@@ -2380,6 +2435,16 @@
 </script>
 
   <canvas id="fx-snow"></canvas>
+
+  <!-- 管理專用導覽（顯示與否由 updateSideNav 控制，不用 .admin-only-btn，
+       因為它還要跟著目前在哪一頁決定要不要出現） -->
+  <div class="side-nav hidden" id="side-nav">
+    <button type="button" class="side-nav-link" onclick="gotoAdminView(openRosterView, true)">排表工具</button>
+    <button type="button" class="side-nav-link" onclick="gotoAdminView(openMemberView, false)">管理名單</button>
+    <button type="button" class="side-nav-link" onclick="gotoAdminView(openAccessAdminView, false)">審核申請</button>
+    <button type="button" class="side-nav-link" onclick="gotoAdminView(openActivityLogView, false)">操作記錄</button>
+    <button type="button" class="side-nav-link" onclick="gotoAdminView(openNameCheckView, false)">名字對照</button>
+  </div>
   <div class="container">
 
     <div class="view" id="main-view">
@@ -2594,11 +2659,7 @@
         <div class="roster-header">
           <span class="roster-title">出勤系統</span>
           <div class="roster-header-actions">
-            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openRosterView, 'attendance-view', true)">排表工具</button>
-            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openMemberView, 'attendance-view', false)">管理名單</button>
-            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openAccessAdminView, 'attendance-view', false)">審核申請</button>
-            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openActivityLogView, 'attendance-view', false)">操作記錄</button>
-            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openNameCheckView, 'attendance-view', false)">名字對照</button>
+            <!-- 排表工具／管理名單／審核申請／操作記錄／名字對照 已經移到視窗左邊的 .side-nav -->
             <button type="button" class="roster-back-btn" onclick="closeAttendanceView()">回首頁</button>
           </div>
         </div>
@@ -3035,6 +3096,39 @@
       Array.prototype.slice.call(document.querySelectorAll('.export-allowed-btn, .clerk-admin-btn')).forEach(function (btn) {
         btn.classList.toggle('hidden', !canExport);
       });
+      updateSideNav();
+    }
+
+    /* ── 左邊那排管理導覽 ──
+       要同時滿足兩件事才顯示：身分是「管理」、而且現在不在整頁寬的那兩頁。
+       排表工具跟戰績會用到整個視窗寬度，左邊那一條會直接壓在表格上。 */
+    var SIDE_NAV_OFF_VIEWS = ['roster-view', 'battle-view'];
+    var sideNavViewId = 'main-view';
+
+    function updateSideNav(viewId) {
+      if (viewId) sideNavViewId = viewId;
+      var el = document.getElementById('side-nav');
+      if (!el) return;
+      var show = currentAccessCategory === '管理' &&
+                 SIDE_NAV_OFF_VIEWS.indexOf(sideNavViewId) < 0;
+      el.classList.toggle('hidden', !show);
+      // 窄畫面時它是貼在最上面的一橫排，要讓 body 空出那條的高度
+      document.body.classList.toggle('has-side-nav', show);
+    }
+
+    // 目前顯示中的是哪一頁。密碼頁按取消時要回到原本那一頁，
+    // 以前這幾顆按鈕只長在出勤系統裡所以寫死 'attendance-view'，
+    // 現在它在每一頁都看得到，就得問清楚是從哪裡按的。
+    function currentViewId() {
+      for (var i = 0; i < ALL_VIEW_IDS.length; i++) {
+        var v = document.getElementById(ALL_VIEW_IDS[i]);
+        if (v && !v.classList.contains('hidden')) return ALL_VIEW_IDS[i];
+      }
+      return 'main-view';
+    }
+
+    function gotoAdminView(fn, wide) {
+      openPasswordGate(fn, currentViewId(), !!wide);
     }
 
     // 「X」原本叫「臨時請假」。資料庫存的就是這個字串，
@@ -3082,6 +3176,8 @@
         document.querySelector('.container').classList.toggle('video-wide', id === 'video-view');
         // 出勤系統／排表工具開啟時，底圖霧化一下，避免顏色太鮮豔搶過面板內容
         document.body.classList.toggle('bg-frosted', id === 'roster-view' || id === 'attendance-view' || id === 'video-view' || id === 'video-roster-view');
+
+        updateSideNav(id);
 
         target.classList.remove('hidden');
         target.classList.add('fade-out'); // 一開始是透明的
