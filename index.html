@@ -552,6 +552,22 @@
       max-height: 45vh;
     }
 
+    /* 請假只是排表時的參考，人多的時候會把左邊整條撐得很長，
+       把它壓短、超過的自己捲。 */
+    .roster-substitutes-panel-short .roster-substitutes-list {
+      max-height: 20vh;
+    }
+
+    /* 同一格裡放第二份名單時，標題要跟上一份拉開，不然會黏在一起 */
+    .roster-substitutes-list + .roster-substitutes-title {
+      margin-top: 14px;
+    }
+
+    /* 一格裡放兩份名單，各自的高度上限要收斂一點，免得整格比中間的表格還長 */
+    .roster-substitutes-panel-split .roster-substitutes-list {
+      max-height: 34vh;
+    }
+
     .roster-substitute-item {
       display: flex;
       justify-content: space-between;
@@ -592,6 +608,8 @@
       }
 
       .roster-substitutes-panel-tall .roster-substitutes-list,
+      .roster-substitutes-panel-short .roster-substitutes-list,
+      .roster-substitutes-panel-split .roster-substitutes-list,
       .roster-substitutes-list {
         max-height: 240px;
       }
@@ -2628,7 +2646,7 @@
           </div>
           <div class="roster-content-row">
             <div class="roster-sidebar">
-              <div class="roster-substitutes-panel">
+              <div class="roster-substitutes-panel roster-substitutes-panel-short">
                 <div class="roster-substitutes-title">請假<span id="roster-leave-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-leave-list"></div>
               </div>
@@ -2641,15 +2659,17 @@
                 <div class="roster-substitutes-list" id="roster-trial-substitutes-list"></div>
                 <div class="roster-substitutes-title">俱樂部<span id="roster-club-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-club-substitutes-list"></div>
-                <div class="roster-substitutes-title">二職候補<span id="roster-second-substitutes-count"></span></div>
-                <div class="roster-substitutes-list" id="roster-second-substitutes-list"></div>
               </div>
             </div>
             <div class="roster-list" id="roster-list"></div>
             <div class="roster-sidebar">
-              <div class="roster-substitutes-panel">
+              <!-- 候補與二職候補放同一格：兩個都是「還沒排上的人」，
+                   分成左右兩邊看反而要來回找，右邊也會只剩一格空著。 -->
+              <div class="roster-substitutes-panel roster-substitutes-panel-tall roster-substitutes-panel-split">
                 <div class="roster-substitutes-title">候補<span id="roster-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-substitutes-list"></div>
+                <div class="roster-substitutes-title">二職候補<span id="roster-second-substitutes-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-second-substitutes-list"></div>
               </div>
             </div>
           </div>
