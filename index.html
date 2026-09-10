@@ -558,6 +558,14 @@
       max-height: 20vh;
     }
 
+    /* 括號裡的人數不用跟標題一樣大、一樣鬆，不然窗格只有 150px 寬，
+       像「二職候補（14）」就會被擠成兩行。 */
+    .roster-substitutes-title span {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
     /* 同一格裡放第二份名單時，標題要跟上一份拉開，不然會黏在一起 */
     .roster-substitutes-list + .roster-substitutes-title {
       margin-top: 14px;
