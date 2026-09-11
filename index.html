@@ -2744,7 +2744,9 @@
             <span class="attendance-col-job">職業
               <select id="attendance-job-filter" class="attendance-job-filter" onchange="applyAttendanceJobFilter()"></select>
             </span>
-            <span class="attendance-col-job">二職</span>
+            <span class="attendance-col-job">二職
+              <select id="attendance-job2-filter" class="attendance-job-filter" onchange="applyAttendanceJobFilter()"></select>
+            </span>
             <span class="attendance-col-status">是否出勤</span>
           </div>
           <div class="attendance-list" id="attendance-list"></div>
@@ -4471,6 +4473,7 @@
       row.className = 'attendance-row';
       row.dataset.name = name;
       row.dataset.job = job;
+      row.dataset.job2 = job2 || '';
 
       var nameSpan = document.createElement('span');
       nameSpan.className = 'attendance-name attendance-name-display';
@@ -5308,23 +5311,35 @@
       }
     }
 
-    // 職業篩選下拉：第一次填入「全部 + 各職業」選項（只填一次）
+    // 職業／二職篩選下拉：第一次填入「全部 + 各職業」選項（只填一次）。
+    // 兩個下拉各自獨立，選了其中一個不會去動另一個。
     function ensureJobFilterOptions() {
-      var sel = document.getElementById('attendance-job-filter');
-      if (!sel || sel.options.length > 0) return;
       var html = '<option value="">全部</option>';
       JOB_OPTIONS.forEach(function (job) { html += '<option value="' + job + '">' + job + '</option>'; });
-      sel.innerHTML = html;
+      ['attendance-job-filter', 'attendance-job2-filter'].forEach(function (id) {
+        var sel = document.getElementById(id);
+        if (sel && sel.options.length === 0) sel.innerHTML = html;
+      });
     }
 
-    // 依選到的職業篩選「主要成員」名單：選某職業只顯示該職業的人，選「全部」顯示所有人。
-    // 只影響主要成員區（#attendance-list），外援/試訓不受影響；統計數字仍以全部人計算。
+    // 依選到的職業／二職篩選「主要成員」名單。
+    //
+    // 兩個條件是各自成立的：只選職業就照本職篩、只選二職就照二職篩，
+    // 兩個都選就是「本職是 A、而且二職是 B」的人。選「全部」代表那一項不篩。
+    // 選其中一個下拉不會改到另一個下拉的值 —— 想換條件自己換就好。
+    //
+    // 只影響主要成員區（#attendance-list），外援/試訓/俱樂部不受影響；
+    // 上面的統計數字一樣是以全部人計算，不會因為篩選而變動。
     function applyAttendanceJobFilter() {
-      var sel = document.getElementById('attendance-job-filter');
-      var job = sel ? sel.value : '';
+      var sel1 = document.getElementById('attendance-job-filter');
+      var sel2 = document.getElementById('attendance-job2-filter');
+      var job = sel1 ? sel1.value : '';
+      var job2 = sel2 ? sel2.value : '';
       var rows = Array.prototype.slice.call(document.querySelectorAll('#attendance-list .attendance-row'));
       rows.forEach(function (row) {
-        row.style.display = (!job || row.dataset.job === job) ? '' : 'none';
+        var ok = (!job || row.dataset.job === job) &&
+                 (!job2 || row.dataset.job2 === job2);
+        row.style.display = ok ? '' : 'none';
       });
     }
 
