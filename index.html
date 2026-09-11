@@ -323,10 +323,10 @@
       text-shadow: 0 0 10px rgba(255, 170, 213, 0.6), 0 1px 6px rgba(0, 0, 0, 0.9);
     }
 
-    /* 會暈車的人把動畫關掉，顏色與亮度照樣有反應 */
+    /* 系統設定要求減少動態時，只把過場動畫拿掉，放大本身留著 ——
+       放大是這排字的功能（讓人知道現在指到哪一個），不是裝飾。 */
     @media (prefers-reduced-motion: reduce) {
-      .side-nav-link { transition: opacity 0.15s, text-shadow 0.15s; }
-      .side-nav-link:hover, .side-nav-link:focus-visible { transform: none; }
+      .side-nav-link { transition: none; }
     }
 
     /* 窄畫面左邊沒有空位（面板本身就佔滿寬度），改成貼在最上面的一橫排。
