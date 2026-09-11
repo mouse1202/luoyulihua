@@ -6069,6 +6069,7 @@
         if (members.length === 0) { listEl.innerHTML = ''; emptyEl.classList.remove('hidden'); return; }
         emptyEl.classList.add('hidden');
         var teamMap = buildTeamMap_(slots);
+        members = videoRosterPeople_(members, teamMap, records);
         var note = document.getElementById('vroster-team-note');
         if (note) {
           var placed = Object.keys(teamMap).length;
@@ -6078,9 +6079,39 @@
         }
         renderVideoRoster(members, records, teamMap);
       }
-      google.script.run.withSuccessHandler(function (m) { members = m || []; ready(); }).withFailureHandler(function () { members = []; ready(); }).getMemberList();
+      google.script.run.withSuccessHandler(function (m) { members = m || []; ready(); }).withFailureHandler(function () { members = []; ready(); }).getAttendanceCandidates();
       google.script.run.withSuccessHandler(function (r) { records = r || []; ready(); }).withFailureHandler(function () { records = []; ready(); }).getVideoRoster(date);
       google.script.run.withSuccessHandler(function (r) { slots = r || []; ready(); }).withFailureHandler(function () { slots = []; ready(); }).getRosterByDate(date, session);
+    }
+
+    /* 這一場要列誰：
+         主名單全部（沒排上的也要列，才看得出誰沒交）
+         ＋ 排表上有但不在主名單的（外援／試訓／俱樂部）
+         ＋ 有影片紀錄但兩邊都查不到的（例如已經離開名單的人）
+       後兩種標出類別，不然會以為主名單多了不認識的人。 */
+    function videoRosterPeople_(cands, teamMap, records) {
+      var out = [], seen = {};
+      var push = function (m) {
+        if (!m || !m.name || seen[m.name]) return;
+        seen[m.name] = true;
+        out.push(m);
+      };
+      (cands || []).forEach(function (m) { if (m.category === 'member') push(m); });
+      (cands || []).forEach(function (m) { if (teamMap[m.name]) push(m); });
+      (records || []).forEach(function (r) {
+        if (seen[r.name]) return;
+        var c = (cands || []).filter(function (m) { return m.name === r.name; })[0];
+        push(c || { name: r.name, job: r.job || '', job2: '', category: '' });
+      });
+      return out;
+    }
+
+    function videoCatTag_(cat) {
+      if (cat === 'guest') return '<span class="battle-tag">外援</span>';
+      if (cat === 'trial') return '<span class="battle-tag">試訓</span>';
+      if (cat === 'club') return '<span class="battle-tag">俱樂部</span>';
+      if (cat === 'member') return '';
+      return '<span class="battle-tag battle-tag-none">非名單</span>';
     }
 
     function renderVideoRoster(members, records, teamMap) {
@@ -6099,7 +6130,7 @@
         var second = slot && slot.isSecond && m.job2;
         var showJob = second ? m.job2 : (m.job || '');
         return '<div class="video-row" data-name="' + (m.name || '').replace(/"/g, '&quot;') + '" data-job="' + showJob.replace(/"/g, '&quot;') + '">' +
-          '<span class="video-col-name">' + m.name + '</span>' +
+          '<span class="video-col-name">' + m.name + videoCatTag_(m.category) + '</span>' +
           '<span class="video-col-job">' + showJob + (second ? '<span class="team-2nd">二職</span>' : '') + '</span>' +
           '<span class="vr-col-s">' + cell(rec.url1, rec.time1) + '</span>' +
           '<span class="vr-col-s">' + cell(rec.url2, rec.time2) + '</span>' +
