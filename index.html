@@ -2599,7 +2599,7 @@
           <div class="roster-header">
             <span class="roster-title">錄影回報</span>
             <div class="roster-header-actions">
-              <button type="button" class="roster-back-btn clerk-admin-btn hidden" onclick="openVideoRosterView()">影片清冊</button>
+              <button type="button" class="roster-back-btn clerk-admin-btn hidden" onclick="openPasswordGate(openVideoRosterView, 'video-view', false, 'export')">影片清冊</button>
               <button type="button" class="roster-back-btn" onclick="closeVideoView()">回首頁</button>
             </div>
           </div>
@@ -3356,6 +3356,19 @@
       var input = document.getElementById('password-input');
       input.value = '';
       setTimeout(function () { input.focus(); }, 0);
+    }
+
+    // 回傳 true = 現在就可以做；false = 已經跳去問密碼了，這次先停手
+    function needUnlockThen_(level, backView, retry) {
+      if (PASSWORD_GATE_DISABLED) return true;
+      var now = Date.now();
+      if (now < fullVerifiedUntil) return true;
+      if (level === 'export' && now < exportVerifiedUntil) return true;
+      openPasswordGate(function () {
+        showView(backView, !!VIEW_WIDE[backView]);
+        retry();
+      }, backView, !!VIEW_WIDE[backView], level);
+      return false;
     }
 
     function closePasswordView() {
@@ -6063,9 +6076,17 @@
       var emptyEl = document.getElementById('vroster-empty');
       if (!(window.google && google.script && google.script.run)) return;
       var session = vrosterSession_();
-      var members = null, records = null, slots = null;
+      var members = null, records = null, slots = null, failed = '';
       function ready() {
         if (members === null || records === null || slots === null) return;
+        if (failed) {
+          listEl.innerHTML = '<div class="access-admin-empty">讀取失敗：' + failed +
+            '<br>影片清冊需要匯出權限，請回上一頁重新進來輸入密碼。</div>';
+          emptyEl.classList.add('hidden');
+          var nt = document.getElementById('vroster-team-note');
+          if (nt) nt.textContent = '';
+          return;
+        }
         if (members.length === 0) { listEl.innerHTML = ''; emptyEl.classList.remove('hidden'); return; }
         emptyEl.classList.add('hidden');
         var teamMap = buildTeamMap_(slots);
@@ -6080,7 +6101,9 @@
         renderVideoRoster(members, records, teamMap);
       }
       google.script.run.withSuccessHandler(function (m) { members = m || []; ready(); }).withFailureHandler(function () { members = []; ready(); }).getAttendanceCandidates();
-      google.script.run.withSuccessHandler(function (r) { records = r || []; ready(); }).withFailureHandler(function () { records = []; ready(); }).getVideoRoster(date);
+      google.script.run.withSuccessHandler(function (r) { records = r || []; ready(); })
+        .withFailureHandler(function (e) { failed = (e && e.message) || '未知錯誤'; records = []; ready(); })
+        .getVideoRoster(date);
       google.script.run.withSuccessHandler(function (r) { slots = r || []; ready(); }).withFailureHandler(function () { slots = []; ready(); }).getRosterByDate(date, session);
     }
 
@@ -6162,7 +6185,10 @@
         el.innerHTML = logs.map(function (l) {
           return '<div class="activity-log-row"><div class="activity-log-time">' + toTaipeiTime(l.time) + '</div><div class="activity-log-desc">' + l.description + '</div></div>';
         }).join('');
-      }).withFailureHandler(function () {}).getVideoActivityLog();
+      }).withFailureHandler(function (e) {
+        el.innerHTML = '<div class="activity-log-empty">讀取失敗：' +
+          ((e && e.message) || '未知錯誤') + '</div>';
+      }).getVideoActivityLog();
     }
 
     function openAttendanceView() {
@@ -6208,6 +6234,7 @@
         showAlertModal('只有管理或文書才能編輯約戰公告');
         return;
       }
+      if (!needUnlockThen_('export', 'attendance-view', saveAnnouncementText)) return;
       var input = document.getElementById('announce-input');
       var text = input ? input.value : '';
       if (window.google && google.script && google.script.run) {
@@ -7034,6 +7061,7 @@
     }
 
     function submitBattleCard(id) {
+      if (!needUnlockThen_('admin', 'battle-view', function () { submitBattleCard(id); })) return;
       var c = battleCards.filter(function (x) { return x.id === id; })[0];
       if (!c) return;
       if (!/^\d{8}$/.test(c.date)) { showAlertModal('日期要是 8 碼，例如 20260906'); return; }
@@ -7185,6 +7213,9 @@
     /* ── 修改單場 ── */
 
     function openBattleEdit(id) {
+      // 在打開對話框之前就問密碼：對話框是蓋在最上層的，
+      // 等按了儲存才跳密碼頁的話兩層會疊在一起。
+      if (!needUnlockThen_('admin', 'battle-view', function () { openBattleEdit(id); })) return;
       var b = battleListCache.filter(function (x) { return x.id === id; })[0];
       if (!b) return;
       var old = document.getElementById('battle-edit-overlay');
@@ -7271,6 +7302,7 @@
     }
 
     function deleteBattleFromAdmin(id, label) {
+      if (!needUnlockThen_('admin', 'battle-view', function () { deleteBattleFromAdmin(id, label); })) return;
       showConfirmModal('確認刪除', '確定要刪除「' + label + '」這場戰績嗎？連同所有人的數據一起刪除，無法復原。', function () {
         battleApi('deleteBattle', id, currentAccessName || '')
           .then(function () { battleAggCache = null; loadBattleList(); })
