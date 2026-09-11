@@ -302,20 +302,31 @@
       border: 0;
       padding: 0;
       font-family: inherit;
-      font-size: 15px;
+      font-size: 19px;
       letter-spacing: 2px;
-      color: #FFFFFF;
+      color: #FFAAD5;
       cursor: pointer;
-      /* 底圖是照片，沒有這層陰影在亮的地方會看不見白字 */
+      /* 底圖是照片，沒有這層陰影在亮的地方會看不見 */
       text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
-      opacity: 0.82;
-      transition: opacity 0.15s, text-shadow 0.15s;
+      opacity: 0.85;
+      /* 放大要從左邊長出去，不然會往視窗外面跑 */
+      display: inline-block;
+      transform-origin: left center;
+      transition: opacity 0.15s, text-shadow 0.15s, transform 0.15s ease;
       white-space: nowrap;
     }
 
-    .side-nav-link:hover {
+    .side-nav-link:hover,
+    .side-nav-link:focus-visible {
       opacity: 1;
-      text-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
+      transform: scale(1.16);
+      text-shadow: 0 0 10px rgba(255, 170, 213, 0.6), 0 1px 6px rgba(0, 0, 0, 0.9);
+    }
+
+    /* 會暈車的人把動畫關掉，顏色與亮度照樣有反應 */
+    @media (prefers-reduced-motion: reduce) {
+      .side-nav-link { transition: opacity 0.15s, text-shadow 0.15s; }
+      .side-nav-link:hover, .side-nav-link:focus-visible { transform: none; }
     }
 
     /* 窄畫面左邊沒有空位（面板本身就佔滿寬度），改成貼在最上面的一橫排。
@@ -332,8 +343,13 @@
         padding: 8px 12px;
         background: rgba(0, 0, 0, 0.72);
       }
-      .side-nav-link { font-size: 13px; letter-spacing: 1px; }
-      body.has-side-nav { padding-top: 38px; }
+      .side-nav-link {
+        font-size: 15px;
+        letter-spacing: 1px;
+        /* 橫排的時候從中間放大，靠左放大會擠到隔壁 */
+        transform-origin: center;
+      }
+      body.has-side-nav { padding-top: 42px; }
     }
 
     /* 切換畫面時的淡出／淡入轉場：先把目前畫面淡出，換完內容後再淡入 */
@@ -2307,7 +2323,7 @@
     .attendance-layout-row { display: flex; gap: 16px; align-items: flex-start; width: 100%; }
     .attendance-layout-row > .roster-section { flex: 1; min-width: 0; }
     .announce-sidebar { flex: 0 0 340px; width: 340px; position: sticky; top: 12px; }
-    .announce-display { white-space: pre-wrap; word-break: break-word; color: #FFAAD5; font-size: 15px; line-height: 1.7; min-height: 48px; }
+    .announce-display { white-space: pre-wrap; word-break: break-word; color: #f5e8c0; font-size: 15px; line-height: 1.7; min-height: 48px; }
     .announce-display.announce-empty { color: #8a7440; font-style: italic; }
     .announce-edit { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid rgba(212, 168, 40, 0.3); padding-top: 12px; }
     .announce-input { width: 100%; min-height: 120px; background: #0A0A0A; border: 1px solid #6B1023; color: #FFFFEF; border-radius: 6px; padding: 8px 10px; font-size: 14px; font-family: inherit; resize: vertical; }
