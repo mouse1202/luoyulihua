@@ -2205,6 +2205,39 @@
       .roster-title { font-size: 18px; }
     }
 
+    .bt-team-note { font-size: 12px; color: #c0a860; align-self: center; }
+    /* .bt-prow 有 940px 的最小寬度，隊伍標頭也要一樣寬才會跟著捲 */
+    .bt-table > .bt-team { min-width: 940px; padding: 0 8px; }
+
+    /* ── 隊伍分組標頭（影片清冊、戰績出戰紀錄共用）── */
+    .team-head {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin: 14px 0 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(212, 168, 40, 0.35);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #d4af37;
+    }
+    .vr-team:first-child .team-head,
+    .bt-table > .bt-team:first-of-type .team-head { margin-top: 4px; }
+    .team-head-n { font-size: 12px; font-weight: 400; letter-spacing: 0; opacity: 0.7; }
+    .team-none .team-head { color: #c0a860; border-bottom-color: rgba(200, 165, 60, 0.25); }
+    .team-empty { display: none; }
+    /* 用二職上場的人要標出來，不然看名單會以為職業填錯 */
+    .team-2nd {
+      margin-left: 5px;
+      font-size: 11px;
+      letter-spacing: 0;
+      color: #c8a45a;
+      border: 1px solid #8a6a2a;
+      border-radius: 4px;
+      padding: 0 4px;
+    }
+
     /* 出勤系統「職業」欄的篩選下拉 */
     .attendance-job-filter {
       margin-left: 8px;
@@ -2626,6 +2659,12 @@
           <div class="attendance-date-row">
             <label for="vroster-date" class="attendance-date-label">日期：</label>
             <select id="vroster-date" class="attendance-date-input" onchange="onVideoRosterDateChange()"></select>
+            <label for="vroster-session" class="attendance-date-label">場次：</label>
+            <select id="vroster-session" class="attendance-date-input" onchange="onVideoRosterDateChange()">
+              <option value="1">第一場</option>
+              <option value="2">第二場</option>
+            </select>
+            <span class="attendance-summary" id="vroster-team-note"></span>
           </div>
           <div class="member-section-title">上傳清冊</div>
           <div class="video-header-row">
@@ -5309,6 +5348,57 @@
 
     // 依職業排序，同職業的人會排在一起（順序照 JOB_OPTIONS），同職業內再依姓名排序；
     // 職業不在清單裡（例如還沒選職業）的人排到最後面。
+    /* ── 排表 → 隊伍 ────────────────────────────────────
+       排表是 3 團 × 3～4 隊 × 6 格。影片清冊與戰績都拿這份資料分隊，
+       查不到的人統一落到「未在隊伍」排在最後面。 */
+    var TEAM_NONE = '未在隊伍';
+
+    // 「團＋隊」照排表本身的順序，不要照字面排序（一隊二隊三隊會變一三二）
+    function teamOrderList_() {
+      var out = [];
+      ROSTER_GROUPS.forEach(function (g) {
+        g.teams.forEach(function (t) { out.push(g.name + ' ' + t); });
+      });
+      return out;
+    }
+
+    // getRosterByDate 回來的格子 → 名字對應到哪一隊
+    function buildTeamMap_(rows) {
+      var map = {};
+      (rows || []).forEach(function (r) {
+        var nm = String(r.name || '').trim();
+        if (!nm || map[nm]) return;   // 同名被排兩格時以第一格為準
+        map[nm] = {
+          team: r.group + ' ' + r.team,
+          slot: Number(r.slot) || 0,
+          isSecond: !!r.isSecond
+        };
+      });
+      return map;
+    }
+
+    // 依隊伍分組，回傳 [{ team, people }]；未在隊伍固定排最後
+    function groupByTeam_(people, teamMap, nameOf) {
+      var buckets = {};
+      people.forEach(function (x) {
+        var t = (teamMap[nameOf(x)] || {}).team || TEAM_NONE;
+        (buckets[t] || (buckets[t] = [])).push(x);
+      });
+      var order = teamOrderList_(), out = [];
+      order.forEach(function (t) { if (buckets[t]) out.push({ team: t, people: buckets[t] }); });
+      // 排表設定改過的話可能出現不在清單上的隊名，不要整組吃掉
+      Object.keys(buckets).forEach(function (t) {
+        if (t !== TEAM_NONE && order.indexOf(t) === -1) out.push({ team: t, people: buckets[t] });
+      });
+      if (buckets[TEAM_NONE]) out.push({ team: TEAM_NONE, people: buckets[TEAM_NONE] });
+      return out;
+    }
+
+    function teamHeadHtml_(team, count) {
+      return '<div class="team-head">' + team +
+        '<span class="team-head-n">' + count + ' 人</span></div>';
+    }
+
     function compareByJob_(a, b) {
       var ia = JOB_OPTIONS.indexOf(a.job);
       var ib = JOB_OPTIONS.indexOf(b.job);
@@ -5939,6 +6029,11 @@
     function closeVideoRosterView() { showView('video-view'); }
     function onVideoRosterDateChange() { loadVideoRoster(document.getElementById('vroster-date').value); }
 
+    function vrosterSession_() {
+      var sel = document.getElementById('vroster-session');
+      return sel && sel.value === '2' ? '2' : '1';
+    }
+
     function ensureVideoRosterJobFilter() {
       var sel = document.getElementById('vroster-job-filter');
       if (!sel || sel.options.length > 0) return;
@@ -5946,43 +6041,82 @@
       JOB_OPTIONS.forEach(function (j) { html += '<option value="' + j + '">' + j + '</option>'; });
       sel.innerHTML = html;
     }
+    // 篩職業時，整隊都被篩掉的話連隊伍標頭一起收起來，
+    // 不然會留下一排「團一進攻 一隊 6 人」底下卻空無一人。
     function applyVideoRosterJobFilter() {
       var job = document.getElementById('vroster-job-filter').value;
       Array.prototype.slice.call(document.querySelectorAll('#vroster-list .video-row')).forEach(function (row) {
         row.style.display = (!job || row.dataset.job === job) ? '' : 'none';
       });
+      Array.prototype.slice.call(document.querySelectorAll('#vroster-list .vr-team')).forEach(function (g) {
+        var shown = Array.prototype.slice.call(g.querySelectorAll('.video-row'))
+          .filter(function (r) { return r.style.display !== 'none'; });
+        g.classList.toggle('team-empty', shown.length === 0);
+        var head = g.querySelector('.team-head-n');
+        if (head) head.textContent = shown.length + ' 人';
+      });
     }
 
+    // 名單、影片紀錄、那一場的排表三份一起抓，到齊了才畫
     function loadVideoRoster(date) {
       var listEl = document.getElementById('vroster-list');
       var emptyEl = document.getElementById('vroster-empty');
       if (!(window.google && google.script && google.script.run)) return;
-      var members = null, records = null;
+      var session = vrosterSession_();
+      var members = null, records = null, slots = null;
       function ready() {
-        if (members === null || records === null) return;
+        if (members === null || records === null || slots === null) return;
         if (members.length === 0) { listEl.innerHTML = ''; emptyEl.classList.remove('hidden'); return; }
         emptyEl.classList.add('hidden');
-        renderVideoRoster(members, records);
+        var teamMap = buildTeamMap_(slots);
+        var note = document.getElementById('vroster-team-note');
+        if (note) {
+          var placed = Object.keys(teamMap).length;
+          note.textContent = placed
+            ? '依「' + date + '」第' + (session === '2' ? '二' : '一') + '場的排表分隊（排上 ' + placed + ' 人）'
+            : '這一場還沒排表，全部列在「' + TEAM_NONE + '」';
+        }
+        renderVideoRoster(members, records, teamMap);
       }
       google.script.run.withSuccessHandler(function (m) { members = m || []; ready(); }).withFailureHandler(function () { members = []; ready(); }).getMemberList();
       google.script.run.withSuccessHandler(function (r) { records = r || []; ready(); }).withFailureHandler(function () { records = []; ready(); }).getVideoRoster(date);
+      google.script.run.withSuccessHandler(function (r) { slots = r || []; ready(); }).withFailureHandler(function () { slots = []; ready(); }).getRosterByDate(date, session);
     }
 
-    function renderVideoRoster(members, records) {
+    function renderVideoRoster(members, records, teamMap) {
+      teamMap = teamMap || {};
       var byName = {}; records.forEach(function (r) { byName[r.name] = r; });
-      var sorted = members.slice().sort(compareByJob_);
       var listEl = document.getElementById('vroster-list');
       function cell(url, time) {
         if (url) return '<a class="vr-link" href="' + url.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener">看影片</a> <span class="vr-yes">✔</span><br><span style="font-size:11px;color:#c0a860;">' + (time ? toTaipeiTime(time) : '') + '</span>';
         return '<span class="vr-no">未交</span>';
       }
-      listEl.innerHTML = sorted.map(function (m) {
+
+      function rowHtml(m) {
         var rec = byName[m.name] || { url1: '', url2: '', time1: '', time2: '' };
-        return '<div class="video-row" data-name="' + (m.name || '').replace(/"/g, '&quot;') + '" data-job="' + (m.job || '').replace(/"/g, '&quot;') + '">' +
+        var slot = teamMap[m.name];
+        // 用二職排上的人，職業欄顯示他實際上的那一個並標記
+        var second = slot && slot.isSecond && m.job2;
+        var showJob = second ? m.job2 : (m.job || '');
+        return '<div class="video-row" data-name="' + (m.name || '').replace(/"/g, '&quot;') + '" data-job="' + showJob.replace(/"/g, '&quot;') + '">' +
           '<span class="video-col-name">' + m.name + '</span>' +
-          '<span class="video-col-job">' + (m.job || '') + '</span>' +
+          '<span class="video-col-job">' + showJob + (second ? '<span class="team-2nd">二職</span>' : '') + '</span>' +
           '<span class="vr-col-s">' + cell(rec.url1, rec.time1) + '</span>' +
           '<span class="vr-col-s">' + cell(rec.url2, rec.time2) + '</span>' +
+          '</div>';
+      }
+
+      // 隊伍內照排表的格子順序；沒排上的那一組才照職業順序
+      var groups = groupByTeam_(members.slice(), teamMap, function (m) { return m.name; });
+      listEl.innerHTML = groups.map(function (g) {
+        var people = g.people.slice();
+        if (g.team === TEAM_NONE) people.sort(compareByJob_);
+        else people.sort(function (a, b) {
+          return ((teamMap[a.name] || {}).slot || 0) - ((teamMap[b.name] || {}).slot || 0);
+        });
+        return '<div class="vr-team' + (g.team === TEAM_NONE ? ' team-none' : '') + '">' +
+          teamHeadHtml_(g.team, people.length) +
+          people.map(rowHtml).join('') +
           '</div>';
       }).join('');
       applyVideoRosterJobFilter();
@@ -6935,8 +7069,37 @@
 
     function openBattleView() {
       if (currentAccessCategory === '俱樂部') { showAlertModal('俱樂部成員沒有查看戰績的權限'); return; }
+      // 自動判斷對應場次與「修改」裡的下拉都要用到場次標籤清單，先載起來
+      ensureDateLabelsLoaded(function () {}, false);
       showView('battle-view');
       switchBattleTab('list');
+    }
+
+    /* ── 戰績 ←→ 排表的連結 ──────────────────────────────
+       戰績本來沒有記「這是哪一個場次」，所以跟排表接不起來。
+       date_label 有值就用它（在「修改」裡綁的），沒有就照下面的規則猜：
+
+         battle_date 20260910 → 取 0910 比對場次標籤的開頭
+         battle_time 存的就是「第一場／第二場」→ 對應排表的場次 1／2
+
+       同一天有兩個標籤時（0905幫戰、0905龍虎決戰）再用類型縮小；
+       還是分不出來就不猜，寧可顯示「未對應場次」讓人自己去綁，
+       也不要猜錯把人歸到別隊。 */
+    function sessionFromBattleTime_(t) {
+      return String(t || '').indexOf('第二') >= 0 ? '2' : '1';
+    }
+
+    function autoMatchDateLabel_(b) {
+      var d = String((b && b.date) || '');
+      if (d.length < 8) return '';
+      var mmdd = d.slice(4, 8);
+      var cands = (knownDateLabels || []).filter(function (l) { return String(l).indexOf(mmdd) === 0; });
+      if (cands.length === 1) return cands[0];
+      if (cands.length > 1 && b.type) {
+        var byType = cands.filter(function (l) { return String(l).indexOf(b.type) >= 0; });
+        if (byType.length === 1) return byType[0];
+      }
+      return '';
     }
 
     function switchBattleTab(tab) {
@@ -7006,6 +7169,17 @@
           '" placeholder="' + ph + '"' + (maxlen ? ' maxlength="' + maxlen + '"' : '') + '>';
       }
 
+      // 對應場次：留空＝自動判斷（不寫進資料庫），選了就是手動綁定
+      var guess = autoMatchDateLabel_(b);
+      var cur = String(b.dateLabel || '');
+      var labelSel = '<select id="be-label" class="modal-input">' +
+        '<option value=""' + (cur ? '' : ' selected') + '>自動判斷' +
+          (guess ? '（目前對到：' + guess + '）' : '（目前對不到）') + '</option>' +
+        (knownDateLabels || []).map(function (l) {
+          return '<option value="' + escapeBattleHtml(l) + '"' + (l === cur ? ' selected' : '') + '>' +
+            escapeBattleHtml(l) + '</option>';
+        }).join('') + '</select>';
+
       var el = document.createElement('div');
       el.id = 'battle-edit-overlay';
       el.className = 'modal-overlay bt-radar-modal';
@@ -7024,8 +7198,11 @@
             '<label>我方擊敗' + txt('mk', b.myKills, '0', 6) + '</label>' +
             '<label>對方擊敗' + txt('ok', b.oppKills, '0', 6) + '</label>' +
           '</div>' +
+          '<label class="bt-edit-full">對應場次' + labelSel + '</label>' +
           '<label class="bt-edit-full">備註' + txt('note', b.note || '', '選填', 200) + '</label>' +
-          '<p class="modal-hint">勝敗預設是照擊敗數自動判定的。實際勝負跟擊敗數不一致時，在這裡改成正確的。</p>' +
+          '<p class="modal-hint">勝敗預設是照擊敗數自動判定的。實際勝負跟擊敗數不一致時，在這裡改成正確的。<br>' +
+            '「對應場次」是拿來跟排表接起來、在戰報上分隊伍用的。留著「自動判斷」' +
+            '就照日期去對；對錯或對不到時在這裡指定。</p>' +
           '<div class="modal-actions">' +
             '<button type="button" class="modal-btn" onclick="closeBattleEdit()">取消</button>' +
             '<button type="button" class="modal-btn modal-btn-confirm" onclick="saveBattleEdit(\'' + id + '\')">儲存</button>' +
@@ -7052,7 +7229,8 @@
         oppGuild: v('oppg'),
         myKills: v('mk'),
         oppKills: v('ok'),
-        note: v('note')
+        note: v('note'),
+        dateLabel: v('label')      // 空字串＝清掉綁定，回去用自動判斷
       }, currentAccessName || '').then(function (res) {
         if (!res.success) { showAlertModal(res.message || '儲存失敗'); return; }
         closeBattleEdit();
@@ -7078,6 +7256,7 @@
     var battleSort = { key: 'pvp', dir: -1 };
     var aggSort = { key: 'games', dir: -1 };
     var battleDetailCache = null;
+    var battleTeamGroup = true;   // 出戰紀錄要不要依隊伍分組
     var battleAggCache = null;
 
     /* ── 衍生指標 ──
@@ -7380,15 +7559,34 @@
       battleTab = 'overview'; battleSide = 'my'; battleSearch = ''; battleJobFilter = 'all'; mvpSide = 'all';
       cqJobs = null; cqHidden = {}; suwenHidden = {};
       battleSort = { key: 'pvp', dir: -1 };
+      battleTeamGroup = true;
       battleApi('getBattle', id).then(function (res) {
         if (!res.found) { box.innerHTML = '<div class="access-admin-empty">找不到這場戰績</div>'; return; }
         battleDetailCache = res;
+        res.teamMap = {};
+        res.teamLabel = '';
+        res.teamSource = 'none';
         renderBattleDetail();
+
+        // 排表另外抓：抓不到也不影響戰報本身，只是分不出隊伍
+        var bound = String(res.battle.dateLabel || '').trim();
+        var label = bound || autoMatchDateLabel_(res.battle);
+        if (!label) return;
+        var session = sessionFromBattleTime_(res.battle.time);
+        battleApi('getRosterByDate', label, session).then(function (rows) {
+          // 這段是非同步的，回來的時候使用者可能已經開了別場
+          if (battleDetailCache !== res) return;
+          res.teamMap = buildTeamMap_(rows);
+          res.teamLabel = label;
+          res.teamSource = bound ? 'bound' : 'auto';
+          renderBattleDetail();
+        }).catch(function () { /* 分不出隊伍就算了 */ });
       }).catch(function (err) {
         box.innerHTML = '<div class="access-admin-empty">讀取失敗：' + escapeBattleHtml(err.message) + '</div>';
       });
     }
 
+    function setBattleTeamGroup(on) { battleTeamGroup = !!on; renderBattleDetail(); }
     function setBattleTab(t) { battleTab = t; renderBattleDetail(); }
     function setBattleSide(s) { battleSide = s; renderBattleDetail(); }
     function setMvpSide(s) { mvpSide = s; renderBattleDetail(); }
@@ -7519,7 +7717,7 @@
 
       if (!list.length) return head + '<div class="access-admin-empty">沒有符合條件的人</div>';
 
-      return '<div class="bt-table">' + head + list.map(function (p, i) {
+      function rowHtml(p, i) {
         var tag = p.side === 'my' ? rosterTag(p.rosterCategory) : '';
         return '<div class="bt-prow bt-clickable" data-side="' + p.side +
             '" data-name="' + escapeBattleHtml(p.name) + '">' +
@@ -7528,6 +7726,29 @@
           '<span>' + jobChip(p.job) + '</span>' +
           BATTLE_KEYS.map(function (f) { return '<span>' + battleFmt(p[f.k], f.k) + '</span>'; }).join('') +
         '</div>';
+      }
+
+      // 對方公會沒有排表可以對，只有我方分得出隊伍
+      var teamMap = battleDetailCache.teamMap || {};
+      var canGroup = battleSide === 'my' && Object.keys(teamMap).length > 0;
+      if (!battleTeamGroup || !canGroup) {
+        return '<div class="bt-table">' + head + list.map(rowHtml).join('') + '</div>';
+      }
+
+      // 名次是整份的名次，不是隊內名次 —— 分組只是換個排法，不該改變誰第幾名
+      var rankOf = {};
+      list.forEach(function (p, i) { rankOf[p.side + '|' + p.name] = i; });
+
+      var groups = groupByTeam_(list, teamMap, function (p) { return p.name; });
+      return '<div class="bt-table">' + head + groups.map(function (g) {
+        var people = g.people.slice();
+        if (g.team === TEAM_NONE) people.sort(compareByJob_);
+        else people.sort(function (a, b) {
+          return ((teamMap[a.name] || {}).slot || 0) - ((teamMap[b.name] || {}).slot || 0);
+        });
+        return '<div class="bt-team' + (g.team === TEAM_NONE ? ' team-none' : '') + '">' +
+          teamHeadHtml_(g.team, people.length) + '</div>' +
+          people.map(function (p) { return rowHtml(p, rankOf[p.side + '|' + p.name]); }).join('');
       }).join('') + '</div>';
     }
 
@@ -7743,9 +7964,29 @@
           '<button type="button" class="bt-pill' + (battleSide === 'opp' ? ' on' : '') +
             '" onclick="setBattleSide(\'opp\')">' + escapeBattleHtml(b.oppGuild) + '</button>' +
         '</div>';
+      // 出戰紀錄多一顆分組開關，並且說清楚隊伍是從哪一份排表來的
+      var teamBar = '';
+      if (battleTab === 'roster' && battleSide === 'my') {
+        var tm = res.teamMap || {};
+        var placed = Object.keys(tm).length;
+        if (placed) {
+          teamBar =
+            '<button type="button" class="bt-pill' + (battleTeamGroup ? ' on' : '') +
+              '" onclick="setBattleTeamGroup(' + (battleTeamGroup ? 'false' : 'true') + ')">' +
+              (battleTeamGroup ? '✓ 依隊伍分組' : '依隊伍分組') + '</button>' +
+            '<span class="bt-team-note">' +
+              (res.teamSource === 'bound' ? '已綁定' : '自動對應') + '「' +
+              escapeBattleHtml(res.teamLabel) + '」第' +
+              (sessionFromBattleTime_(b.time) === '2' ? '二' : '一') + '場的排表</span>';
+        } else {
+          teamBar = '<span class="bt-team-note">未對應場次，分不出隊伍 —— ' +
+            '可在場次列表按「修改」手動指定，或那一天還沒排表</span>';
+        }
+      }
+
       var filterBar = sideOnly ? '<div class="bt-filter">' + sideBar + '</div>' :
         !needFilter ? '' :
-        '<div class="bt-filter">' + sideBar +
+        '<div class="bt-filter">' + sideBar + teamBar +
           '<input id="battle-search" class="modal-input bt-search" placeholder="🔍 搜尋玩家" ' +
             'value="' + escapeBattleHtml(battleSearch) + '" oninput="onBattleSearch(this.value)">' +
           '<div class="bt-pillbar">' + jobs.map(function (j) {
