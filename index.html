@@ -3220,8 +3220,12 @@
         document.querySelector('.container').classList.toggle('attendance-wide', id === 'attendance-view');
         // 錄影回報改為單欄上下堆疊，比主頁 680px 略寬一點比較好看
         document.querySelector('.container').classList.toggle('video-wide', id === 'video-view');
-        // 出勤系統／排表工具開啟時，底圖霧化一下，避免顏色太鮮豔搶過面板內容
-        document.body.classList.toggle('bg-frosted', id === 'roster-view' || id === 'attendance-view' || id === 'video-view' || id === 'video-roster-view');
+        // 面板底色是純黑 18.4%，底圖會直接透出來，所以除了首頁以外每一頁都要霧化。
+        // 首頁沒有面板，那張底圖就是主視覺，維持清晰。
+        //
+        // 以前只有出勤／排表／影片會霧化，其他頁面壓在清晰的原圖上，
+        // 標題與說明文字剛好落在月亮、燈籠、櫻花那些亮部就看不清楚。
+        document.body.classList.toggle('bg-frosted', id !== 'main-view');
 
         updateSideNav(id);
 
