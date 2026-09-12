@@ -867,6 +867,10 @@
       border-color: #6B1023;
     }
 
+    /* 已經不在名單上（或那天沒出勤）的人，格子裡的名字要看得出來不一樣 */
+    .roster-name-gone { color: #c8a45a; }
+    .roster-person-row .roster-name-input.is-gone { color: #c8a45a; border-color: #8a6a2a; }
+
     .roster-name-popup {
       position: absolute;
       top: 100%;
@@ -3463,6 +3467,9 @@
 
     // 姓名下拉選單的內容＝當天出勤系統標記「出勤」的人，並依「已選的職業」篩選
     var currentRosterAttendees = [];
+    // 名單上的所有人（不分類別、不管那天有沒有出勤）。
+    // 用來分辨排表裡一個對不上的名字是「已經不在名單上」還是「那天沒出勤」。
+    var rosterAllKnown = null;
 
     // 有時候一天會有兩場，用這個記住目前排的是第一場還第二場
     var currentRosterSession = '1';
@@ -3581,7 +3588,15 @@
             (m.job2 === jobSelect.value && m.job2 !== m.job)) &&
           excludeMain.indexOf(currentValue) === -1;
       });
-      nameSelect.value = stillValid ? currentValue : '';
+      if (stillValid) {
+        nameSelect.value = currentValue;
+      } else if (currentValue && !currentRosterAttendees.some(function (m) { return m.name === currentValue; })) {
+        // 不是「被別格佔走」而是整個查不到這個人 —— 名字要留著，不能清成空白
+        addGoneRosterOption_(nameSelect, currentValue);
+        nameSelect.value = currentValue;
+      } else {
+        nameSelect.value = '';
+      }
 
       syncRosterNameCustomUI(row);
     }
@@ -3599,6 +3614,8 @@
         return opt.value === nameSelect.value;
       })[0];
       input.value = selectedOption ? selectedOption.textContent : '';
+      input.classList.toggle('is-gone',
+        !!selectedOption && selectedOption.className === 'roster-name-gone');
 
       renderRosterNamePopupOptions(row, '');
     }
@@ -3834,6 +3851,37 @@
         secondPool, '目前沒有二職候補');
     }
 
+    function ensureRosterAllKnown_(cb) {
+      if (rosterAllKnown || !(window.google && google.script && google.script.run)) { if (cb) cb(); return; }
+      google.script.run.withSuccessHandler(function (list) {
+        rosterAllKnown = {};
+        (list || []).forEach(function (m) { rosterAllKnown[m.name] = m.category || ''; });
+        if (cb) cb();
+      }).withFailureHandler(function () { rosterAllKnown = {}; if (cb) cb(); }).getAttendanceCandidates();
+    }
+
+    /* 排表裡存到的名字，如果已經不在當天的出勤名單裡：
+         不在名單上　→　（已退）
+         在名單上但那天沒出勤　→　（未出勤）
+       兩種都要把名字留在格子裡。以前是直接把格子設成空白，而排表是自動儲存的，
+       下一次改別格就會把這格的空白一起寫回資料庫，等於歷史排表被默默洗掉。 */
+    function goneRosterLabel_(name) {
+      if (rosterAllKnown && Object.prototype.hasOwnProperty.call(rosterAllKnown, name)) {
+        return name + '（未出勤）';
+      }
+      return name + '（已退）';
+    }
+
+    function addGoneRosterOption_(sel, name) {
+      var has = Array.prototype.slice.call(sel.options).some(function (o) { return o.value === name; });
+      if (has) return;
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = goneRosterLabel_(name);
+      opt.className = 'roster-name-gone';
+      sel.appendChild(opt);
+    }
+
     function loadRosterAttendeesForDate(date, callback) {
       function applyAttendees(records) {
         currentRosterAttendees = records || [];
@@ -3901,7 +3949,9 @@
 
         jobSelect.value = saved ? (saved.job || '') : '';
         nameSelect.innerHTML = buildRosterNameOptionsHtml(jobSelect.value);
-        nameSelect.value = saved ? (saved.name || '') : '';
+        var savedName = saved ? (saved.name || '') : '';
+        if (savedName) addGoneRosterOption_(nameSelect, savedName);
+        nameSelect.value = savedName;
         noteInput.value = saved ? (saved.note || '') : '';
       });
       refreshAllRosterNameOptions();
@@ -4143,6 +4193,7 @@
     }
 
     function openRosterView() {
+      ensureRosterAllKnown_();
       buildRosterForm();
       ensureDateLabelsLoaded(function () {
         var date = getSharedDate();
