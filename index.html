@@ -1342,6 +1342,16 @@
       line-height: 1.5;
     }
 
+    /* 確認框／提示框的內文是用 textContent 塞進去的，裡面的換行要留著，
+       不然「會刪掉：・排表格子 2 筆」跟下一句「戰績 2 筆會保留」會黏成一行，
+       看起來像兩樣都要刪。
+       只針對這兩個元素，不是整個 .modal-hint —— 其他地方的 .modal-hint 是
+       寫死在 HTML 裡的，開了 pre-wrap 連原始碼的縮排都會跑出來。 */
+    #confirm-modal-message,
+    #alert-modal-message {
+      white-space: pre-wrap;
+    }
+
     .modal-input {
       width: 100%;
       background: #0A0A0A;
@@ -5725,7 +5735,8 @@
         showConfirmModal('標成已退出',
           '確定「' + name + '」已經退出了嗎？\n\n' +
           '會刪掉：\n' + items.map(function (x) { return '・' + x[0] + '　' + x[1] + ' 筆'; }).join('\n') +
-          '\n\n戰績 ' + (pv.battlesKept || 0) + ' 筆會保留（那是打完的歷史）。\n' +
+          '\n\n以上是全部要刪的。戰績 ' + (pv.battlesKept || 0) +
+            ' 筆不會刪，保留起來（那是打完的歷史）。\n' +
           '刪掉之後救不回來。',
           function () {
             google.script.run.withSuccessHandler(function (res) {
