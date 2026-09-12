@@ -5773,22 +5773,29 @@
         }
         var items = [
           ['出勤紀錄', pv.attendance],
-          ['排表格子', pv.slots],
-          ['指揮紀錄', pv.commanders],
           ['影片', pv.videos]
         ].filter(function (x) { return x[1] > 0; });
 
+        var keeps = [
+          ['排表格子', pv.slots],
+          ['指揮紀錄', pv.commanders],
+          ['戰績', pv.battlesKept]
+        ].filter(function (x) { return x[1] > 0; });
+
         if (!items.length) {
-          showAlertModal('「' + name + '」已經沒有出勤／排表／指揮／影片紀錄了，不用再清。');
+          showAlertModal('「' + name + '」已經沒有出勤與影片紀錄了，不用再清。');
           return;
         }
 
         showConfirmModal('標成已退出',
           '確定「' + name + '」已經退出了嗎？\n\n' +
-          '會刪掉：\n' + items.map(function (x) { return '・' + x[0] + '　' + x[1] + ' 筆'; }).join('\n') +
-          '\n\n以上是全部要刪的。戰績 ' + (pv.battlesKept || 0) +
-            ' 筆不會刪，保留起來（那是打完的歷史）。\n' +
-          '刪掉之後救不回來。',
+          '會刪掉（救不回來）：\n' +
+          items.map(function (x) { return '・' + x[0] + '　' + x[1] + ' 筆'; }).join('\n') +
+          (keeps.length
+            ? '\n\n會留著（已經發生過的歷史）：\n' +
+              keeps.map(function (x) { return '・' + x[0] + '　' + x[1] + ' 筆'; }).join('\n') +
+              '\n排表裡他的名字會標成「（已退）」繼續顯示。'
+            : ''),
           function () {
             google.script.run.withSuccessHandler(function (res) {
               if (!res || !res.success) {
@@ -5796,9 +5803,9 @@
                 return;
               }
               showAlertModal('已把「' + name + '」標成退出\n\n' +
-                '清掉出勤 ' + res.attendance + ' 筆、排表 ' + res.slots +
-                ' 筆、指揮 ' + res.commanders + ' 筆、影片 ' + res.videos + ' 筆\n' +
-                '戰績 ' + res.battlesKept + ' 筆保留');
+                '清掉：出勤 ' + res.attendance + ' 筆、影片 ' + res.videos + ' 筆\n' +
+                '留著：排表 ' + res.slotsKept + ' 筆、指揮 ' + res.commandersKept +
+                ' 筆、戰績 ' + res.battlesKept + ' 筆');
               loadUnmatchedNames();
             }).withFailureHandler(function (err) {
               showAlertModal('失敗：' + err.message);
@@ -5831,7 +5838,7 @@
         '<br>這些紀錄沒有消失，只是對不上人：出勤看不到他過去的請假、戰績會被當成兩個人、' +
         '排表已排好的格子會變空白。' +
         '<br><b>改名</b>＝他換了名字，紀錄整批接到新名字上。' +
-        '<b>已退出</b>＝他離開了，清掉戰績以外的紀錄。' +
+        '<b>已退出</b>＝他離開了，清掉出勤與影片；排表、指揮、戰績留著當歷史。' +
         '</div>';
 
       if (!rows.length) {
@@ -5864,7 +5871,7 @@
               '<span class="nc-acts">' +
                 '<button type="button" class="nc-btn" data-rename="' + escapeBattleHtml(r.name) +
                   '" data-suggest="' + escapeBattleHtml(r.suspect || '') + '">改名</button>' +
-                (r.nonBattle > 0
+                (r.needClear > 0
                   ? '<button type="button" class="nc-btn nc-btn-left" data-left="' +
                       escapeBattleHtml(r.name) + '">已退出</button>'
                   : '') +
