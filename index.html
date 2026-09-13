@@ -7217,6 +7217,15 @@
     // 時間欄裡有沒有寫「第一場／第二場」。那一欄本來是給時間用的，
     // 格式全看上傳的人怎麼填（0912 那兩場填的是擊敗數「29vs62」），
     // 所以推不出來是正常的，推不出來就不要猜。
+    /* 上傳的 CSV 檔名是遊戲產生的，開頭就帶著那一場的日期與時間：
+         20260912_202626_落雨梨花ꕥ_緣心云醉.csv
+       同一天兩場要分先後時，這個比「時間」欄可靠得多 —— 時間欄是人手填的，
+       0912 那兩場填的是擊敗數。 */
+    function battleFileTime_(b) {
+      var m = String((b && b.fileName) || '').match(/^(\d{8})_(\d{6})/);
+      return m ? m[2] : '';
+    }
+
     function battleSessionFromTime_(t) {
       var v = String(t || '');
       if (v.indexOf('第二') >= 0) return '2';
@@ -7246,6 +7255,11 @@
           ? siblings[0].session
           : battleSessionFromTime_(siblings[0].time);
         if (other) return { session: other === '2' ? '1' : '2', sure: true, how: 'sibling' };
+        // 兩場都沒標，就看 CSV 檔名裡的時間誰比較早
+        var mine = battleFileTime_(b), theirs = battleFileTime_(siblings[0]);
+        if (mine && theirs && mine !== theirs) {
+          return { session: mine < theirs ? '1' : '2', sure: true, how: 'file' };
+        }
       }
       return { session: '', sure: false, how: 'ambiguous' };
     }
@@ -7751,6 +7765,7 @@
         if (!label) return;
         var sess = resolveBattleSession_(res.battle, label);
         res.teamLabel = label;
+        res.teamHow = sess.how;
         if (!sess.sure) {
           // 分不出是第幾場就不要抓排表 —— 抓錯的那一份會讓人整批歸錯隊
           res.teamSource = 'ambiguous';
@@ -8162,7 +8177,10 @@
             '<span class="bt-team-note">' +
               (res.teamSource === 'bound' ? '已綁定' : '自動對應') + '「' +
               escapeBattleHtml(res.teamLabel) + '」第' +
-              (res.teamSession === '2' ? '二' : '一') + '場的排表</span>';
+              (res.teamSession === '2' ? '二' : '一') + '場的排表' +
+              (res.teamHow === 'file' ? '（依 CSV 檔名的時間分先後）' :
+               res.teamHow === 'sibling' ? '（另一場已指定，這場就是另一個）' : '') +
+            '</span>';
         } else if (res.teamSource === 'ambiguous') {
           teamBar = '<span class="bt-team-note">「' + escapeBattleHtml(res.teamLabel) +
             '」那天有兩場，但看不出這是第幾場 —— 請在場次列表按「修改」指定場次</span>';
