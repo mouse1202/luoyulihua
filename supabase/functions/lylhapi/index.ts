@@ -885,6 +885,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       opp_kills:   oppKills,
       result:      myKills > oppKills ? "勝" : (myKills < oppKills ? "敗" : "平"),
       date_label:  payload.dateLabel || null,
+      session:     payload.session === "1" || payload.session === "2" ? payload.session : null,
       file_name:   String(payload.fileName ?? "").trim(),
       note:        String(payload.note ?? "").trim(),
     }, { onConflict: "battle_date,battle_time,my_guild,opp_guild" }).select());
@@ -919,7 +920,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       id: b.id, date: b.battle_date, time: b.battle_time,
       myGuild: b.my_guild, oppGuild: b.opp_guild, type: b.battle_type,
       myKills: b.my_kills, oppKills: b.opp_kills, result: b.result,
-      dateLabel: b.date_label || "", note: b.note, fileName: b.file_name,
+      dateLabel: b.date_label || "", session: b.session || "",
+      note: b.note, fileName: b.file_name,
     }));
   },
 
@@ -939,7 +941,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
         id: b.id, date: b.battle_date, time: b.battle_time,
         myGuild: b.my_guild, oppGuild: b.opp_guild, type: b.battle_type,
         myKills: b.my_kills, oppKills: b.opp_kills, result: b.result,
-        dateLabel: b.date_label || "", note: b.note,
+        dateLabel: b.date_label || "", session: b.session || "", note: b.note,
       },
       players: (ps ?? []).map((p) => {
         // 只換我方：對方公會的人跟我們的曾用名無關
@@ -966,6 +968,10 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     if (patch.oppGuild !== undefined)   p.opp_guild = String(patch.oppGuild).trim();
     if (patch.note !== undefined)       p.note = String(patch.note).trim();
     if (patch.dateLabel !== undefined)  p.date_label = patch.dateLabel || null;
+    // 空字串＝清掉指定，回去用 battle_time 推斷
+    if (patch.session !== undefined) {
+      p.session = (patch.session === "1" || patch.session === "2") ? patch.session : null;
+    }
     if (patch.battleType !== undefined) {
       if (!BATTLE_TYPES.includes(patch.battleType)) return { success: false, message: "類型不正確" };
       p.battle_type = patch.battleType;
@@ -1160,6 +1166,10 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   },
 
   // 累積統計：把區間內每個人的場次與各項數據加總，只算我方。
+  //
+  // byJob = true 時以「名字＋那一場打的職業」分組。
+  // 幫裡十幾個人打過兩種以上職業，混在一起加的話，素問那幾場的治療會被
+  // 算進他掛著玄機的那一列 —— 一個玄機不會有兩萬多萬的奶量，數字直接失真。
   getBattleAggregate: async (opts: any) => {
     const from = String(opts?.from ?? "").trim();
     const to = String(opts?.to ?? "").trim();
@@ -1181,26 +1191,39 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     // 改名前後要算成同一個人，所以先把名字換算成現在的再分組
     const alias = await getAliasMap();
 
+    const byJob = !!opts?.byJob;
     const KEYS = ["kills", "assists", "res", "pvp", "bld", "heal", "tank", "heavy", "feather", "bone"];
     const acc: Record<string, any> = {};
     (ps ?? []).forEach((p) => {
       const nm = canon(alias, p.name);
-      const a = acc[nm] ?? (acc[nm] = {
-        name: nm, job: p.job, games: 0,
+      const job = p.job || "";
+      const key = byJob ? nm + "\u0000" + job : nm;
+      const a = acc[key] ?? (acc[key] = {
+        name: nm, job, jobs: new Set<string>(), games: 0,
         ...Object.fromEntries(KEYS.map((k) => [k, 0])),
       });
       a.games += 1;
-      if (p.job) a.job = p.job;
+      if (job) a.jobs.add(job);
       KEYS.forEach((k) => { a[k] += Number((p as any)[k]) || 0; });
     });
 
     const rows = Object.values(acc).map((a: any) => {
       const avg: Record<string, number> = {};
       KEYS.forEach((k) => { avg[k] = a.games ? a[k] / a.games : 0; });
-      return { ...a, rosterCategory: cat[a.name] || "", avg };
+      const jobs = Array.from(a.jobs) as string[];
+      // 不分職業的時候，職業欄把打過的都列出來 —— 只顯示其中一個會讓人
+      // 把別的職業的數字當成那個職業的。
+      return {
+        ...a,
+        jobs,
+        job: byJob ? a.job : jobs.join("／"),
+        multiJob: jobs.length > 1,
+        rosterCategory: cat[a.name] || "",
+        avg,
+      };
     }).sort((x: any, y: any) => y.games - x.games || y.pvp - x.pvp);
 
-    return { battleCount: ids.length, rows };
+    return { battleCount: ids.length, byJob, rows };
   },
 };
 

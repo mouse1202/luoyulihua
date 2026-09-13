@@ -3053,6 +3053,7 @@
             </div>
             <div class="bt-tabs" id="agg-tabs">
               <button type="button" class="bt-tab on" id="aggtab-rank" onclick="setAggTab('rank')">📋 個人累積</button>
+              <button type="button" class="bt-tab on" id="aggtab-byjob" onclick="toggleAggByJob()">✓ 依職業分開算</button>
               <button type="button" class="bt-tab" id="aggtab-trend" onclick="setAggTab('trend')">📈 趨勢</button>
               <button type="button" class="bt-tab" id="aggtab-record" onclick="setAggTab('record')">🏆 最高紀錄</button>
             </div>
@@ -7213,8 +7214,33 @@
        同一天有兩個標籤時（0905幫戰、0905龍虎決戰）再用類型縮小；
        還是分不出來就不猜，寧可顯示「未對應場次」讓人自己去綁，
        也不要猜錯把人歸到別隊。 */
-    function sessionFromBattleTime_(t) {
-      return String(t || '').indexOf('第二') >= 0 ? '2' : '1';
+    // 時間欄裡有沒有寫「第一場／第二場」。那一欄本來是給時間用的，
+    // 格式全看上傳的人怎麼填（0912 那兩場填的是擊敗數「29vs62」），
+    // 所以推不出來是正常的，推不出來就不要猜。
+    function battleSessionFromTime_(t) {
+      var v = String(t || '');
+      if (v.indexOf('第二') >= 0) return '2';
+      if (v.indexOf('第一') >= 0) return '1';
+      return '';
+    }
+
+    /* 這一場是那一天的第幾場：
+         1. battles.session 有指定就用它（在「修改」裡選的）
+         2. 時間欄寫了第一場／第二場就用它
+         3. 同一天對到同一個場次標籤的只有這一場 → 就是第一場
+         4. 同一天有兩場卻都看不出來 → 不猜，回 sure:false 讓畫面講清楚
+       猜錯比猜不到更糟：第二場套到第一場的排表，有換隊的人會整批歸錯隊。 */
+    function resolveBattleSession_(b, label) {
+      if (b.session === '1' || b.session === '2') return { session: b.session, sure: true, how: 'set' };
+      var fromTime = battleSessionFromTime_(b.time);
+      if (fromTime) return { session: fromTime, sure: true, how: 'time' };
+      var siblings = (battleListCache || []).filter(function (x) {
+        if (x.id === b.id || x.date !== b.date) return false;
+        var l = String(x.dateLabel || '').trim() || autoMatchDateLabel_(x);
+        return l === label;
+      });
+      if (!siblings.length) return { session: '1', sure: true, how: 'only' };
+      return { session: '', sure: false, how: 'ambiguous' };
     }
 
     function autoMatchDateLabel_(b) {
@@ -7303,6 +7329,14 @@
       // 對應場次：留空＝自動判斷（不寫進資料庫），選了就是手動綁定
       var guess = autoMatchDateLabel_(b);
       var cur = String(b.dateLabel || '');
+      var sessGuess = battleSessionFromTime_(b.time);
+      var sessSel = '<select id="be-session" class="modal-input">' +
+        ['', '1', '2'].map(function (v) {
+          var txt = v === '' ? ('自動判斷' + (sessGuess ? '（目前對到：第' + (sessGuess === '2' ? '二' : '一') + '場）' : '（目前看不出來）'))
+                  : ('第' + (v === '2' ? '二' : '一') + '場');
+          return '<option value="' + v + '"' + (String(b.session || '') === v ? ' selected' : '') + '>' + txt + '</option>';
+        }).join('') + '</select>';
+
       var labelSel = '<select id="be-label" class="modal-input">' +
         '<option value=""' + (cur ? '' : ' selected') + '>自動判斷' +
           (guess ? '（目前對到：' + guess + '）' : '（目前對不到）') + '</option>' +
@@ -7330,10 +7364,13 @@
             '<label>對方擊敗' + txt('ok', b.oppKills, '0', 6) + '</label>' +
           '</div>' +
           '<label class="bt-edit-full">對應場次' + labelSel + '</label>' +
+          '<label class="bt-edit-full">第幾場' + sessSel + '</label>' +
           '<label class="bt-edit-full">備註' + txt('note', b.note || '', '選填', 200) + '</label>' +
           '<p class="modal-hint">勝敗預設是照擊敗數自動判定的。實際勝負跟擊敗數不一致時，在這裡改成正確的。<br>' +
-            '「對應場次」是拿來跟排表接起來、在戰報上分隊伍用的。留著「自動判斷」' +
-            '就照日期去對；對錯或對不到時在這裡指定。</p>' +
+            '「對應場次」與「第幾場」是拿來跟排表接起來、在戰報上分隊伍用的。' +
+            '留著「自動判斷」就照日期與時間欄去對；對錯或對不到時在這裡指定。<br>' +
+            '同一天有兩場、時間欄又沒寫「第一場／第二場」的時候一定要指定，' +
+            '否則分不出要套哪一份排表。</p>' +
           '<div class="modal-actions">' +
             '<button type="button" class="modal-btn" onclick="closeBattleEdit()">取消</button>' +
             '<button type="button" class="modal-btn modal-btn-confirm" onclick="saveBattleEdit(\'' + id + '\')">儲存</button>' +
@@ -7361,7 +7398,8 @@
         myKills: v('mk'),
         oppKills: v('ok'),
         note: v('note'),
-        dateLabel: v('label')      // 空字串＝清掉綁定，回去用自動判斷
+        dateLabel: v('label'),     // 空字串＝清掉綁定，回去用自動判斷
+        session: v('session')      // 空字串＝回去用時間欄推斷
       }, currentAccessName || '').then(function (res) {
         if (!res.success) { showAlertModal(res.message || '儲存失敗'); return; }
         closeBattleEdit();
@@ -7704,12 +7742,20 @@
         var bound = String(res.battle.dateLabel || '').trim();
         var label = bound || autoMatchDateLabel_(res.battle);
         if (!label) return;
-        var session = sessionFromBattleTime_(res.battle.time);
+        var sess = resolveBattleSession_(res.battle, label);
+        res.teamLabel = label;
+        if (!sess.sure) {
+          // 分不出是第幾場就不要抓排表 —— 抓錯的那一份會讓人整批歸錯隊
+          res.teamSource = 'ambiguous';
+          renderBattleDetail();
+          return;
+        }
+        var session = sess.session;
+        res.teamSession = session;
         battleApi('getRosterByDate', label, session).then(function (rows) {
           // 這段是非同步的，回來的時候使用者可能已經開了別場
           if (battleDetailCache !== res) return;
           res.teamMap = buildTeamMap_(rows);
-          res.teamLabel = label;
           res.teamSource = bound ? 'bound' : 'auto';
           renderBattleDetail();
         }).catch(function () { /* 分不出隊伍就算了 */ });
@@ -8109,7 +8155,10 @@
             '<span class="bt-team-note">' +
               (res.teamSource === 'bound' ? '已綁定' : '自動對應') + '「' +
               escapeBattleHtml(res.teamLabel) + '」第' +
-              (sessionFromBattleTime_(b.time) === '2' ? '二' : '一') + '場的排表</span>';
+              (res.teamSession === '2' ? '二' : '一') + '場的排表</span>';
+        } else if (res.teamSource === 'ambiguous') {
+          teamBar = '<span class="bt-team-note">「' + escapeBattleHtml(res.teamLabel) +
+            '」那天有兩場，但看不出這是第幾場 —— 請在場次列表按「修改」指定場次</span>';
         } else {
           teamBar = '<span class="bt-team-note">未對應場次，分不出隊伍 —— ' +
             '可在場次列表按「修改」手動指定，或那一天還沒排表</span>';
@@ -8460,6 +8509,19 @@
     }
 
     var aggTab = 'rank';
+    // 同一個人打過不同職業時要不要分開算。預設開 ——
+    // 把素問那幾場的治療加進他掛著玄機的那一列，數字沒有意義。
+    var aggByJob = true;
+
+    function toggleAggByJob() {
+      aggByJob = !aggByJob;
+      var btn = document.getElementById('aggtab-byjob');
+      if (btn) {
+        btn.classList.toggle('on', aggByJob);
+        btn.textContent = (aggByJob ? '✓ ' : '') + '依職業分開算';
+      }
+      loadBattleAggregate();
+    }
     var battleHistCache = null;
 
     function setAggTab(t) {
@@ -8475,7 +8537,10 @@
       box.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
       var opts = battleFilterOpts_();
       // 個人累積與趨勢／最高紀錄共用同一組條件，一次抓回來
-      var jobs = [battleApi('getBattleAggregate', opts), battleApi('getBattleHistory', opts)];
+      var aggOpts = {};
+      Object.keys(opts).forEach(function (k) { aggOpts[k] = opts[k]; });
+      aggOpts.byJob = aggByJob;
+      var jobs = [battleApi('getBattleAggregate', aggOpts), battleApi('getBattleHistory', opts)];
       // 單人趨勢正開著的話一起更新，否則換了日期範圍圖還停在舊區間
       if (trendPlayer) jobs.push(battleApi('getPlayerTrend', battleFilterOpts_(trendPlayer)));
       Promise.all(jobs)
@@ -8772,10 +8837,13 @@
                   r.rosterCategory === 'guest' ? '<span class="battle-tag">外援</span>' :
                   r.rosterCategory === 'trial' ? '<span class="battle-tag">試訓</span>' :
                   '<span class="battle-tag battle-tag-none">非名單</span>';
+        // 不分職業時，職業欄會是「潮光／玄機／素問」這種，標一下免得
+        // 有人把那一列的治療當成其中某一個職業的
+        var multi = r.multiJob ? '<span class="battle-tag battle-tag-none">多職業</span>' : '';
         return '<div class="battle-arow">' +
           '<span>' + (i + 1) + '</span>' +
           '<span>' + escapeBattleHtml(r.name) + tag + '</span>' +
-          '<span>' + escapeBattleHtml(r.job) + '</span>' +
+          '<span>' + escapeBattleHtml(r.job) + multi + '</span>' +
           '<span>' + r.games + '</span>' +
           BATTLE_KEYS.map(function (f) {
             return '<span>' + battleFmt(r[f.k], f.k) +
