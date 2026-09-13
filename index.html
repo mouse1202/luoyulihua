@@ -7240,6 +7240,13 @@
         return l === label;
       });
       if (!siblings.length) return { session: '1', sure: true, how: 'only' };
+      // 剛好只有兩場，而且另一場已經指定了 → 這一場就是另一個
+      if (siblings.length === 1) {
+        var other = siblings[0].session === '1' || siblings[0].session === '2'
+          ? siblings[0].session
+          : battleSessionFromTime_(siblings[0].time);
+        if (other) return { session: other === '2' ? '1' : '2', sure: true, how: 'sibling' };
+      }
       return { session: '', sure: false, how: 'ambiguous' };
     }
 
