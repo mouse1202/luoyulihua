@@ -7350,7 +7350,10 @@
       // 對應場次：留空＝自動判斷（不寫進資料庫），選了就是手動綁定
       var guess = autoMatchDateLabel_(b);
       var cur = String(b.dateLabel || '');
-      var sessGuess = battleSessionFromTime_(b.time);
+      // 用完整的判斷鏈，不是只看時間欄 —— 不然畫面上明明靠檔名分出來了，
+      // 這裡卻寫「目前看不出來」，兩邊對不上。
+      var sessGuessed = resolveBattleSession_(b, String(b.dateLabel || '').trim() || autoMatchDateLabel_(b));
+      var sessGuess = sessGuessed.sure ? sessGuessed.session : '';
       var sessSel = '<select id="be-session" class="modal-input">' +
         ['', '1', '2'].map(function (v) {
           var txt = v === '' ? ('自動判斷' + (sessGuess ? '（目前對到：第' + (sessGuess === '2' ? '二' : '一') + '場）' : '（目前看不出來）'))
