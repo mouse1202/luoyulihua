@@ -440,23 +440,28 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   // 玩家改名。實際動作在資料庫函式 rename_player 裡（0008 migration）：
   // 名單／出勤／排表／指揮／影片／登入身分直接改掉，戰績留著不動改記別名。
   // 新名字已經有資料時整個不做，把衝突列出來讓人自己決定。
-  renamePlayer: async (oldName: string, newName: string, actorName?: string) => {
+  // merge = true 代表使用者看過衝突清單、確認那些是重複登記之後才按的合併。
+  // 資料庫函式自己會再檢查一次：只要有一筆兩邊內容不一樣就還是不做。
+  renamePlayer: async (oldName: string, newName: string, actorName?: string, merge?: boolean) => {
     const oldN = normName(oldName), newN = normName(newName);
     if (!oldN || !newN) return { success: false, message: "名字不能是空白" };
     if (oldN === OWNER_NAME) {
       return { success: false, message: "擁有者的名字寫死在程式裡，要改得改 OWNER_NAME 再重新部署" };
     }
     const { data, error } = await db.rpc("rename_player", {
-      p_old: oldN, p_new: newN, p_actor: actorName ?? "",
+      p_old: oldN, p_new: newN, p_actor: actorName ?? "", p_merge: !!merge,
     });
     if (error) throw new Error(error.message);
     const res = data as any;
     if (res && res.success) {
       const who = actorName || "有人";
+      const mergedNote = res.merged
+        ? `；另外刪掉 ${res.merged} 筆重複登記（出勤 ${res.mergedAttendance}、影片 ${res.mergedVideos}、登入 ${res.mergedAccess}）`
+        : "";
       await appendActivityLog(actorName || "", actorName || "",
         `${who} 把「${oldN}」改名為「${newN}」（名單 ${res.roster} 筆、出勤 ${res.attendance} 筆、` +
         `排表 ${res.slots} 筆、指揮 ${res.commanders} 筆、影片 ${res.videos} 筆、登入身分 ${res.access} 筆；` +
-        `戰績 ${res.battles} 筆改用別名對照，沒有改寫）`);
+        `戰績 ${res.battles} 筆改用別名對照，沒有改寫${mergedNote}）`);
     }
     return res;
   },

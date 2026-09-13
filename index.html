@@ -5735,27 +5735,74 @@
       }, function (newName) {
         newName = (newName || '').trim();
         if (!newName || newName === oldName) return;
+        doRenamePlayer_(oldName, newName, false);
+      });
+    }
 
-        google.script.run.withSuccessHandler(function (res) {
-          if (!res || !res.success) {
-            var msg = (res && res.message) ? res.message : '未知錯誤';
-            if (res && res.conflicts && res.conflicts.length) {
-              msg += '\n\n衝突的地方：\n' + res.conflicts.map(function (c) {
-                return '・' + c.type + '：' + c.detail;
-              }).join('\n');
-            }
-            showAlertModal('改名失敗：' + msg);
+    // 衝突清單畫成文字。same 的是重複登記，不一樣的要人自己決定
+    function renameConflictLines_(list) {
+      return (list || []).map(function (c) {
+        var line = '・' + c.type + '：' + c.detail;
+        if (c.same === false && (c.oldValue || c.newValue)) {
+          line += '\n　　舊名字是「' + (c.oldValue || '空白') +
+                  '」，新名字是「' + (c.newValue || '空白') + '」';
+        }
+        return line;
+      }).join('\n');
+    }
+
+    /* merge = true 只會在使用者看過衝突清單、確認全部都是重複登記之後才送。
+       後端自己會再檢查一次，只要有一筆兩邊內容不一樣就還是不做。 */
+    function doRenamePlayer_(oldName, newName, merge) {
+      google.script.run.withSuccessHandler(function (res) {
+        if (!res || !res.success) {
+          // 同一場戰鬥裡兩個名字都在場 —— 那是兩個人，怎麼樣都不能改
+          if (res && res.sameBattle && res.sameBattle.length) {
+            showAlertModal('不能改名\n\n' + res.message + '\n\n同時出現在：\n' +
+              res.sameBattle.map(function (b) { return '・' + b; }).join('\n') +
+              '\n\n同一場戰鬥裡兩個人都在場，不可能是同一個人改名。' +
+              '如果「' + oldName + '」只是被移出名單，請到「管理名單」把他加回去。');
             return;
           }
-          showAlertModal('已把「' + oldName + '」改成「' + newName + '」\n\n' +
-            '名單 ' + res.roster + ' 筆、出勤 ' + res.attendance + ' 筆、排表 ' + res.slots +
-            ' 筆、指揮 ' + res.commanders + ' 筆、影片 ' + res.videos + ' 筆、登入身分 ' + res.access + ' 筆\n' +
-            '戰績 ' + res.battles + ' 筆改用曾用名對照，沒有改寫原始資料');
-          loadUnmatchedNames();
-        }).withFailureHandler(function (err) {
-          showAlertModal('改名失敗：' + err.message);
-        }).renamePlayer(oldName, newName, currentAccessRoleName);
-      });
+
+          var msg = (res && res.message) ? res.message : '未知錯誤';
+
+          // 全部都是重複登記 → 問一次要不要直接合併
+          if (res && res.canMerge && (res.mergeable || []).length) {
+            showConfirmModal('要合併嗎？',
+              '「' + newName + '」在這幾個地方已經有一樣的紀錄了：\n' +
+              renameConflictLines_(res.mergeable) +
+              '\n\n兩邊內容完全一樣，是同一件事登記了兩次。\n' +
+              '按「確定」會刪掉「' + oldName + '」那一份重複的，再把其餘紀錄改到「' +
+              newName + '」名下。\n刪掉之後救不回來。',
+              function () { doRenamePlayer_(oldName, newName, true); });
+            return;
+          }
+
+          // 有內容不一樣的，不能自動決定留哪個
+          if (res && (res.blocking || []).length) {
+            msg += '\n\n內容不一樣、要你自己決定的：\n' + renameConflictLines_(res.blocking);
+            if ((res.mergeable || []).length) {
+              msg += '\n\n內容一樣、可以直接合併的：\n' + renameConflictLines_(res.mergeable);
+            }
+            msg += '\n\n請先到出勤系統／影片清冊／審核申請把不一樣的那幾筆處理掉，再回來改名。';
+          } else if (res && res.conflicts && res.conflicts.length) {
+            msg += '\n\n衝突的地方：\n' + renameConflictLines_(res.conflicts);
+          }
+          showAlertModal('改名失敗：' + msg);
+          return;
+        }
+
+        showAlertModal('已把「' + oldName + '」改成「' + newName + '」\n\n' +
+          '名單 ' + res.roster + ' 筆、出勤 ' + res.attendance + ' 筆、排表 ' + res.slots +
+          ' 筆、指揮 ' + res.commanders + ' 筆、影片 ' + res.videos + ' 筆、登入身分 ' + res.access + ' 筆\n' +
+          (res.merged ? '另外刪掉 ' + res.merged + ' 筆重複登記（出勤 ' + res.mergedAttendance +
+            '、影片 ' + res.mergedVideos + '、登入 ' + res.mergedAccess + '）\n' : '') +
+          '戰績 ' + res.battles + ' 筆改用曾用名對照，沒有改寫原始資料');
+        loadUnmatchedNames();
+      }).withFailureHandler(function (err) {
+        showAlertModal('改名失敗：' + err.message);
+      }).renamePlayer(oldName, newName, currentAccessRoleName, !!merge);
     }
 
     /* 「已退出」：這個人離開了，不是改名。
