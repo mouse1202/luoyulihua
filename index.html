@@ -2844,6 +2844,14 @@
           <p class="attendance-empty hidden" id="attendance-trial-empty">目前沒有試訓名單。</p>
 
           <div class="member-section-title">俱樂部成員</div>
+          <!-- 整批調整只有俱樂部這一組有。主要成員／外援／試訓刻意沒有 —— 那幾組
+               是一個一個自己登記的，整批蓋掉會把別人填的東西洗掉。 -->
+          <div class="attendance-date-row admin-only-btn hidden" id="club-bulk-row">
+            <label for="club-bulk-status" class="attendance-date-label">全員調整：</label>
+            <select id="club-bulk-status" class="attendance-date-input"></select>
+            <button type="button" class="roster-back-btn" onclick="bulkSetClubAttendance()">套用到全部俱樂部成員</button>
+            <span class="attendance-summary" id="club-bulk-hint">只會動俱樂部成員</span>
+          </div>
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
             <span class="attendance-col-job">職業</span>
@@ -5543,6 +5551,7 @@
         renderAttendanceGroup_('attendance-trial-list', 'attendance-trial-empty', trialMembers);
         renderAttendanceGroup_('attendance-club-list', 'attendance-club-empty', clubMembers);
         ensureJobFilterOptions();
+        ensureClubBulkOptions_();
         applyAttendanceJobFilter(); // 重新渲染後套用目前的職業篩選（只篩主要成員）
 
         var date = document.getElementById('attendance-date').value;
@@ -5617,6 +5626,68 @@
       } else {
         console.log('local preview: 出勤狀態未送出（無 GAS 後端）', { date: date, name: name, job: job, status: status });
       }
+    }
+
+    /* ── 俱樂部成員：全員調整出勤狀況 ──────────────────────
+       只有「管理」看得到這排（.admin-only-btn），按下去還要再過一次管理密碼 ——
+       一次蓋掉一整組人的出勤，跟旁邊的「刪除此紀錄」「設定調整截止時間」同一個等級。
+
+       只有俱樂部這一組有。主要成員／外援／試訓是每個人自己登記的，
+       整批蓋過去會把別人填的請假洗掉。 */
+    function ensureClubBulkOptions_() {
+      var sel = document.getElementById('club-bulk-status');
+      if (!sel || sel.options.length) return;
+      sel.innerHTML = ATTENDANCE_STATUS_OPTIONS.map(function (st) {
+        return '<option value="' + st + '">' + st + '</option>';
+      }).join('');
+    }
+
+    function bulkSetClubAttendance() {
+      var sel = document.getElementById('club-bulk-status');
+      var status = sel ? sel.value : '';
+      if (!status) { showAlertModal('請先選要設成哪一個狀態'); return; }
+
+      var date = document.getElementById('attendance-date').value;
+      if (!date) { showAlertModal('請先選日期／場次'); return; }
+
+      var rows = Array.prototype.slice.call(
+        document.querySelectorAll('#attendance-club-list .attendance-row'));
+      if (!rows.length) { showAlertModal('目前沒有俱樂部成員。'); return; }
+
+      // 只算真的會變的人，不然訊息會寫「改了 21 人」但其實只有 3 個人有變
+      var willChange = rows.filter(function (r) {
+        var st = r.querySelector('.attendance-status');
+        return st && st.value !== status;
+      });
+      if (!willChange.length) {
+        showAlertModal('俱樂部成員（' + rows.length + ' 人）本來就全部都是「' + status + '」了，不用再改。');
+        return;
+      }
+
+      // 過管理密碼。免密期內會直接往下走
+      if (!needUnlockThen_('admin', 'attendance-view', bulkSetClubAttendance)) return;
+
+      showConfirmModal('全員調整出勤',
+        '把「' + date + '」的俱樂部成員出勤狀態全部設成「' + status + '」？\n\n' +
+        '俱樂部成員共 ' + rows.length + ' 人，其中 ' + willChange.length + ' 人會被改動。\n' +
+        '主要成員、外援、試訓不會動到。\n\n' +
+        '每一筆都會記進操作記錄。',
+        function () { applyClubBulk_(status, willChange, date); });
+    }
+
+    function applyClubBulk_(status, rows, date) {
+      var done = 0;
+      rows.forEach(function (row) {
+        var st = row.querySelector('.attendance-status');
+        if (!st || st.value === status) return;
+        st.value = status;
+        // prev 要一起更新，不然那一列下次自己改狀態時會拿舊值去比對
+        st.dataset.prev = status;
+        saveAttendanceStatus(row.dataset.name, row.dataset.job, status, true);
+        done++;
+      });
+      updateAttendanceSummary();
+      showAlertModal('已把 ' + done + ' 位俱樂部成員（' + date + '）的出勤狀態設成「' + status + '」');
     }
 
     function updateAttendanceSummary() {
