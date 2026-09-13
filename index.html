@@ -7760,6 +7760,11 @@
         renderBattleDetail();
 
         // 排表另外抓：抓不到也不影響戰報本身，只是分不出隊伍
+        // getBattle 不回傳 fileName，從列表那一份補上 ——
+        // 同一天兩場要靠 CSV 檔名裡的時間分先後。
+        var listed = (battleListCache || []).filter(function (x) { return x.id === res.battle.id; })[0];
+        if (listed && !res.battle.fileName) res.battle.fileName = listed.fileName;
+
         var bound = String(res.battle.dateLabel || '').trim();
         var label = bound || autoMatchDateLabel_(res.battle);
         if (!label) return;
