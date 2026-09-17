@@ -6685,7 +6685,13 @@
       showAlertModal('已匯入 ' + imported.length + ' 筆資料，確認無誤後記得按「儲存名單」');
     }
 
+    // 四份名單各自載入成功沒有、載入時各有幾人。
+    // 任何一份沒載入成功就不准存 —— 畫面上那份是空白預設列，存下去就是清空。
+    var memberLoadState = { member: null, guest: null, trial: null, club: null };
+
     function loadMemberListIntoForm() {
+      memberLoadState = { member: null, guest: null, trial: null, club: null };
+      setMemberSaveEnabled_();
       var memberList = document.getElementById('member-list');
       var guestList = document.getElementById('guest-list');
       var trialList = document.getElementById('trial-list');
@@ -6693,7 +6699,9 @@
       guestList.innerHTML = '';
       trialList.innerHTML = '';
 
-      function renderMembers(members) {
+      function renderMembers(members, failed) {
+        memberLoadState.member = failed ? 'failed' : (members || []).length;
+        setMemberSaveEnabled_();
         if (!members || members.length === 0) {
           for (var i = 0; i < 5; i++) addMemberRow();
         } else {
@@ -6701,7 +6709,9 @@
         }
       }
 
-      function renderGuests(guests) {
+      function renderGuests(guests, failed) {
+        memberLoadState.guest = failed ? 'failed' : (guests || []).length;
+        setMemberSaveEnabled_();
         if (!guests || guests.length === 0) {
           for (var i = 0; i < 3; i++) addGuestRow();
         } else {
@@ -6709,7 +6719,9 @@
         }
       }
 
-      function renderTrials(trials) {
+      function renderTrials(trials, failed) {
+        memberLoadState.trial = failed ? 'failed' : (trials || []).length;
+        setMemberSaveEnabled_();
         if (!trials || trials.length === 0) {
           for (var i = 0; i < 3; i++) addTrialRow();
         } else {
@@ -6717,7 +6729,9 @@
         }
       }
 
-      function renderClubs(clubs) {
+      function renderClubs(clubs, failed) {
+        memberLoadState.club = failed ? 'failed' : (clubs || []).length;
+        setMemberSaveEnabled_();
         var list = document.getElementById('club-list');
         if (list) list.innerHTML = '';
         if (!clubs || clubs.length === 0) {
@@ -6729,23 +6743,23 @@
 
       if (window.google && google.script && google.script.run) {
         google.script.run.withSuccessHandler(renderMembers).withFailureHandler(function (err) {
-          showAlertModal('讀取主名單失敗：' + err.message);
-          renderMembers([]);
+          showAlertModal('讀取主名單失敗：' + err.message + '\n\n這時候不能儲存名單，請重新整理頁面再進來。');
+          renderMembers([], true);
         }).getMemberList();
 
         google.script.run.withSuccessHandler(renderGuests).withFailureHandler(function (err) {
-          showAlertModal('讀取外援名單失敗：' + err.message);
-          renderGuests([]);
+          showAlertModal('讀取外援名單失敗：' + err.message + '\n\n這時候不能儲存名單，請重新整理頁面再進來。');
+          renderGuests([], true);
         }).getGuestList();
 
         google.script.run.withSuccessHandler(renderTrials).withFailureHandler(function (err) {
-          showAlertModal('讀取試訓名單失敗：' + err.message);
-          renderTrials([]);
+          showAlertModal('讀取試訓名單失敗：' + err.message + '\n\n這時候不能儲存名單，請重新整理頁面再進來。');
+          renderTrials([], true);
         }).getTrialList();
 
         google.script.run.withSuccessHandler(renderClubs).withFailureHandler(function (err) {
-          showAlertModal('讀取俱樂部成員名單失敗：' + err.message);
-          renderClubs([]);
+          showAlertModal('讀取俱樂部成員名單失敗：' + err.message + '\n\n這時候不能儲存名單，請重新整理頁面再進來。');
+          renderClubs([], true);
         }).getClubList();
       } else {
         console.log('local preview: 未連接 Google Apps Script，名單管理改用空白列');
@@ -6996,12 +7010,55 @@
       }).filter(function (r) { return r.name; });
     }
 
+    function memberListsReady_() {
+      var st = memberLoadState;
+      return ['member', 'guest', 'trial', 'club'].every(function (k) {
+        return typeof st[k] === 'number';
+      });
+    }
+
+    function setMemberSaveEnabled_() {
+      var btn = document.getElementById('member-save-btn');
+      if (!btn) return;
+      var failed = ['member', 'guest', 'trial', 'club'].some(function (k) { return memberLoadState[k] === 'failed'; });
+      var ready = memberListsReady_();
+      btn.disabled = !ready;
+      btn.textContent = failed ? '名單沒載入成功，請重新整理' : (ready ? '儲存名單' : '名單載入中…');
+    }
+
     // 主名單、外援名單、試訓名單用同一顆「儲存名單」按鈕一起存，避免漏存其中一邊
-    function saveMemberListData() {
+    function saveMemberListData(force) {
+      if (!memberListsReady_()) {
+        showAlertModal('名單還沒全部載入成功，現在儲存會把沒載入的那幾份清空。\n\n請重新整理頁面再進來。');
+        return;
+      }
       var memberData = collectListRows_('member-list');
       var guestData = collectListRows_('guest-list');
       var trialData = collectListRows_('trial-list');
       var clubData = collectListRows_('club-list');
+
+      // 跟載入時的人數比。清空或少掉一大半的，先講清楚再讓人決定
+      if (!force) {
+        var warn = [
+          ['主名單', memberLoadState.member, memberData.length],
+          ['外援', memberLoadState.guest, guestData.length],
+          ['試訓', memberLoadState.trial, trialData.length],
+          ['俱樂部成員', memberLoadState.club, clubData.length]
+        ].filter(function (x) {
+          var had = x[1], now = x[2];
+          return (had > 0 && now === 0) || (had >= 10 && now < had * 0.5);
+        });
+        if (warn.length) {
+          showConfirmModal('名單人數大幅減少',
+            '這次儲存會讓下面這幾份名單的人數大幅減少：\n\n' +
+            warn.map(function (x) { return '・' + x[0] + '：' + x[1] + ' 人 → ' + x[2] + ' 人'; }).join('\n') +
+            '\n\n如果不是你故意刪的，請按取消，重新整理頁面再進來。\n' +
+            '確定要這樣存嗎？',
+            function () { saveMemberListData(true); });
+          return;
+        }
+      }
+      var opts = force ? { force: true } : {};
 
       var saveBtn = document.getElementById('member-save-btn');
       saveBtn.disabled = true;
@@ -7015,7 +7072,12 @@
         if (pending > 0) return;
         saveBtn.disabled = false;
         saveBtn.textContent = '儲存名單';
-        if (!hadError) showAlertModal('已儲存名單');
+        if (!hadError) {
+          // 存成功之後，下次比對的基準改成這次存進去的人數
+          memberLoadState = { member: memberData.length, guest: guestData.length,
+                              trial: trialData.length, club: clubData.length };
+          showAlertModal('已儲存名單');
+        }
       }
 
       function onFailure(label) {
@@ -7027,10 +7089,20 @@
       }
 
       if (window.google && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(checkDone).withFailureHandler(onFailure('主名單')).saveMemberList(memberData);
-        google.script.run.withSuccessHandler(checkDone).withFailureHandler(onFailure('外援名單')).saveGuestList(guestData);
-        google.script.run.withSuccessHandler(checkDone).withFailureHandler(onFailure('試訓名單')).saveTrialList(trialData);
-        google.script.run.withSuccessHandler(checkDone).withFailureHandler(onFailure('俱樂部成員名單')).saveClubList(clubData);
+        // 後端也會擋清空／大幅減少；被擋下來時一樣當成失敗講出來
+        var ok = function (label) {
+          return function (res) {
+            if (res && res.success === false) {
+              hadError = true;
+              showAlertModal(label + '沒有儲存：' + (res.message || '') + '\n\n請重新整理頁面確認名單後再存。');
+            }
+            checkDone();
+          };
+        };
+        google.script.run.withSuccessHandler(ok('主名單')).withFailureHandler(onFailure('主名單')).saveMemberList(memberData, opts);
+        google.script.run.withSuccessHandler(ok('外援名單')).withFailureHandler(onFailure('外援名單')).saveGuestList(guestData, opts);
+        google.script.run.withSuccessHandler(ok('試訓名單')).withFailureHandler(onFailure('試訓名單')).saveTrialList(trialData, opts);
+        google.script.run.withSuccessHandler(ok('俱樂部成員名單')).withFailureHandler(onFailure('俱樂部成員名單')).saveClubList(clubData, opts);
       } else {
         console.log('member list data (local preview, no GAS backend):', memberData);
         console.log('guest list data (local preview, no GAS backend):', guestData);

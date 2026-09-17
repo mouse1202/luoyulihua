@@ -69,7 +69,26 @@ async function listByCategory(category: string) {
   const { data } = await db.from("roster_members").select("name,job,job2").eq("category", category).order("sort_order");
   return (data ?? []).map((r) => ({ name: r.name, job: r.job, job2: r.job2 ?? "" }));
 }
-async function saveByCategory(category: string, rows: any[]) {
+// 名單存檔是「整份刪掉再寫入」。9/17 22:25 有人在主名單沒載入成功的畫面按了儲存，
+// 送上來的主名單是空的，69 人整批消失。所以現在：
+//   · 要把一份有人的名單存成空的 → 拒絕
+//   · 一次少掉一半以上（原本 10 人以上時）→ 拒絕
+// 兩種都回傳目前人數，前端讓人確認過再帶 force 重送。
+async function saveByCategory(category: string, rows: any[], opts?: any) {
+  const incoming = (rows ?? []).filter((r) => r && r.name).length;
+  const { count: existing } = await db.from("roster_members")
+    .select("id", { count: "exact", head: true }).eq("category", category);
+  const had = existing ?? 0;
+  if (!opts?.force) {
+    if (incoming === 0 && had > 0) {
+      return { success: false, code: "WOULD_EMPTY", existing: had, incoming,
+        message: `目前有 ${had} 人，這次送出的是空的` };
+    }
+    if (had >= 10 && incoming < had * 0.5) {
+      return { success: false, code: "BIG_SHRINK", existing: had, incoming,
+        message: `目前有 ${had} 人，這次只剩 ${incoming} 人` };
+    }
+  }
   await chk(db.from("roster_members").delete().eq("category", category).select("id"));
   const clean = (rows ?? []).filter((r) => r && r.name)
     .map((r, i) => ({ category, name: r.name, job: r.job ?? "", job2: r.job2 ?? "", sort_order: i }));
@@ -260,13 +279,13 @@ function parseMonthFromLabel(label: string): number | null {
 
 const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   getMemberList: () => listByCategory("member"),
-  saveMemberList: (rows: any[]) => saveByCategory("member", rows),
+  saveMemberList: (rows: any[], opts?: any) => saveByCategory("member", rows, opts),
   getGuestList: () => listByCategory("guest"),
-  saveGuestList: (rows: any[]) => saveByCategory("guest", rows),
+  saveGuestList: (rows: any[], opts?: any) => saveByCategory("guest", rows, opts),
   getTrialList: () => listByCategory("trial"),
-  saveTrialList: (rows: any[]) => saveByCategory("trial", rows),
+  saveTrialList: (rows: any[], opts?: any) => saveByCategory("trial", rows, opts),
   getClubList: () => listByCategory("club"),
-  saveClubList: (rows: any[]) => saveByCategory("club", rows),
+  saveClubList: (rows: any[], opts?: any) => saveByCategory("club", rows, opts),
   getAttendanceCandidates: () => getAttendanceCandidates(),
 
   checkAccessStatus: async (nameIn: string) => {
