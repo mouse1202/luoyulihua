@@ -3307,6 +3307,12 @@
 
         updateSideNav(id);
 
+        // 切回出勤系統就重新判斷鎖定狀態。日期是跟排表工具、影片上傳共用的，
+        // 在別頁換掉日期再回來時，這裡不重判的話鎖跟提示都會停在上一個場次。
+        if (id === 'attendance-view' && typeof refreshAttendanceLockForToday === 'function') {
+          refreshAttendanceLockForToday();
+        }
+
         target.classList.remove('hidden');
         target.classList.add('fade-out'); // 一開始是透明的
         void target.offsetWidth; // 強制瀏覽器先套用透明狀態，接下來拿掉 class 才會有淡入動畫
@@ -4692,11 +4698,19 @@
     }
 
     function setSharedDate(value) {
+      var changed = sharedDate !== value;
       sharedDate = value;
       var attendanceDateInput = document.getElementById('attendance-date');
       var rosterDateInput = document.getElementById('roster-date');
       if (attendanceDateInput) attendanceDateInput.value = value;
       if (rosterDateInput) rosterDateInput.value = value;
+      // 換場次就馬上重判一次，舊場次的鎖與提示不要留在畫面上。
+      // 新場次的截止時間還沒問到之前會先鎖住（非管理），問到之後由
+      // refreshAttendanceLockForToday 再更新一次。
+      if (changed && typeof applyAttendanceLockState === 'function'
+          && typeof attendanceDeadlines !== 'undefined') {
+        applyAttendanceLockState();
+      }
     }
 
     // ── 月份分頁：日期下拉先用「月份」過濾，日期一多才不會一長串 ──
