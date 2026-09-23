@@ -428,6 +428,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const c = await db.from("roster_commanders").delete().eq("date_label", date).select("id");
     const v = await db.from("video_uploads").delete().eq("date_label", date).select("id");
     await db.from("date_labels").delete().eq("label", date);
+    await db.from("attendance_deadlines").delete().eq("date_label", date);
     const na = a.data?.length ?? 0, nr = r.data?.length ?? 0, nc = c.data?.length ?? 0, nv = v.data?.length ?? 0;
     const actorLabel = actorRoleName || actorEmail || "有人";
     await appendActivityLog(actorEmail || "", actorRoleName || "",
@@ -444,6 +445,10 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const c = await db.from("roster_commanders").update({ date_label: newDate }).eq("date_label", oldDate).select("id");
     // 影片也要跟著搬，否則會留在舊場次名底下變成孤兒
     const v = await db.from("video_uploads").update({ date_label: newDate }).eq("date_label", oldDate).select("id");
+    // 截止時間也要搬。沒搬的話新標籤查不到手動截止時間，會退回「活動前一天 23:59」
+    // 的自動規則 —— 比原本設的寬鬆，已經截止的場次又變成可以改。
+    await db.from("attendance_deadlines").delete().eq("date_label", newDate);
+    await db.from("attendance_deadlines").update({ date_label: newDate }).eq("date_label", oldDate);
     await db.from("date_labels").upsert({ label: newDate }, { onConflict: "label" });
     await db.from("date_labels").delete().eq("label", oldDate);
     const actorLabel = actorName || "有人";

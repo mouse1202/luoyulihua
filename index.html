@@ -5238,6 +5238,15 @@
       return attendanceDeadlines[label] || autoDeadlineForLabel(label) || '';
     }
 
+    /* 這個標籤的截止時間「載到了沒有」。
+       attendanceDeadlines[label] 是 undefined 代表還沒問到（或問失敗），
+       是 '' 代表問到了、沒有手動設定。兩者要分開：不知道的時候不能當成沒有，
+       否則會退回自動規則（活動前一天 23:59），比手動設的時間寬鬆，
+       一般成員就會在已經截止的場次上還改得動。 */
+    function deadlineKnown_(label) {
+      return !label || attendanceDeadlines[label] !== undefined;
+    }
+
     // 是否已過截止時間（純時間判斷；「誰能改」由 applyAttendanceLockState 決定：鎖表後只有管理能改）
     function isAttendanceLockedNow() {
       var label = getSharedDate();
@@ -5250,15 +5259,25 @@
     }
 
     function applyAttendanceLockState() {
-      var locked = isAttendanceLockedNow();
+      var label = getSharedDate();
+      var known = deadlineKnown_(label);
+      var locked = known && isAttendanceLockedNow();
       var isAdmin = currentAccessCategory === '管理';
-      var disable = locked && !isAdmin; // 鎖表後只有「管理」能修改，其他人一律鎖住
+      // 還沒問到截止時間就先鎖住（管理不受影響）。寧可晚幾秒才能改，
+      // 也不要在還不知道有沒有截止的情況下讓人改了才發現已經過期。
+      var disable = (!known || locked) && !isAdmin;
       var selects = Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-status'));
       selects.forEach(function (select) { select.disabled = disable; });
 
       var lockRow = document.getElementById('attendance-lock-row');
+      if (!known) {
+        document.getElementById('attendance-lock-msg').textContent = isAdmin
+          ? '正在讀取這個場次的調整截止時間…'
+          : '正在讀取這個場次的調整截止時間，讀到之前先不開放修改。';
+        lockRow.classList.remove('hidden');
+        return;
+      }
       if (locked) {
-        var label = getSharedDate();
         var cutoff = effectiveDeadline(label).replace('T', ' ');
         document.getElementById('attendance-lock-msg').textContent = isAdmin
           ? '「' + label + '」已過調整截止時間（' + cutoff + '），一般成員無法修改；你是管理，可直接編輯。'
@@ -5286,10 +5305,14 @@
 
       if (!label) { applyAttendanceLockState(); return; }
 
+      // 換標籤時先把這個標籤的截止時間標成「還不知道」，畫面會先鎖住
+      if (attendanceDeadlines[label] === undefined) applyAttendanceLockState();
+
       if (window.google && google.script && google.script.run) {
         google.script.run.withSuccessHandler(applyDeadline).withFailureHandler(function (err) {
+          // 讀失敗不能當成「沒有截止時間」—— 那會比實際設定寬鬆。維持鎖住。
           console.log('讀取出勤截止時間失敗：' + err.message);
-          applyDeadline('');
+          applyAttendanceLockState();
         }).getAttendanceDeadline(label);
       } else {
         applyDeadline('');
@@ -6384,9 +6407,13 @@
         // 每次從首頁進來都跳到今天的場次（沒有就跳最接近的那一場）。
         // 從排表工具按「返回出勤系統」不會經過這裡，所以不會把人正在排的場次拉走。
         jumpToDefaultAttendanceDate_();
+        // 一定要等上面決定好是哪一天之後才抓截止時間。
+        // 本來這行寫在外面、先跑掉了，抓到的是上一個（或空的）場次的截止時間，
+        // 那一天的手動截止時間就沒載到，退回「活動前一天 23:59」的自動規則 ——
+        // 手動設 9/22 22:00 的場次，到 9/23 晚上還是開著讓人請假。
+        refreshAttendanceLockForToday();
         loadAttendanceFromMembers();
       });
-      refreshAttendanceLockForToday();
       loadAnnouncement();
       showView('attendance-view');
     }
