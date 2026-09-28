@@ -6730,7 +6730,13 @@
     // 任何一份沒載入成功就不准存 —— 畫面上那份是空白預設列，存下去就是清空。
     var memberLoadState = { member: null, guest: null, trial: null, club: null };
 
+    // 第幾次載入名單。每按一次「名單管理」就 +1，回應回來時對不上就丟掉 ——
+    // 連開兩三次的話，舊的那幾份回應不能再寫進畫面。
+    var memberLoadSeq = 0;
+
     function loadMemberListIntoForm() {
+      var seq = ++memberLoadSeq;
+      var stale = function () { return seq !== memberLoadSeq; };
       memberLoadState = { member: null, guest: null, trial: null, club: null };
       setMemberSaveEnabled_();
       var memberList = document.getElementById('member-list');
@@ -6741,6 +6747,8 @@
       trialList.innerHTML = '';
 
       function renderMembers(members, failed) {
+        if (stale()) return;                       // 舊的一次載入回來了，丟掉
+        document.getElementById('member-list').innerHTML = ''; // 先清掉自己，不然會疊上去
         memberLoadState.member = failed ? 'failed' : (members || []).length;
         setMemberSaveEnabled_();
         if (!members || members.length === 0) {
@@ -6751,6 +6759,8 @@
       }
 
       function renderGuests(guests, failed) {
+        if (stale()) return;                       // 舊的一次載入回來了，丟掉
+        document.getElementById('guest-list').innerHTML = ''; // 先清掉自己，不然會疊上去
         memberLoadState.guest = failed ? 'failed' : (guests || []).length;
         setMemberSaveEnabled_();
         if (!guests || guests.length === 0) {
@@ -6761,6 +6771,8 @@
       }
 
       function renderTrials(trials, failed) {
+        if (stale()) return;                       // 舊的一次載入回來了，丟掉
+        document.getElementById('trial-list').innerHTML = ''; // 先清掉自己，不然會疊上去
         memberLoadState.trial = failed ? 'failed' : (trials || []).length;
         setMemberSaveEnabled_();
         if (!trials || trials.length === 0) {
@@ -6771,6 +6783,7 @@
       }
 
       function renderClubs(clubs, failed) {
+        if (stale()) return;                       // 舊的一次載入回來了，丟掉
         memberLoadState.club = failed ? 'failed' : (clubs || []).length;
         setMemberSaveEnabled_();
         var list = document.getElementById('club-list');
@@ -7077,6 +7090,28 @@
       var guestData = collectListRows_('guest-list');
       var trialData = collectListRows_('trial-list');
       var clubData = collectListRows_('club-list');
+
+      // 同一份名單裡有重複的名字就不准存。名字在這套系統裡等於識別碼，
+      // 一份名單本來就不該有兩個一樣的 —— 出現重複代表畫面疊到了，
+      // 存下去出勤系統就會看到同一個人好幾行。這個不給 force 略過。
+      var dupFound = [
+        ['主名單', memberData], ['外援', guestData],
+        ['試訓', trialData], ['俱樂部成員', clubData]
+      ].map(function (x) {
+        var seen = {}, dups = [];
+        x[1].forEach(function (r) {
+          var nm = (r.name || '').trim();
+          if (!nm) return;
+          if (seen[nm]) { if (seen[nm] === 1) dups.push(nm); seen[nm]++; }
+          else seen[nm] = 1;
+        });
+        return dups.length ? x[0] + '：' + dups.join('、') : '';
+      }).filter(Boolean);
+      if (dupFound.length) {
+        showAlertModal('名單裡有重複的名字，沒有存出去：\n\n' + dupFound.join('\n') +
+          '\n\n通常是名單管理被連開了好幾次、畫面疊在一起。\n請重新整理頁面再進來確認。');
+        return;
+      }
 
       // 跟載入時的人數比。清空或少掉一大半的，先講清楚再讓人決定
       if (!force) {

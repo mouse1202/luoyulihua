@@ -75,6 +75,17 @@ async function listByCategory(category: string) {
 //   · 一次少掉一半以上（原本 10 人以上時）→ 拒絕
 // 兩種都回傳目前人數，前端讓人確認過再帶 force 重送。
 async function saveByCategory(category: string, rows: any[], opts?: any) {
+  // 同一份名單裡不該有重複的名字。名字等於識別碼，重複代表前端畫面疊到了
+  // （名單管理連開好幾次，三份回應疊在同一個清單上），存進來的話
+  // 出勤系統就會看到同一個人好幾行。這個不給 force 略過。
+  const names = (rows ?? []).map((r) => (r && r.name ? String(r.name).trim() : "")).filter(Boolean);
+  const seen = new Set<string>(), dups = new Set<string>();
+  names.forEach((nm) => { if (seen.has(nm)) dups.add(nm); else seen.add(nm); });
+  if (dups.size > 0) {
+    return { success: false, code: "DUPLICATE_NAMES", duplicates: Array.from(dups),
+      message: `名單裡有重複的名字：${Array.from(dups).slice(0, 10).join("、")}` };
+  }
+
   const incoming = (rows ?? []).filter((r) => r && r.name).length;
   const { count: existing } = await db.from("roster_members")
     .select("id", { count: "exact", head: true }).eq("category", category);
