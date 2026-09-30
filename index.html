@@ -1044,6 +1044,24 @@
       flex: 1;
     }
 
+    /* 「最後修改」欄。給固定寬度，不跟其他欄搶 flex: 1，
+       不然名字跟職業會被時間字串擠掉。 */
+    .attendance-col-updated,
+    .attendance-updated {
+      flex: 0 0 118px;
+      font-size: 12px;
+      opacity: 0.72;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* 窄螢幕一行塞不下五欄，時間先收起來（資料還在，點名字一樣看得到 title） */
+    @media (max-width: 760px) {
+      .attendance-col-updated,
+      .attendance-updated { display: none; }
+    }
+
     .attendance-col-spacer {
       width: 30px;
       flex-shrink: 0;
@@ -2187,6 +2205,18 @@
       padding: 10px 12px;
     }
 
+    /* 記錄的保留範圍。放在清單最上面，讓人知道「查不到」是被蓋掉了還是真的沒發生 */
+    .activity-log-range {
+      font-size: 13px;
+      line-height: 1.7;
+      color: #FFFFEF;
+      opacity: 0.78;
+      border: 1px solid rgba(212, 168, 40, 0.3);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+
     .activity-log-time {
       font-size: 12px;
       color: #FFFFEF;
@@ -2819,6 +2849,7 @@
               <select id="attendance-job2-filter" class="attendance-job-filter" onchange="applyAttendanceJobFilter()"></select>
             </span>
             <span class="attendance-col-status">是否出勤</span>
+            <span class="attendance-col-updated">最後修改</span>
           </div>
           <div class="attendance-list" id="attendance-list"></div>
           <p class="attendance-empty hidden" id="attendance-empty">尚未建立任何成員名單，請點選右上角「管理名單」新增。</p>
@@ -2829,6 +2860,7 @@
             <span class="attendance-col-job">職業</span>
             <span class="attendance-col-job">二職</span>
             <span class="attendance-col-status">是否出勤</span>
+            <span class="attendance-col-updated">最後修改</span>
           </div>
           <div class="attendance-list" id="attendance-guest-list"></div>
           <p class="attendance-empty hidden" id="attendance-guest-empty">目前沒有外援名單。</p>
@@ -2839,6 +2871,7 @@
             <span class="attendance-col-job">職業</span>
             <span class="attendance-col-job">二職</span>
             <span class="attendance-col-status">是否出勤</span>
+            <span class="attendance-col-updated">最後修改</span>
           </div>
           <div class="attendance-list" id="attendance-trial-list"></div>
           <p class="attendance-empty hidden" id="attendance-trial-empty">目前沒有試訓名單。</p>
@@ -2857,6 +2890,7 @@
             <span class="attendance-col-job">職業</span>
             <span class="attendance-col-job">二職</span>
             <span class="attendance-col-status">是否出勤</span>
+            <span class="attendance-col-updated">最後修改</span>
           </div>
           <div class="attendance-list" id="attendance-club-list"></div>
           <p class="attendance-empty hidden" id="attendance-club-empty">目前沒有俱樂部成員名單。</p>
@@ -2998,7 +3032,7 @@
       </div>
     </div>
 
-    <!-- 操作記錄：後台記事本，記錄誰把誰的出勤狀態改成什麼，只保留最近 500 筆。 -->
+    <!-- 操作記錄：後台記事本，記錄誰把誰的出勤狀態改成什麼，只保留最近 5000 筆。 -->
     <div class="view hidden" id="activity-log-view">
       <div class="roster-section">
         <div class="roster-header">
@@ -4675,10 +4709,17 @@
         nameSpan.appendChild(mineBadge);
       }
 
+      // 這一筆最後是什麼時候被改的。操作記錄滿了會把最舊的蓋掉，
+      // 到時候查不到「是誰」，但這個時間一直都在。
+      var updatedSpan = document.createElement('span');
+      updatedSpan.className = 'attendance-updated';
+      updatedSpan.textContent = '';
+
       row.appendChild(nameSpan);
       row.appendChild(jobSpan);
       row.appendChild(job2Span);
       row.appendChild(statusSelect);
+      row.appendChild(updatedSpan);
       return row;
     }
 
@@ -5611,7 +5652,11 @@
     function applyAttendanceStatusesForDate(date) {
       function applyRecords(records) {
         var statusMap = {};
-        (records || []).forEach(function (r) { statusMap[r.name] = r.status; });
+        var timeMap = {};
+        (records || []).forEach(function (r) {
+          statusMap[r.name] = r.status;
+          timeMap[r.name] = r.updatedAt || '';
+        });
 
         var rows = Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-row'));
         rows.forEach(function (row) {
@@ -5620,6 +5665,7 @@
           var sel = row.querySelector('.attendance-status');
           sel.value = status;
           sel.dataset.prev = status; // 同步「上一個狀態」，確認框取消時才能正確還原
+          setRowUpdatedAt_(row, existing === undefined ? '' : toTaipeiTime(timeMap[row.dataset.name]));
         });
         updateAttendanceSummary();
       }
@@ -5646,13 +5692,36 @@
       });
     }
 
+    /* 把「最後修改」填進那一列。沒有紀錄的人（從來沒人動過，畫面預設顯示出勤）
+       就留空白 —— 寫個時間反而會讓人以為有人改過。 */
+    function setRowUpdatedAt_(row, text) {
+      var el = row.querySelector('.attendance-updated');
+      if (!el) return;
+      el.textContent = text || '';
+      // 窄螢幕那一欄是收起來的，時間掛在整列的 title 上還是看得到
+      if (text) row.title = row.dataset.name + '：最後修改 ' + text;
+      else row.removeAttribute('title');
+    }
+
     function saveAttendanceStatus(name, job, status, isManual) {
       if (!status) return; // 選回空白就不寫入，避免建立沒有意義的紀錄
       var date = document.getElementById('attendance-date').value;
       if (!date) return; // 還沒選日期就不寫入，避免產生「空白日期」的垃圾出勤紀錄
 
+      // 存好之後把那一列的「最後修改」換成現在，不用整頁重載才看得到
+      function markSaved() {
+        var row = Array.prototype.slice.call(
+          document.querySelectorAll('#attendance-view .attendance-row'))
+          .filter(function (r) { return r.dataset.name === name; })[0];
+        if (!row) return;
+        var d = new Date();
+        function p(v) { return String(v).padStart(2, '0'); }
+        setRowUpdatedAt_(row, d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+          ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()));
+      }
+
       if (window.google && google.script && google.script.run) {
-        google.script.run.withFailureHandler(function (err) {
+        google.script.run.withSuccessHandler(markSaved).withFailureHandler(function (err) {
           showAlertModal('儲存出勤狀態失敗：' + err.message);
         }).saveAttendanceRecord({
           date: date, name: name, job: job, status: status,
@@ -6994,7 +7063,7 @@
         title: '操作記錄（影片）',
         back: '返回影片上傳',
         backView: 'video-view',
-        hint: '記錄誰在什麼時候上傳或刪除了誰的影片，只保留最近 500 筆，最新的排最上面。' +
+        hint: '記錄誰在什麼時候上傳或刪除了誰的影片，只保留最近 5000 筆，最新的排最上面。' +
               '出勤與名單的記錄不在這裡，要看請從出勤系統那邊開。',
       },
       main: {
@@ -7002,7 +7071,7 @@
         back: '返回出勤系統',
         backView: 'attendance-view',
         hint: '記錄出勤狀態的手動更動（系統自動補的預設值不算），以及名單、場次改名、' +
-              '玩家改名／已退出、戰績修改。只保留最近 500 筆，最新的排最上面。' +
+              '玩家改名／已退出、戰績修改。只保留最近 5000 筆，最新的排最上面。' +
               '影片的上傳記錄不在這裡，要看請從影片上傳那邊開。',
       },
     };
@@ -7031,7 +7100,17 @@
           listEl.innerHTML = '<div class="activity-log-empty">目前還沒有任何紀錄</div>';
           return;
         }
-        listEl.innerHTML = logs.map(function (l) {
+        // 講清楚「查得到的範圍到哪」。記錄是滾動保留的，超過上限就把最舊的蓋掉——
+        // 沒寫的話，查不到的人會以為是「沒有人改過」，而不是「已經被蓋掉了」。
+        var oldest = toTaipeiTime(logs[logs.length - 1].time);
+        var range = '<div class="activity-log-range">目前保留 ' + logs.length + ' 筆，' +
+          '最舊到 ' + oldest + '。' +
+          (logs.length >= 5000
+            ? '已經滿了，比這個時間更早的異動已經被新的蓋掉，查不到。'
+            : '這個時間之後的異動都查得到。') +
+          '<br>查不到的時候，可以看出勤系統那一列的「最後修改」——' +
+          '那個時間永遠都在，只是看不出是誰改的。</div>';
+        listEl.innerHTML = range + logs.map(function (l) {
           return '<div class="activity-log-row">' +
             '<div class="activity-log-time">' + toTaipeiTime(l.time) + '</div>' +
             '<div class="activity-log-desc">' + l.description + '</div>' +

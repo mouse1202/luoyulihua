@@ -49,9 +49,13 @@ async function chk<T>(p: PromiseLike<{ data: T; error: { message: string } | nul
   return data;
 }
 
+// 操作記錄保留幾筆。原本是 500，但實際用量約每天 31 筆 —— 只蓋得住兩個半星期，
+// 三週前的異動要查「是誰改的」就已經查不到了。這張表很小，放大到 5000 大概是半年。
+const ACTIVITY_LOG_KEEP = 5000;
+
 async function appendActivityLog(actorEmail: string, actorRole: string, description: string) {
   await db.from("activity_log").insert({ actor_email: actorEmail || "", actor_role: actorRole || "", description });
-  const { data } = await db.from("activity_log").select("id").order("id", { ascending: false }).range(500, 500);
+  const { data } = await db.from("activity_log").select("id").order("id", { ascending: false }).range(ACTIVITY_LOG_KEEP, ACTIVITY_LOG_KEEP);
   if (data && data.length > 0) {
     await db.from("activity_log").delete().lte("id", data[0].id);
   }
@@ -59,7 +63,7 @@ async function appendActivityLog(actorEmail: string, actorRole: string, descript
 
 async function appendVideoLog(actorEmail: string, actorRole: string, description: string) {
   await db.from("video_activity_log").insert({ actor_email: actorEmail || "", actor_role: actorRole || "", description });
-  const { data } = await db.from("video_activity_log").select("id").order("id", { ascending: false }).range(500, 500);
+  const { data } = await db.from("video_activity_log").select("id").order("id", { ascending: false }).range(ACTIVITY_LOG_KEEP, ACTIVITY_LOG_KEEP);
   if (data && data.length > 0) {
     await db.from("video_activity_log").delete().lte("id", data[0].id);
   }
@@ -113,8 +117,13 @@ async function getAttendanceCandidates() {
 }
 
 async function getAttendanceByDate(date: string) {
-  const { data } = await db.from("attendance_records").select("name,job,status").eq("date_label", date);
-  return (data ?? []).map((r) => ({ name: r.name, job: r.job, status: r.status }));
+  const { data } = await db.from("attendance_records").select("name,job,status,updated_at").eq("date_label", date);
+  return (data ?? []).map((r) => ({
+    name: r.name, job: r.job, status: r.status,
+    // 這一筆最後是什麼時候被改的。操作記錄只留最近 ACTIVITY_LOG_KEEP 筆，
+    // 更早的異動查不到「是誰」，但這個時間永遠都在。
+    updatedAt: r.updated_at ? String(r.updated_at).slice(0, 19).replace("T", " ") : "",
+  }));
 }
 
 async function getRosterByDate(date: string, session: string) {
