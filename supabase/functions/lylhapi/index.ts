@@ -939,27 +939,19 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       note:        String(payload.note ?? "").trim(),
     }, { onConflict: "battle_date,battle_time,my_guild,opp_guild" }).select());
 
-    // 重傳同一場時先清掉舊的名單，避免新舊混在一起
-    await db.from("battle_players").delete().eq("battle_id", battle.id);
-    await chk(db.from("battle_players").insert(players.map((p: any) => ({
-      battle_id: battle.id,
-      side: p.side === "opp" ? "opp" : "my",
-      guild_name: String(p.guildName ?? "").trim(),
-      name: String(p.name ?? "").trim(),
-      job: String(p.job ?? "").trim(),
-      kills: Math.round(Number(p.kills) || 0),
-      assists: Math.round(Number(p.assists) || 0),
-      res: Math.round(Number(p.res) || 0),
-      pvp: Number(p.pvp) || 0,
-      bld: Number(p.bld) || 0,
-      heal: Number(p.heal) || 0,
-      tank: Number(p.tank) || 0,
-      heavy: Math.round(Number(p.heavy) || 0),
-      feather: Math.round(Number(p.feather) || 0),
-      bone: Math.round(Number(p.bone) || 0),
-    }))).select("id"));
+    // 重傳同一場時先清掉舊的名單，避免新舊混在一起。
+    //
+    // 刪與寫走同一個資料庫函式（0015 migration），整個包在一個交易裡並用
+    // battle_id 上鎖 —— 以前是兩個獨立的請求，同一場被連送兩次就會變成
+    // 刪①→刪②→寫①→寫②，兩份都留下來。10/01 約戰 vs 夏夜淺酌就是這樣
+    // 變成 240 筆／120 人的。
+    const { data: written, error: wErr } = await db.rpc("save_battle_players", {
+      p_battle_id: battle.id,
+      p_rows: players,
+    });
+    if (wErr) throw new Error(wErr.message);
 
-    return { success: true, id: battle.id, myKills, oppKills, result: battle.result, players: players.length };
+    return { success: true, id: battle.id, myKills, oppKills, result: battle.result, players: Number(written) || 0 };
   },
 
   listBattles: async () => {
