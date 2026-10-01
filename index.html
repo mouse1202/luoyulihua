@@ -4100,16 +4100,52 @@
     // 隊伍/格子的結構是固定的，所以能複製的就是「誰排在哪一格 + 指揮」這份配置。
     function openCopyRosterConfigDialog() {
       var currentDate = getSharedDate();
-      var srcSelect = document.getElementById('roster-date');
-      var labels = Array.prototype.slice.call(srcSelect.options)
-        .map(function (o) { return o.value; })
+
+      /* 來源清單要用「全部的日期」，不是上面那個日期下拉。
+         那個下拉被月份分頁過濾過，拿它來組的話複製就跨不了月 ——
+         每個月月初的第一場都接不到上個月月底的配置，而且像 11/01 那種
+         該月只有一場的情況，扣掉自己就空了，連選單都開不出來。
+         後端沒有這個限制，給它哪一天都讀得到。 */
+      var allLabels = sortDateLabelsAscending_(knownDateLabels || [])
         .filter(function (v) { return v && v !== currentDate && v !== NEW_DATE_LABEL_VALUE; });
-      if (labels.length === 0) { showAlertModal('目前沒有其他日期可以複製'); return; }
+      if (allLabels.length === 0) { showAlertModal('目前沒有其他日期可以複製'); return; }
 
       var sessionText = (currentRosterSession === '2') ? '第二場' : '第一場';
-      var optionsHtml = labels.map(function (v) {
-        var safe = v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-        return '<option value="' + safe + '">' + safe + '</option>';
+      var esc = function (v) {
+        return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+      };
+
+      // 跨月之後清單會變長，依月份分組，不然是一長串找不到東西。
+      // 新的月份排前面 —— 要複製的通常是最近幾場。
+      var used = {};
+      var groups = [];
+      monthTabs.slice().reverse().forEach(function (idx) {
+        var inMonth = labelsInMonthIdx_(idx).filter(function (v) {
+          return allLabels.indexOf(v) !== -1 && !used[v];
+        });
+        inMonth.forEach(function (v) { used[v] = true; });
+        if (inMonth.length) groups.push({ text: monthTabText_(idx), labels: inMonth.reverse() });
+      });
+      var rest = allLabels.filter(function (v) { return !used[v]; });
+      if (rest.length) groups.push({ text: '其他', labels: rest.reverse() });
+
+      // 預設選「目前這天的前一場」—— 最常做的就是接續上一場的配置，
+      // 這樣月初第一場打開就直接指到上個月最後一場。
+      //
+      // 用 sortDateLabelsAscending_ 排好之後抓自己前面那一個，不是直接比字串：
+      // 標籤是自由文字，直接比大小遇到「其他」那種非 MMDD 的會排得亂七八糟。
+      var sortedAll = sortDateLabelsAscending_(knownDateLabels || []);
+      var at = sortedAll.indexOf(currentDate);
+      var preset = '';
+      for (var i = at - 1; i >= 0; i--) {
+        if (allLabels.indexOf(sortedAll[i]) !== -1) { preset = sortedAll[i]; break; }
+      }
+      if (!preset) preset = allLabels[allLabels.length - 1];
+
+      var optionsHtml = groups.map(function (g) {
+        return '<optgroup label="' + esc(g.text) + '">' + g.labels.map(function (v) {
+          return '<option value="' + esc(v) + '"' + (v === preset ? ' selected' : '') + '>' + esc(v) + '</option>';
+        }).join('') + '</optgroup>';
       }).join('');
 
       var overlay = document.createElement('div');
@@ -4117,7 +4153,7 @@
       overlay.innerHTML =
         '<div class="modal-box">' +
           '<div class="modal-title">複製其他天配置</div>' +
-          '<div class="modal-hint">選一個日期，把該天「' + sessionText + '」的排表配置（職業／姓名／備註＋指揮）複製到目前這天這一場。複製後會立即存檔、覆蓋目前內容。</div>' +
+          '<div class="modal-hint">選一個日期，把該天「' + sessionText + '」的排表配置（職業／姓名／備註＋指揮）複製到目前這天這一場。可以跨月份選，預設是前一場。複製後會立即存檔、覆蓋目前內容。</div>' +
           '<select class="modal-input" id="copy-roster-source">' + optionsHtml + '</select>' +
           '<div class="modal-actions">' +
             '<button type="button" class="modal-btn modal-btn-cancel">取消</button>' +
