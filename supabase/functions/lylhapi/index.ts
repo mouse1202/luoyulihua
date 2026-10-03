@@ -283,6 +283,7 @@ const NEED_LEVEL: Record<string, "admin" | "export"> = {
   getActivityLog: "admin",
   saveBattle: "admin", deleteBattle: "admin", updateBattle: "admin",
   renamePlayer: "admin", markPlayerLeft: "admin", getPlayerLeftPreview: "admin",
+  listRenameRequests: "admin", approveRenameRequest: "admin", rejectRenameRequest: "admin",
   deletePlayerAlias: "admin", getUnmatchedNames: "admin", getPlayerAliases: "admin",
   // 文書也能做的
   exportAttendanceAll: "export", saveAnnouncement: "export",
@@ -508,6 +509,161 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
         `戰績 ${res.battles} 筆改用別名對照，沒有改寫${mergedNote}）`);
     }
     return res;
+  },
+
+  /* ── 改名申請 ───────────────────────────────────────────
+     幫眾自己送、管理按同意。真正的改名還是走 rename_player，
+     這裡只負責「誰想改成什麼」與「誰同意了」。
+
+     跟管理自己用的改名差一道硬擋：新名字只要在現有資料裡出現過就不給。
+     送出時擋一次、同意時再擋一次 —— 中間可能隔好幾天，那段時間剛好
+     有別人用了那個名字的話，同意的當下要擋下來。
+
+     注意：一般成員這邊沒有伺服器端身分（登入只是用名字查核准狀態），
+     所以「只能改自己」是前端鎖的，後端這裡只驗得到「舊名字確實是一個
+     已核准的登入身分」。這跟出勤登記的信任模型一致。 */
+
+  nameInUse: async (name: string) => {
+    const { data, error } = await db.rpc("name_in_use", { p_name: normName(name) });
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  submitRenameRequest: async (oldNameIn: string, newNameIn: string, reasonIn?: string) => {
+    const oldName = normName(oldNameIn), newName = normName(newNameIn);
+    if (!oldName || !newName) return { success: false, message: "名字不能是空白" };
+    if (oldName === newName) return { success: false, message: "新舊名字一樣" };
+    if (oldName === OWNER_NAME) {
+      return { success: false, message: "擁有者的名字寫死在程式裡，不能用申請的方式改" };
+    }
+
+    const { data: me } = await db.from("access_requests")
+      .select("name,status").eq("name", oldName).maybeSingle();
+    if (!me || me.status !== "已核准") {
+      return { success: false, message: "找不到你的登入身分，請先登入再送出申請" };
+    }
+
+    const { data: used, error: uErr } = await db.rpc("name_in_use", { p_name: newName });
+    if (uErr) throw new Error(uErr.message);
+    if (used && used.inUse) {
+      return { success: false, code: "NAME_TAKEN", where: used.where,
+        message: `「${newName}」已經有人用了（${(used.where || []).join("、")}），請換一個` };
+    }
+
+    const { error } = await db.from("rename_requests").insert({
+      requester: oldName, old_name: oldName, new_name: newName,
+      reason: String(reasonIn ?? "").trim().slice(0, 200),
+    });
+    if (error) {
+      // 一個人同時只能有一筆待審核（rename_requests_one_pending 部分唯一索引）
+      if (String(error.code) === "23505") {
+        return { success: false, code: "ALREADY_PENDING",
+          message: "你已經有一筆改名申請在等管理審核了" };
+      }
+      throw new Error(error.message);
+    }
+    await appendActivityLog(oldName, oldName,
+      `${oldName} 送出改名申請：「${oldName}」→「${newName}」`);
+    return { success: true };
+  },
+
+  // 自己看自己的最近一筆（含已處理的，這樣才知道被退回還是過了）
+  getMyRenameRequest: async (nameIn: string) => {
+    const name = normName(nameIn);
+    if (!name) return null;
+    const { data } = await db.from("rename_requests").select("*")
+      .eq("requester", name).order("id", { ascending: false }).limit(1);
+    const r = data && data[0];
+    if (!r) return null;
+    return {
+      id: r.id, oldName: r.old_name, newName: r.new_name, reason: r.reason,
+      status: r.status, reviewNote: r.review_note || "", reviewedBy: r.reviewed_by || "",
+      time: r.created_at ? String(r.created_at).slice(0, 16).replace("T", " ") : "",
+    };
+  },
+
+  // 自己把還沒被處理的那筆撤掉
+  cancelRenameRequest: async (id: number, nameIn: string) => {
+    const name = normName(nameIn);
+    const { data } = await db.from("rename_requests").delete()
+      .eq("id", id).eq("requester", name).eq("status", "待審核").select("id");
+    if (!data || !data.length) return { success: false, message: "這筆申請已經被處理過了，撤不掉" };
+    return { success: true };
+  },
+
+  listRenameRequests: async () => {
+    const { data } = await db.from("rename_requests").select("*")
+      .order("status", { ascending: true }).order("id", { ascending: false });
+    const rows = data ?? [];
+    // 待審核的排最前面，其餘照時間新到舊
+    rows.sort((a, b) => {
+      const pa = a.status === "待審核" ? 0 : 1, pb = b.status === "待審核" ? 0 : 1;
+      return pa - pb || b.id - a.id;
+    });
+    // 待審核的順便查一下新名字現在還能不能用，管理一眼看得到
+    const out = [];
+    for (const r of rows) {
+      let taken = null;
+      if (r.status === "待審核") {
+        const { data: u } = await db.rpc("name_in_use", { p_name: r.new_name });
+        if (u && u.inUse) taken = u.where;
+      }
+      out.push({
+        id: r.id, requester: r.requester, oldName: r.old_name, newName: r.new_name,
+        reason: r.reason, status: r.status,
+        reviewedBy: r.reviewed_by || "", reviewNote: r.review_note || "",
+        time: r.created_at ? String(r.created_at).slice(0, 16).replace("T", " ") : "",
+        reviewedAt: r.reviewed_at ? String(r.reviewed_at).slice(0, 16).replace("T", " ") : "",
+        takenNow: taken,   // null＝還可以用；陣列＝已經被佔走了
+      });
+    }
+    return out;
+  },
+
+  approveRenameRequest: async (id: number, actorName?: string) => {
+    const { data: r } = await db.from("rename_requests").select("*").eq("id", id).maybeSingle();
+    if (!r) return { success: false, message: "找不到這筆申請" };
+    if (r.status !== "待審核") return { success: false, message: "這筆申請已經處理過了" };
+
+    // 送出到現在可能隔了好幾天，新名字說不定已經被別人用掉，所以再擋一次
+    const { data: used, error: uErr } = await db.rpc("name_in_use", { p_name: r.new_name });
+    if (uErr) throw new Error(uErr.message);
+    if (used && used.inUse) {
+      return { success: false, code: "NAME_TAKEN", where: used.where,
+        message: `「${r.new_name}」現在已經有人用了（${(used.where || []).join("、")}），不能改過去` };
+    }
+
+    // 幫眾自助這條路不給合併：有衝突就是退回，讓管理自己判斷
+    const { data: res, error } = await db.rpc("rename_player", {
+      p_old: r.old_name, p_new: r.new_name, p_actor: actorName ?? "", p_merge: false,
+    });
+    if (error) throw new Error(error.message);
+    if (!res || !res.success) return res || { success: false, message: "改名失敗" };
+
+    await db.from("rename_requests").update({
+      status: "已同意", reviewed_by: actorName ?? "", reviewed_at: new Date().toISOString(),
+    }).eq("id", id);
+
+    await appendActivityLog(actorName || "", actorName || "",
+      `${actorName || "有人"} 同意了改名申請：「${r.old_name}」→「${r.new_name}」` +
+      `（名單 ${res.roster} 筆、出勤 ${res.attendance} 筆、排表 ${res.slots} 筆、` +
+      `指揮 ${res.commanders} 筆、影片 ${res.videos} 筆、登入身分 ${res.access} 筆；` +
+      `戰績 ${res.battles} 筆改用別名對照）`);
+    return { success: true, detail: res };
+  },
+
+  rejectRenameRequest: async (id: number, actorName?: string, noteIn?: string) => {
+    const { data: r } = await db.from("rename_requests").select("*").eq("id", id).maybeSingle();
+    if (!r) return { success: false, message: "找不到這筆申請" };
+    if (r.status !== "待審核") return { success: false, message: "這筆申請已經處理過了" };
+    await db.from("rename_requests").update({
+      status: "已退回", reviewed_by: actorName ?? "", reviewed_at: new Date().toISOString(),
+      review_note: String(noteIn ?? "").trim().slice(0, 200),
+    }).eq("id", id);
+    await appendActivityLog(actorName || "", actorName || "",
+      `${actorName || "有人"} 退回了改名申請：「${r.old_name}」→「${r.new_name}」` +
+      (noteIn ? `（理由：${String(noteIn).trim()}）` : ""));
+    return { success: true };
   },
 
   // 「已退出」：這個人離開了，不是改名。

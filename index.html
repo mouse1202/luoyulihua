@@ -1724,6 +1724,65 @@
     .battle-win  { color: #7bd88f; font-weight: 700; }
     .battle-lose { color: #ef8f8f; font-weight: 700; }
 
+    /* ── 改名申請 ── */
+    .rename-req-box {
+      border: 1px solid #6B1023;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      background: #0A0A0A;
+    }
+
+    .rename-req-reload { margin-left: 10px; font-size: 12px; padding: 2px 8px; }
+
+    .rename-req-row {
+      display: grid;
+      grid-template-columns: 1.1fr 1.6fr 1.2fr 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(212, 168, 40, 0.18);
+      font-size: 14px;
+    }
+
+    .rename-req-row:last-child { border-bottom: none; }
+
+    .rename-req-arrow {
+      color: #d4af37;
+      font-weight: 700;
+      word-break: break-all;
+    }
+
+    .rename-req-reason {
+      font-size: 13px;
+      opacity: 0.75;
+      word-break: break-all;
+    }
+
+    .rename-req-taken {
+      color: #ef8f8f;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .rename-req-done { opacity: 0.55; }
+
+    .rename-req-actions { display: flex; gap: 6px; }
+
+    /* 自己那一張小卡（出勤系統的對話框裡） */
+    .rename-req-mine {
+      border: 1px solid #6B1023;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    @media (max-width: 760px) {
+      .rename-req-row { grid-template-columns: 1fr; }
+    }
+
     /* ── 對手分析 ── */
     .bt-opp-pick {
       display: flex;
@@ -2542,7 +2601,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias','markPlayerLeft','getPlayerLeftPreview'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias','markPlayerLeft','getPlayerLeftPreview','nameInUse','submitRenameRequest','getMyRenameRequest','cancelRenameRequest','listRenameRequests','approveRenameRequest','rejectRenameRequest'];
 
   // 排表匯出的職業底色。存的是不含 # 的六碼，argb() 會補上 FF。
   // 都是淺色系，配預設的黑字才看得清楚。
@@ -2948,6 +3007,7 @@
           <span class="roster-title">出勤系統</span>
           <div class="roster-header-actions">
             <!-- 排表工具／管理名單／審核申請／操作記錄／名字對照 已經移到視窗左邊的 .side-nav -->
+            <button type="button" class="roster-back-btn" id="rename-req-btn" onclick="openRenameRequestDialog()">改名申請</button>
             <button type="button" class="roster-back-btn" onclick="closeAttendanceView()">回首頁</button>
           </div>
         </div>
@@ -3157,6 +3217,16 @@
         </div>
         <div class="roster-body">
           <p class="password-hint">這裡是完整的人員清冊：核准後對方才能使用網頁功能；已核准的人也能隨時點「剔除」立刻收回權限。「管理」才能輸入總管理密碼使用排表工具/名單管理/審核申請等所有功能；「文書」比幫眾多一項：可輸入匯出密碼匯出出勤紀錄；「幫眾」登入後只能開出勤系統改自己的出勤狀態。</p>
+
+          <!-- 改名申請：幫眾自己送的，管理在這裡按同意／退回。
+               同意就直接執行改名（名單、出勤、排表、指揮、影片、登入身分一起改，
+               戰績記曾用名對照）。新名字被別人佔走的話這裡會先標出來。 -->
+          <div class="rename-req-box">
+            <div class="access-admin-manual-title">改名申請
+              <button type="button" class="roster-back-btn rename-req-reload" onclick="loadRenameRequests()">🔄 重新讀取</button>
+            </div>
+            <div id="rename-req-admin-list"></div>
+          </div>
 
           <div class="access-admin-manual-add">
             <span class="access-admin-manual-title">手動新增成員（不用經過申請流程，直接核准）</span>
@@ -7135,10 +7205,233 @@
     function openAccessAdminView() {
       showView('access-admin-view');
       loadAccessAdminList();
+      loadRenameRequests();
     }
 
     function closeAccessAdminView() {
       showView('attendance-view');
+    }
+
+    /* ── 改名申請 ──────────────────────────────────────────
+       幫眾在出勤系統按「改名申請」送出，管理在「審核申請」頁按同意。
+       同意就直接執行改名：名單、出勤、排表、指揮、影片、登入身分一起改掉，
+       戰績不改寫、記一筆曾用名對照（下次重匯 CSV 才不會又變回舊名字）。
+
+       只能改自己：舊名字鎖成登入的那個名字，畫面上不給編輯。
+       新名字只要在現有資料裡出現過就不給送 —— 送出時擋一次、
+       管理按同意時後端再擋一次（中間可能隔好幾天）。 */
+
+    function renameReqEsc_(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function openRenameRequestDialog() {
+      var me = currentAccessRoleName || currentAccessName || '';
+      if (!me) { showAlertModal('請先登入再送出改名申請。'); return; }
+
+      var old = document.getElementById('rename-req-overlay');
+      if (old) old.remove();
+
+      var el = document.createElement('div');
+      el.id = 'rename-req-overlay';
+      el.className = 'modal-overlay';
+      el.onclick = function (e) { if (e.target === el) el.remove(); };
+      el.innerHTML =
+        '<div class="modal-box" onclick="event.stopPropagation()">' +
+          '<div class="modal-title">改名申請</div>' +
+          '<div id="rename-req-mine"></div>' +
+          '<div class="modal-hint">送出後要等管理同意才會生效。同意之後，' +
+            '名單、出勤、排表、指揮、影片、登入身分都會一起改成新名字；' +
+            '戰績會記一筆曾用名對照，畫面上一樣顯示新名字。' +
+            '<br><b>改好之後要重新登入</b>，這個分頁還是舊名字。</div>' +
+          '<label class="bt-edit-full">目前的名字' +
+            '<input type="text" class="modal-input" id="rename-req-old" value="' + renameReqEsc_(me) + '" readonly>' +
+          '</label>' +
+          '<label class="bt-edit-full">想改成' +
+            '<input type="text" class="modal-input" id="rename-req-new" maxlength="30" placeholder="新的角色名稱">' +
+          '</label>' +
+          '<label class="bt-edit-full">原因（選填）' +
+            '<input type="text" class="modal-input" id="rename-req-reason" maxlength="200" placeholder="例如：遊戲裡已經改名了">' +
+          '</label>' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="modal-btn" onclick="document.getElementById(' + "'rename-req-overlay'" + ').remove()">關閉</button>' +
+            '<button type="button" class="modal-btn modal-btn-confirm" id="rename-req-send" onclick="submitMyRenameRequest()">送出申請</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(el);
+      loadMyRenameRequest();
+    }
+
+    function loadMyRenameRequest() {
+      var box = document.getElementById('rename-req-mine');
+      if (!box) return;
+      var me = currentAccessRoleName || currentAccessName || '';
+      google.script.run.withSuccessHandler(function (r) {
+        var box2 = document.getElementById('rename-req-mine');
+        if (!box2) return;
+        if (!r) { box2.innerHTML = ''; return; }
+        var sendBtn = document.getElementById('rename-req-send');
+        var txt = '你上一筆申請：「' + renameReqEsc_(r.oldName) + '」→「' + renameReqEsc_(r.newName) + '」' +
+          '（' + renameReqEsc_(r.time) + '）<br>狀態：<b>' + renameReqEsc_(r.status) + '</b>';
+        if (r.status === '已退回' && r.reviewNote) {
+          txt += '<br>退回理由：' + renameReqEsc_(r.reviewNote);
+        }
+        if (r.status === '待審核') {
+          txt += '<br>還在等管理審核，處理完才能再送一筆。' +
+            ' <button type="button" class="roster-back-btn rename-req-reload" onclick="cancelMyRenameRequest(' + r.id + ')">撤回這筆</button>';
+          if (sendBtn) sendBtn.disabled = true;
+        }
+        box2.innerHTML = '<div class="rename-req-mine">' + txt + '</div>';
+      }).withFailureHandler(function () { /* 讀不到就不顯示，不擋送出 */ }).getMyRenameRequest(me);
+    }
+
+    function cancelMyRenameRequest(id) {
+      var me = currentAccessRoleName || currentAccessName || '';
+      google.script.run.withSuccessHandler(function (res) {
+        if (res && res.success) {
+          var b = document.getElementById('rename-req-send');
+          if (b) b.disabled = false;
+          loadMyRenameRequest();
+        } else {
+          showAlertModal((res && res.message) || '撤回失敗');
+        }
+      }).withFailureHandler(function (err) {
+        showAlertModal('撤回失敗：' + err.message);
+      }).cancelRenameRequest(id, me);
+    }
+
+    function submitMyRenameRequest() {
+      var me = currentAccessRoleName || currentAccessName || '';
+      var nw = (document.getElementById('rename-req-new').value || '').trim();
+      var reason = (document.getElementById('rename-req-reason').value || '').trim();
+      if (!nw) { showAlertModal('請輸入想改成的名字'); return; }
+      if (nw === me) { showAlertModal('新名字跟目前的名字一樣'); return; }
+
+      var btn = document.getElementById('rename-req-send');
+      btn.disabled = true; btn.textContent = '送出中…';
+      function done() { btn.disabled = false; btn.textContent = '送出申請'; }
+
+      google.script.run.withSuccessHandler(function (res) {
+        if (res && res.success) {
+          var el = document.getElementById('rename-req-overlay');
+          if (el) el.remove();
+          showAlertModal('申請送出了：「' + me + '」→「' + nw + '」' + '\n\n' +
+            '等管理同意之後才會生效。同意後請重新登入，用新名字進來。');
+          return;
+        }
+        done();
+        showAlertModal((res && res.message) || '送出失敗');
+      }).withFailureHandler(function (err) {
+        done();
+        showAlertModal('送出失敗：' + err.message);
+      }).submitRenameRequest(me, nw, reason);
+    }
+
+    /* ── 管理端 ── */
+
+    function loadRenameRequests() {
+      var box = document.getElementById('rename-req-admin-list');
+      if (!box) return;
+      box.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
+      google.script.run.withSuccessHandler(function (rows) {
+        rows = rows || [];
+        if (!rows.length) {
+          box.innerHTML = '<div class="access-admin-empty">目前沒有任何改名申請。</div>';
+          return;
+        }
+        box.innerHTML = rows.map(function (r) {
+          var pending = r.status === '待審核';
+          var taken = pending && r.takenNow && r.takenNow.length;
+          var right;
+          if (!pending) {
+            right = '<span>' + renameReqEsc_(r.status) +
+              (r.reviewedBy ? '（' + renameReqEsc_(r.reviewedBy) + '）' : '') + '</span>';
+          } else if (taken) {
+            // 送出之後才被別人用掉，按下去也會被後端擋，乾脆先不給按
+            right = '<span class="rename-req-taken">新名字已被佔用：' +
+              renameReqEsc_(r.takenNow.join('、')) + '</span>' +
+              '<div class="rename-req-actions">' +
+              '<button type="button" class="access-admin-btn" onclick="rejectRenameReq(' + r.id + ')">退回</button></div>';
+          } else {
+            right = '<div class="rename-req-actions">' +
+              '<button type="button" class="access-admin-btn access-admin-btn-approve" onclick="approveRenameReq(' + r.id + ')">同意</button>' +
+              '<button type="button" class="access-admin-btn" onclick="rejectRenameReq(' + r.id + ')">退回</button></div>';
+          }
+          return '<div class="rename-req-row' + (pending ? '' : ' rename-req-done') + '">' +
+            '<span>' + renameReqEsc_(r.time) + '</span>' +
+            '<span class="rename-req-arrow">' + renameReqEsc_(r.oldName) + ' → ' + renameReqEsc_(r.newName) + '</span>' +
+            '<span class="rename-req-reason">' + (r.reason ? renameReqEsc_(r.reason) : '（沒寫原因）') + '</span>' +
+            '<span>' + renameReqEsc_(r.status) + '</span>' +
+            right +
+            '</div>';
+        }).join('');
+      }).withFailureHandler(function (err) {
+        box.innerHTML = '<div class="access-admin-empty">讀取失敗：' + renameReqEsc_(err.message) + '</div>';
+      }).listRenameRequests();
+    }
+
+    function approveRenameReq(id) {
+      showConfirmModal('同意改名申請',
+        '同意之後會立刻執行改名：\n' +
+        '名單、出勤、排表、指揮、影片、登入身分都會改成新名字，' +
+        '戰績記一筆曾用名對照。\n\n' +
+        '這個動作不可逆（要改回去得再改一次名）。確定嗎？',
+        function () {
+          google.script.run.withSuccessHandler(function (res) {
+            if (res && res.success) {
+              showAlertModal('改名完成。對方要重新登入才會變成新名字。');
+              loadRenameRequests();
+              loadAccessAdminList();
+              return;
+            }
+            // rename_player 自己的擋下理由（同場戰鬥、新名字已有資料…）照原文顯示
+            showAlertModal('沒有改成：' + ((res && res.message) || '未知原因'));
+            loadRenameRequests();
+          }).withFailureHandler(function (err) {
+            showAlertModal('改名失敗：' + err.message);
+          }).approveRenameRequest(id, currentAccessRoleName || currentAccessName || '');
+        });
+    }
+
+    // 沒有通用的輸入對話框，這裡自己畫一個小的（要讓管理填退回理由）
+    function rejectRenameReq(id) {
+      var old = document.getElementById('rename-reject-overlay');
+      if (old) old.remove();
+      var el = document.createElement('div');
+      el.id = 'rename-reject-overlay';
+      el.className = 'modal-overlay';
+      el.onclick = function (e) { if (e.target === el) el.remove(); };
+      el.innerHTML =
+        '<div class="modal-box" onclick="event.stopPropagation()">' +
+          '<div class="modal-title">退回改名申請</div>' +
+          '<div class="modal-hint">可以寫個理由給對方看（選填）。</div>' +
+          '<input type="text" class="modal-input" id="rename-reject-note" maxlength="200" placeholder="例如：遊戲裡還沒改，先改好再申請">' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="modal-btn" onclick="closeRenameRejectDialog()">取消</button>' +
+            '<button type="button" class="modal-btn modal-btn-confirm" onclick="doRejectRenameReq(' + id + ')">退回</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(el);
+    }
+
+    function closeRenameRejectDialog() {
+      var el = document.getElementById('rename-reject-overlay');
+      if (el) el.remove();
+    }
+
+    function doRejectRenameReq(id) {
+      var noteEl = document.getElementById('rename-reject-note');
+      var note = noteEl ? noteEl.value.trim() : '';
+      var el = document.getElementById('rename-reject-overlay');
+      if (el) el.remove();
+      google.script.run.withSuccessHandler(function (res) {
+        if (!res || !res.success) { showAlertModal((res && res.message) || '退回失敗'); }
+        loadRenameRequests();
+      }).withFailureHandler(function (err) {
+        showAlertModal('退回失敗：' + err.message);
+      }).rejectRenameRequest(id, currentAccessRoleName || currentAccessName || '', note);
     }
 
     function loadAccessAdminList() {
