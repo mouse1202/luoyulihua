@@ -523,8 +523,12 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
      所以「只能改自己」是前端鎖的，後端這裡只驗得到「舊名字確實是一個
      已核准的登入身分」。這跟出勤登記的信任模型一致。 */
 
-  nameInUse: async (name: string) => {
-    const { data, error } = await db.rpc("name_in_use", { p_name: normName(name) });
+  // forName＝「這個名字是要給誰用的」。帶了的話，指向他自己的別名（＝他的舊名字）
+  // 不算被佔用 —— 改回原名是允許的。
+  nameInUse: async (name: string, forName?: string) => {
+    const { data, error } = await db.rpc("name_in_use", {
+      p_name: normName(name), p_for: normName(forName),
+    });
     if (error) throw new Error(error.message);
     return data;
   },
@@ -543,7 +547,9 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       return { success: false, message: "找不到你的登入身分，請先登入再送出申請" };
     }
 
-    const { data: used, error: uErr } = await db.rpc("name_in_use", { p_name: newName });
+    // 帶上申請人：指回他自己的別名（他以前的名字）不算被佔用，
+    // 不然 A→B 之後要改回 A 會被自己的舊名字擋掉。
+    const { data: used, error: uErr } = await db.rpc("name_in_use", { p_name: newName, p_for: oldName });
     if (uErr) throw new Error(uErr.message);
     if (used && used.inUse) {
       return { success: false, code: "NAME_TAKEN", where: used.where,
@@ -605,7 +611,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     for (const r of rows) {
       let taken = null;
       if (r.status === "待審核") {
-        const { data: u } = await db.rpc("name_in_use", { p_name: r.new_name });
+        const { data: u } = await db.rpc("name_in_use", { p_name: r.new_name, p_for: r.old_name });
         if (u && u.inUse) taken = u.where;
       }
       out.push({
@@ -626,7 +632,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     if (r.status !== "待審核") return { success: false, message: "這筆申請已經處理過了" };
 
     // 送出到現在可能隔了好幾天，新名字說不定已經被別人用掉，所以再擋一次
-    const { data: used, error: uErr } = await db.rpc("name_in_use", { p_name: r.new_name });
+    const { data: used, error: uErr } = await db.rpc("name_in_use", { p_name: r.new_name, p_for: r.old_name });
     if (uErr) throw new Error(uErr.message);
     if (used && used.inUse) {
       return { success: false, code: "NAME_TAKEN", where: used.where,
