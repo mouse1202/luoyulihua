@@ -2467,6 +2467,7 @@
       var rows = session.rows || [];
       var commanders = session.commanders || [];
       var substitutes = session.substitutes || [];
+      var onLeave = (payload && payload.onLeave) || [];
       var cmdMap = {}; commanders.forEach(function (c) { cmdMap[c.group] = c.name; });
       var groups = [], gIdx = {};
       rows.forEach(function (row) {
@@ -2507,6 +2508,31 @@
       var sr = aoa.length; aoa.push(['候補']); st(sr, 0, banner('999999','ffffff'));
       if (substitutes.length === 0) { aoa.push(['（無）']); }
       else { substitutes.forEach(function (s) { var r = aoa.length; aoa.push([s.name, s.job]); if (JOB_COLORS[s.job]) st(r, 0, solid(JOB_COLORS[s.job])); }); }
+
+      /* 請假名單放在排表右邊，空一欄當間隔。
+         請假是「那一天」的，不是「那一場」的，所以第一場、第二場兩張表都放同一份。
+         來源已經在前端依職業排好序（跟畫面上的順序同一套）。 */
+      var maxCols = 0;
+      aoa.forEach(function (row) { maxCols = Math.max(maxCols, row.length); });
+      var lc = maxCols + 1;
+      function putAt(r, c, v) {
+        while (aoa.length <= r) aoa.push([]);
+        var row = aoa[r];
+        while (row.length < c) row.push('');
+        row[c] = v;
+      }
+      putAt(0, lc, '請假（' + onLeave.length + ' 人）');
+      st(0, lc, banner('999999','ffffff'));
+      if (onLeave.length === 0) {
+        putAt(1, lc, '（無）');
+      } else {
+        onLeave.forEach(function (p, i) {
+          putAt(i + 1, lc, p.name);
+          putAt(i + 1, lc + 1, p.job || '');
+          if (JOB_COLORS[p.job]) st(i + 1, lc, solid(JOB_COLORS[p.job]));
+        });
+      }
+
       var ws = XLSX.utils.aoa_to_sheet(aoa);
       if (merges.length) ws['!merges'] = merges;
       styleOps.forEach(function (op) { var a = XLSX.utils.encode_cell({ r:op.r, c:op.c }); if (!ws[a]) ws[a] = { t:'s', v:'' }; ws[a].s = op.s; });
@@ -4604,6 +4630,19 @@
         };
       }
 
+      /* 當天請假的人。依職業排序（跟出勤系統、候補同一套 compareByJob_）。
+         職業以名單上的現職為準，不用 attendance_records 裡那個 —— 那是當初
+         登記時的職業，之後換職業的話會對不上。 */
+      var onLeaveList = [];
+      function buildOnLeave(records, candidates) {
+        var jobOf = {};
+        (candidates || []).forEach(function (c) { jobOf[c.name] = c.job || ''; });
+        onLeaveList = (records || [])
+          .filter(function (r) { return r.status === '請假'; })
+          .map(function (r) { return { name: r.name, job: jobOf[r.name] || r.job || '' }; })
+          .sort(compareByJob_);
+      }
+
       function finish(session1Result, session2Result) {
         var hasAny1 = (session1Result.rows || []).some(function (r) { return r.name || r.job || r.note; });
         var hasAny2 = (session2Result.rows || []).some(function (r) { return r.name || r.job || r.note; });
@@ -4619,7 +4658,8 @@
           sessions: [
             buildSessionPayload('第一場', session1Result),
             buildSessionPayload('第二場', session2Result)
-          ]
+          ],
+          onLeave: onLeaveList
         };
 
         function onSuccess(res) {
@@ -4650,18 +4690,30 @@
 
       if (window.google && google.script && google.script.run) {
         var results = {};
-        var pending = 2;
-        function onOneSession(session, res) {
-          results[session] = res || {};
+        // 兩場排表 + 當天出勤紀錄 + 名單（拿現職職業），四個一起抓，都回來才組檔
+        var pending = 4;
+        var att = null, cands = null;
+        function onOnePart() {
           pending--;
-          if (pending === 0) finish(results['1'], results['2']);
+          if (pending === 0) {
+            buildOnLeave(att, cands);
+            finish(results['1'], results['2']);
+          }
         }
+        function onOneSession(session, res) { results[session] = res || {}; onOnePart(); }
         google.script.run.withSuccessHandler(function (res) { onOneSession('1', res); })
           .withFailureHandler(function () { onOneSession('1', {}); })
           .getRosterWithFallback(date, '1');
         google.script.run.withSuccessHandler(function (res) { onOneSession('2', res); })
           .withFailureHandler(function () { onOneSession('2', {}); })
           .getRosterWithFallback(date, '2');
+        // 抓不到就當作沒有請假的人，不要整個匯出失敗
+        google.script.run.withSuccessHandler(function (res) { att = res; onOnePart(); })
+          .withFailureHandler(function () { att = []; onOnePart(); })
+          .getAttendanceByDate(date);
+        google.script.run.withSuccessHandler(function (res) { cands = res; onOnePart(); })
+          .withFailureHandler(function () { cands = []; onOnePart(); })
+          .getAttendanceCandidates();
       } else {
         // 本機預覽（沒有 GAS 後端）：只能用目前畫面上這個場次的資料
         var currentRows = collectRosterData();
