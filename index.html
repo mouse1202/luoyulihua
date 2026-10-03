@@ -1724,6 +1724,131 @@
     .battle-win  { color: #7bd88f; font-weight: 700; }
     .battle-lose { color: #ef8f8f; font-weight: 700; }
 
+    /* ── 對手分析 ── */
+    .bt-opp-pick {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .bt-opp-pick select { min-width: 220px; }
+
+    .bt-opp-sum {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .bt-opp-card {
+      flex: 1 1 150px;
+      background: #0A0A0A;
+      border: 1px solid #6B1023;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .bt-opp-card .bt-opp-k {
+      font-size: 12px;
+      color: #FFFFEF;
+      opacity: 0.65;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .bt-opp-card .bt-opp-v {
+      font-size: 20px;
+      font-weight: 900;
+      color: #d4af37;
+    }
+
+    /* 勝負序列：由舊到新，勝綠負紅 */
+    .bt-opp-seq {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.9;
+      word-break: break-all;
+    }
+
+    .bt-opp-seq .bt-arrow {
+      color: #FFFFEF;
+      opacity: 0.45;
+      font-weight: 400;
+      margin: 0 4px;
+    }
+
+    /* 趨勢條：一場一格，綠＝勝、紅＝敗、灰＝平 */
+    .bt-opp-bars {
+      display: flex;
+      gap: 6px;
+      align-items: flex-end;
+      min-height: 34px;
+      margin-top: 4px;
+    }
+
+    .bt-opp-bar {
+      flex: 1 1 0;
+      min-width: 10px;
+      border-radius: 3px;
+    }
+
+    .bt-opp-bar-win  { height: 26px; background: #2e7d4f; align-self: flex-start; }
+    .bt-opp-bar-lose { height: 26px; background: #a32626; }
+    .bt-opp-bar-draw { height: 12px; background: #6e6e6e; align-self: center; }
+
+    .bt-opp-block {
+      background: #0A0A0A;
+      border: 1px solid #6B1023;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+
+    .bt-opp-block-title {
+      font-size: 13px;
+      color: #FFFFEF;
+      opacity: 0.65;
+      margin-bottom: 6px;
+    }
+
+    /* 明細表：八欄，跟場次列表同一套底色與框線 */
+    .bt-opp-row {
+      display: grid;
+      grid-template-columns: 1.1fr 1.4fr .7fr .9fr .9fr .9fr .9fr 1.2fr;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(212, 168, 40, 0.18);
+      font-size: 14px;
+      align-items: center;
+    }
+
+    .bt-opp-row-head {
+      font-weight: 700;
+      color: #d4af37;
+      border-bottom: 1px solid #6B1023;
+    }
+
+    .bt-opp-num { text-align: right; }
+
+    /* 沒填的進度留白，不要顯示 0 —— 0 是有意義的數字 */
+    .bt-opp-blank { opacity: 0.3; }
+
+    @media (max-width: 900px) {
+      .bt-opp-row {
+        grid-template-columns: 1fr 1fr;
+        font-size: 13px;
+      }
+      .bt-opp-row-head { display: none; }
+      .bt-opp-row span::before {
+        content: attr(data-k) '：';
+        opacity: 0.55;
+        font-size: 12px;
+      }
+      .bt-opp-num { text-align: left; }
+    }
+
     /* 單場：雙方合計對比 */
     .battle-compare { margin: 14px 0 6px; }
     .battle-compare .battle-row,
@@ -3079,6 +3204,7 @@
           <span class="roster-title">戰績</span>
           <button type="button" class="roster-back-btn" id="battle-tab-list" onclick="switchBattleTab('list')">場次</button>
           <button type="button" class="roster-back-btn" id="battle-tab-agg" onclick="switchBattleTab('agg')">累積統計</button>
+          <button type="button" class="roster-back-btn" id="battle-tab-opp" onclick="switchBattleTab('opp')">對手分析</button>
           <button type="button" class="roster-back-btn" onclick="showView('main-view')">回首頁</button>
         </div>
         <div class="roster-body">
@@ -3101,6 +3227,17 @@
           <div id="battle-pane-detail" class="hidden">
             <button type="button" class="roster-back-btn" onclick="switchBattleTab('list')">← 回場次列表</button>
             <div id="battle-detail"></div>
+          </div>
+
+          <!-- 敵對幫會過往戰績分析：挑一個對手，看跟他交手過的每一場 -->
+          <div id="battle-pane-opp" class="hidden">
+            <div class="bt-opp-pick">
+              <label>對手名稱
+                <select id="bt-opp-select" class="modal-input" onchange="renderOppAnalysis()"></select>
+              </label>
+              <span class="password-hint" id="bt-opp-hint"></span>
+            </div>
+            <div id="bt-opp-body"></div>
           </div>
 
           <!-- 累積統計 -->
@@ -7714,8 +7851,149 @@
       document.getElementById('battle-pane-list').classList.toggle('hidden', tab !== 'list');
       document.getElementById('battle-pane-detail').classList.toggle('hidden', tab !== 'detail');
       document.getElementById('battle-pane-agg').classList.toggle('hidden', tab !== 'agg');
+      document.getElementById('battle-pane-opp').classList.toggle('hidden', tab !== 'opp');
       if (tab === 'list') loadBattleList();
       if (tab === 'agg' && !battleAggCache) loadBattleAggregate();
+      if (tab === 'opp') loadOppAnalysis();
+    }
+
+    /* ── 敵對幫會過往戰績分析 ──────────────────────────────
+       挑一個對手，把跟他交手過的每一場列出來，附上總戰績、勝率、
+       勝負序列與趨勢條。資料就是戰績本身，沒有另外存一份。
+
+       進度那四欄是人工填的（在「修改戰績」裡），沒填的留白不顯示 0 ——
+       0 是有意義的數字，拿來當「沒填」會讓人誤判。 */
+
+    function oppBattles_(opp) {
+      // 由舊到新，跟趨勢條、勝負序列的方向一致
+      return battleListCache
+        .filter(function (b) { return b.oppGuild === opp; })
+        .slice()
+        .sort(function (a, b) {
+          var ka = String(a.date) + String(a.time || '');
+          var kb = String(b.date) + String(b.time || '');
+          return ka < kb ? -1 : (ka > kb ? 1 : 0);
+        });
+    }
+
+    // 場次編號：類型-日期[-第幾場]，例如 幫戰-20260411-2
+    function oppMatchNo_(b) {
+      var no = (b.type || '') + '-' + (b.date || '');
+      if (b.session) no += '-' + b.session;
+      return no;
+    }
+
+    function fmtBattleDate_(d) {
+      var v = String(d || '');
+      if (!/^\d{8}$/.test(v)) return v;
+      return v.slice(0, 4) + '/' + v.slice(4, 6) + '/' + v.slice(6, 8);
+    }
+
+    // 進度沒填就留一個「—」，不要寫 0
+    function oppNum_(v) {
+      return (v === null || v === undefined || v === '')
+        ? '<span class="bt-opp-blank">—</span>'
+        : escapeBattleHtml(String(v));
+    }
+
+    function loadOppAnalysis() {
+      var sel = document.getElementById('bt-opp-select');
+      var body = document.getElementById('bt-opp-body');
+
+      function fill() {
+        var opps = {};
+        battleListCache.forEach(function (b) { if (b.oppGuild) opps[b.oppGuild] = (opps[b.oppGuild] || 0) + 1; });
+        var names = Object.keys(opps).sort(function (a, b) {
+          return opps[b] - opps[a] || a.localeCompare(b, 'zh-Hant');
+        });
+        if (!names.length) {
+          sel.innerHTML = '';
+          body.innerHTML = '<div class="access-admin-empty">還沒有任何戰績，先上傳 CSV。</div>';
+          return;
+        }
+        var keep = sel.value;
+        sel.innerHTML = names.map(function (nm) {
+          return '<option value="' + escapeBattleHtml(nm) + '">' +
+            escapeBattleHtml(nm) + '（' + opps[nm] + ' 場）</option>';
+        }).join('');
+        if (keep && names.indexOf(keep) !== -1) sel.value = keep;
+        renderOppAnalysis();
+      }
+
+      if (battleListCache.length) { fill(); return; }
+      body.innerHTML = '<div class="access-admin-empty">讀取中…</div>';
+      battleApi('listBattles').then(function (rows) {
+        battleListCache = rows || [];
+        fill();
+      }).catch(function (err) {
+        body.innerHTML = '<div class="access-admin-empty">讀取失敗：' + escapeBattleHtml(err.message) + '</div>';
+      });
+    }
+
+    function renderOppAnalysis() {
+      var opp = document.getElementById('bt-opp-select').value;
+      var body = document.getElementById('bt-opp-body');
+      var hint = document.getElementById('bt-opp-hint');
+      var list = oppBattles_(opp);
+      if (!list.length) { body.innerHTML = '<div class="access-admin-empty">跟「' + escapeBattleHtml(opp) + '」還沒有交手紀錄。</div>'; return; }
+
+      var win = list.filter(function (b) { return b.result === '勝'; }).length;
+      var lose = list.filter(function (b) { return b.result === '敗'; }).length;
+      var draw = list.length - win - lose;
+      // 勝率算「勝 ÷ 全部」，平手照樣算在分母裡 —— 平手不是贏
+      var rate = Math.round(win / list.length * 100);
+      var recCls = win > lose ? 'battle-win' : (win < lose ? 'battle-lose' : '');
+
+      var seq = list.map(function (b) {
+        return '<span class="' + resultCls_(b.result) + '">' + escapeBattleHtml(b.result || '—') + '</span>';
+      }).join('<span class="bt-arrow">→</span>');
+
+      var bars = list.map(function (b) {
+        var k = b.result === '勝' ? 'win' : (b.result === '敗' ? 'lose' : 'draw');
+        return '<div class="bt-opp-bar bt-opp-bar-' + k + '" title="' +
+          escapeBattleHtml(fmtBattleDate_(b.date) + ' ' + oppMatchNo_(b) + ' ' + (b.result || '')) + '"></div>';
+      }).join('');
+
+      var rows = list.slice().reverse().map(function (b) {   // 表格由新到舊，最近的在最上面
+        return '<div class="bt-opp-row">' +
+          '<span data-k="日期">' + escapeBattleHtml(fmtBattleDate_(b.date)) + '</span>' +
+          '<span data-k="場次編號"><a href="javascript:void(0)" onclick="openBattleDetail(\'' + b.id + '\')">' +
+            escapeBattleHtml(oppMatchNo_(b)) + '</a></span>' +
+          '<span data-k="結果" class="' + resultCls_(b.result) + '">' + escapeBattleHtml(b.result || '—') + '</span>' +
+          '<span data-k="我方總進度" class="bt-opp-num">' + oppNum_(b.myTotal) + '</span>' +
+          '<span data-k="敵方總進度" class="bt-opp-num">' + oppNum_(b.oppTotal) + '</span>' +
+          '<span data-k="我方攻塔進度" class="bt-opp-num">' + oppNum_(b.myTower) + '</span>' +
+          '<span data-k="敵方攻塔進度" class="bt-opp-num">' + oppNum_(b.oppTower) + '</span>' +
+          '<span data-k="備註">' + escapeBattleHtml(b.note || '') + '</span>' +
+          '</div>';
+      }).join('');
+
+      var filled = list.filter(function (b) {
+        return b.myTotal !== null && b.myTotal !== undefined;
+      }).length;
+      hint.textContent = filled === list.length ? ''
+        : '進度欄有 ' + (list.length - filled) + ' 場還沒填，在「場次」列表按該場的「修改」可以補。';
+
+      body.innerHTML =
+        '<div class="bt-opp-sum">' +
+          '<div class="bt-opp-card"><span class="bt-opp-k">總戰績</span>' +
+            '<span class="bt-opp-v ' + recCls + '">' + win + '勝' + lose + '敗' +
+            (draw ? draw + '平' : '') + '</span></div>' +
+          '<div class="bt-opp-card"><span class="bt-opp-k">勝率</span>' +
+            '<span class="bt-opp-v ' + recCls + '">' + rate + '%</span></div>' +
+          '<div class="bt-opp-card"><span class="bt-opp-k">交手場數</span>' +
+            '<span class="bt-opp-v">' + list.length + '</span></div>' +
+        '</div>' +
+        '<div class="bt-opp-block"><div class="bt-opp-block-title">勝負序列（由舊到新）</div>' +
+          '<div class="bt-opp-seq">' + seq + '</div></div>' +
+        '<div class="bt-opp-block"><div class="bt-opp-block-title">趨勢條</div>' +
+          '<div class="bt-opp-bars">' + bars + '</div></div>' +
+        '<div class="bt-opp-row bt-opp-row-head">' +
+          '<span>日期</span><span>場次編號</span><span>結果</span>' +
+          '<span class="bt-opp-num">我方總進度</span><span class="bt-opp-num">敵方總進度</span>' +
+          '<span class="bt-opp-num">我方攻塔進度</span><span class="bt-opp-num">敵方攻塔進度</span>' +
+          '<span>備註</span>' +
+        '</div>' + rows;
     }
 
     var battleListCache = [];
@@ -7819,6 +8097,10 @@
             '<label>對手公會' + txt('oppg', b.oppGuild, '', 40) + '</label>' +
             '<label>我方擊敗' + txt('mk', b.myKills, '0', 6) + '</label>' +
             '<label>對方擊敗' + txt('ok', b.oppKills, '0', 6) + '</label>' +
+            '<label>我方總進度' + txt('mt', b.myTotal == null ? '' : b.myTotal, '留空＝沒填', 6) + '</label>' +
+            '<label>敵方總進度' + txt('ot', b.oppTotal == null ? '' : b.oppTotal, '留空＝沒填', 6) + '</label>' +
+            '<label>我方攻塔進度' + txt('mw', b.myTower == null ? '' : b.myTower, '留空＝沒填', 6) + '</label>' +
+            '<label>敵方攻塔進度' + txt('ow', b.oppTower == null ? '' : b.oppTower, '留空＝沒填', 6) + '</label>' +
           '</div>' +
           '<label class="bt-edit-full">對應場次' + labelSel + '</label>' +
           '<label class="bt-edit-full">第幾場' + sessSel + '</label>' +
@@ -7854,6 +8136,10 @@
         oppGuild: v('oppg'),
         myKills: v('mk'),
         oppKills: v('ok'),
+        myTotal: v('mt'),
+        oppTotal: v('ot'),
+        myTower: v('mw'),
+        oppTower: v('ow'),
         note: v('note'),
         dateLabel: v('label'),     // 空字串＝清掉綁定，回去用自動判斷
         session: v('session')      // 空字串＝回去用時間欄推斷

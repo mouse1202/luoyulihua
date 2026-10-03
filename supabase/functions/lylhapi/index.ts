@@ -963,6 +963,9 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       myKills: b.my_kills, oppKills: b.opp_kills, result: b.result,
       dateLabel: b.date_label || "", session: b.session || "",
       note: b.note, fileName: b.file_name,
+      // 進度是人工填的，null 代表還沒填 —— 要跟「填了 0」分開，所以不要 ?? 0
+      myTotal: b.my_total, oppTotal: b.opp_total,
+      myTower: b.my_tower, oppTower: b.opp_tower,
     }));
   },
 
@@ -983,6 +986,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
         myGuild: b.my_guild, oppGuild: b.opp_guild, type: b.battle_type,
         myKills: b.my_kills, oppKills: b.opp_kills, result: b.result,
         dateLabel: b.date_label || "", session: b.session || "", note: b.note,
+        myTotal: b.my_total, oppTotal: b.opp_total,
+        myTower: b.my_tower, oppTower: b.opp_tower,
       },
       players: (ps ?? []).map((p) => {
         // 只換我方：對方公會的人跟我們的曾用名無關
@@ -1023,6 +1028,19 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     }
     if (patch.myKills !== undefined)  p.my_kills = Math.round(Number(patch.myKills) || 0);
     if (patch.oppKills !== undefined) p.opp_kills = Math.round(Number(patch.oppKills) || 0);
+
+    // 進度四欄：空字串＝清成「還沒填」(null)，不是 0。
+    // 填了 0 跟沒填是兩回事 —— 沒填的場次在對手分析表上要留白，不能顯示 0。
+    const progress = (v: unknown) => {
+      const t = String(v ?? "").trim();
+      if (t === "") return null;
+      const num = Number(t);
+      return Number.isFinite(num) ? Math.round(num) : null;
+    };
+    if (patch.myTotal  !== undefined) p.my_total  = progress(patch.myTotal);
+    if (patch.oppTotal !== undefined) p.opp_total = progress(patch.oppTotal);
+    if (patch.myTower  !== undefined) p.my_tower  = progress(patch.myTower);
+    if (patch.oppTower !== undefined) p.opp_tower = progress(patch.oppTower);
 
     if (!p.battle_date && patch.battleDate !== undefined) return { success: false, message: "日期不能空白" };
     if (Object.keys(p).length === 0) return { success: false, message: "沒有要更新的欄位" };
