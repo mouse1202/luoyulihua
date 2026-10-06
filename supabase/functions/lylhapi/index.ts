@@ -49,6 +49,28 @@ async function chk<T>(p: PromiseLike<{ data: T; error: { message: string } | nul
   return data;
 }
 
+/* 一次查詢最多只會回 1000 筆，超過的直接被切掉，不會報錯也不會有任何跡象。
+   battle_players 我方已經有 1898 筆 —— 不分頁的話「累積統計」只讀得到前 1000 筆，
+   所有人的場數加總剛好卡在 1000，等於有將近一半的戰績沒被算進去，
+   而且少掉哪幾筆完全看回傳順序。roster_slots 也已經破千。
+
+   這支負責把整份讀完：一頁一千筆，拿到不足一頁就代表讀完了。
+   每一個用到的查詢都要自己帶 order —— 沒有排序的話，分頁之間可能重複或漏掉。 */
+const PAGE_SIZE = 1000;
+async function fetchAll<T = any>(
+  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await build(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    for (const r of rows) out.push(r);
+    if (rows.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
 // 操作記錄保留幾筆。原本是 500，但實際用量約每天 31 筆 —— 只蓋得住兩個半星期，
 // 三週前的異動要查「是誰改的」就已經查不到了。這張表很小，放大到 5000 大概是半年。
 const ACTIVITY_LOG_KEEP = 5000;
@@ -154,20 +176,22 @@ async function getCommandersByDate(date: string, session: string) {
 
 async function getAllDateLabels(): Promise<string[]> {
   const labelTime: Record<string, number | null> = {};
-  const att = await db.from("attendance_records").select("date_label");
-  (att.data ?? []).forEach((r) => { const l = String(r.date_label); if (l && !(l in labelTime)) labelTime[l] = null; });
-  const ros = await db.from("roster_slots").select("date_label,updated_at");
-  (ros.data ?? []).forEach((r) => {
+  const att = await fetchAll((a, b) =>
+    db.from("attendance_records").select("date_label").order("id").range(a, b));
+  att.forEach((r) => { const l = String(r.date_label); if (l && !(l in labelTime)) labelTime[l] = null; });
+  const ros = await fetchAll((a, b) =>
+    db.from("roster_slots").select("date_label,updated_at").order("id").range(a, b));
+  ros.forEach((r) => {
     const l = String(r.date_label); if (!l) return;
     const t = new Date(r.updated_at).getTime();
     if (!labelTime[l] || (t > (labelTime[l] as number))) labelTime[l] = t;
   });
-  const dl = await db.from("date_labels").select("label");
-  (dl.data ?? []).forEach((r) => { const l = String(r.label); if (l && !(l in labelTime)) labelTime[l] = null; });
+  const dl = await fetchAll((a, b) => db.from("date_labels").select("label").order("label").range(a, b));
+  dl.forEach((r) => { const l = String(r.label); if (l && !(l in labelTime)) labelTime[l] = null; });
   // 影片的日期也要算進來：不然場次被改名後，留在舊名字底下的影片
   // 會因為選單裡沒有那個場次而永遠看不到。
-  const vu = await db.from("video_uploads").select("date_label");
-  (vu.data ?? []).forEach((r) => { const l = String(r.date_label); if (l && !(l in labelTime)) labelTime[l] = null; });
+  const vu = await fetchAll((a, b) => db.from("video_uploads").select("date_label").order("id").range(a, b));
+  vu.forEach((r) => { const l = String(r.date_label); if (l && !(l in labelTime)) labelTime[l] = null; });
   const labels = Object.keys(labelTime);
   labels.sort((a, b) => {
     const ta = labelTime[a], tb = labelTime[b];
@@ -482,11 +506,12 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     };
   },
 
-  // 玩家改名。實際動作在資料庫函式 rename_player 裡（0008 migration）：
+  // 玩家改名。實際動作在資料庫函式 rename_player 裡（0008／0012／0013 migration）：
   // 名單／出勤／排表／指揮／影片／登入身分直接改掉，戰績留著不動改記別名。
-  // 新名字已經有資料時整個不做，把衝突列出來讓人自己決定。
+  //
   // merge = true 代表使用者看過衝突清單、確認那些是重複登記之後才按的合併。
-  // 資料庫函式自己會再檢查一次：只要有一筆兩邊內容不一樣就還是不做。
+  // 資料庫函式自己會再檢查一次：只要有一筆兩邊內容不一樣就還是不做；
+  // 兩個名字同時出現在同一場戰鬥裡的話更是直接拒絕，那必然是兩個人。
   renamePlayer: async (oldName: string, newName: string, actorName?: string, merge?: boolean) => {
     const oldN = normName(oldName), newN = normName(newName);
     if (!oldN || !newN) return { success: false, message: "名字不能是空白" };
@@ -511,7 +536,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     return res;
   },
 
-  /* ── 改名申請 ───────────────────────────────────────────
+  /* ── 改名申請 ────────────────────────────────────
      幫眾自己送、管理按同意。真正的改名還是走 rename_player，
      這裡只負責「誰想改成什麼」與「誰同意了」。
 
@@ -804,32 +829,37 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       });
     };
 
-    const att = await db.from("attendance_records").select("name,job,date_label");
-    (att.data ?? []).forEach((r) => {
+    const att = await fetchAll((a, b) =>
+      db.from("attendance_records").select("name,job,date_label").order("id").range(a, b));
+    att.forEach((r) => {
       const t = touch(r.name); if (!t) return;
       t.attendance += 1; if (r.job) t.jobs.add(r.job); if (r.date_label) t.dates.add(String(r.date_label));
     });
 
-    const slots = await db.from("roster_slots").select("name,job,date_label");
-    (slots.data ?? []).forEach((r) => {
+    const slots = await fetchAll((a, b) =>
+      db.from("roster_slots").select("name,job,date_label").order("id").range(a, b));
+    slots.forEach((r) => {
       const t = touch(r.name); if (!t) return;
       t.slots += 1; if (r.job) t.jobs.add(r.job); if (r.date_label) t.dates.add(String(r.date_label));
     });
 
-    const cmd = await db.from("roster_commanders").select("name,date_label");
-    (cmd.data ?? []).forEach((r) => {
+    const cmd = await fetchAll((a, b) =>
+      db.from("roster_commanders").select("name,date_label").order("id").range(a, b));
+    cmd.forEach((r) => {
       const t = touch(r.name); if (!t) return;
       t.commanders += 1; if (r.date_label) t.dates.add(String(r.date_label));
     });
 
-    const vid = await db.from("video_uploads").select("name,job,date_label");
-    (vid.data ?? []).forEach((r) => {
+    const vid = await fetchAll((a, b) =>
+      db.from("video_uploads").select("name,job,date_label").order("id").range(a, b));
+    vid.forEach((r) => {
       const t = touch(r.name); if (!t) return;
       t.videos += 1; if (r.job) t.jobs.add(r.job); if (r.date_label) t.dates.add(String(r.date_label));
     });
 
-    const bp = await db.from("battle_players").select("name,job,battle_id").eq("side", "my");
-    (bp.data ?? []).forEach((r) => {
+    const bp = await fetchAll((a, b) =>
+      db.from("battle_players").select("name,job,battle_id").eq("side", "my").order("id").range(a, b));
+    bp.forEach((r) => {
       const t = touch(r.name); if (!t) return;
       t.battles += 1; if (r.job) t.jobs.add(r.job);
     });
@@ -867,8 +897,9 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   },
 
   getActivityLog: async () => {
-    const { data } = await db.from("activity_log").select("*").order("id", { ascending: false });
-    return (data ?? []).map((r) => ({
+    const data = await fetchAll((a, b) =>
+      db.from("activity_log").select("*").order("id", { ascending: false }).range(a, b));
+    return data.map((r) => ({
       time: r.created_at ? String(r.created_at).slice(0, 19).replace("T", " ") : "",
       actorEmail: r.actor_email, actorRoleName: r.actor_role, description: r.description,
     }));
@@ -913,9 +944,10 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
         copiedFrom: null, updatedAt: await getRosterUpdatedAt(date, session),
       };
     }
-    const { data } = await db.from("roster_slots").select("date_label,updated_at").eq("session", session);
+    const data = await fetchAll((a, b) =>
+      db.from("roster_slots").select("date_label,updated_at").eq("session", session).order("id").range(a, b));
     let best: { date: string; time: number } | null = null;
-    (data ?? []).forEach((r) => {
+    data.forEach((r) => {
       const d = String(r.date_label);
       if (d === date) return;
       const t = new Date(r.updated_at).getTime();
@@ -926,9 +958,10 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   },
 
   getAttendanceMonthOptions: async () => {
-    const { data } = await db.from("attendance_records").select("date_label");
+    const data = await fetchAll((a, b) =>
+      db.from("attendance_records").select("date_label").order("id").range(a, b));
     const countByMonth: Record<number, number> = {};
-    (data ?? []).forEach((r) => {
+    data.forEach((r) => {
       const m = parseMonthFromLabel(String(r.date_label));
       if (m === null) return;
       countByMonth[m] = (countByMonth[m] || 0) + 1;
@@ -938,10 +971,11 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   },
   exportAttendanceAll: async (month?: number) => {
     const members = await getAttendanceCandidates();
-    const { data } = await db.from("attendance_records").select("date_label,name,status");
+    const data = await fetchAll((a, b) =>
+      db.from("attendance_records").select("date_label,name,status").order("id").range(a, b));
     const labelSet: Record<string, boolean> = {};
     const statusMap: Record<string, string> = {};
-    (data ?? []).forEach((r) => {
+    data.forEach((r) => {
       const label = String(r.date_label);
       if (!label) return;
       if (month && parseMonthFromLabel(label) !== month) return;
@@ -1064,8 +1098,9 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     }));
   },
   getVideoActivityLog: async () => {
-    const { data } = await db.from("video_activity_log").select("*").order("id", { ascending: false });
-    return (data ?? []).map((r) => ({
+    const data = await fetchAll((a, b) =>
+      db.from("video_activity_log").select("*").order("id", { ascending: false }).range(a, b));
+    return data.map((r) => ({
       time: r.created_at ? String(r.created_at).slice(0, 19).replace("T", " ") : "",
       actorEmail: r.actor_email, actorRoleName: r.actor_role, description: r.description,
     }));
@@ -1086,6 +1121,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const myKills = Math.round(sum("my", "kills"));
     const oppKills = Math.round(sum("opp", "kills"));
 
+    // 進度那四欄是人工填的，這裡故意不送 —— upsert 只會賋值給它有送的欄位，
+    // 所以重傳 CSV 不會把已經填好的進度洗掉。
     const [battle] = await chk(db.from("battles").upsert({
       battle_date: date,
       battle_time: String(payload.battleTime ?? "").trim(),
@@ -1249,7 +1286,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     if (list.length === 0) return { trend: [], records: [] };
 
     const ids = list.map((b) => b.id);
-    const { data: ps } = await db.from("battle_players").select("*").in("battle_id", ids).eq("side", "my");
+    const ps = await fetchAll((a, b) =>
+      db.from("battle_players").select("*").in("battle_id", ids).eq("side", "my").order("id").range(a, b));
 
     const KEYS = ["kills", "assists", "pvp", "bld", "heal", "tank", "heavy", "feather", "bone", "res"];
     const byBattle: Record<string, any> = {};
@@ -1263,7 +1301,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const dateOf: Record<string, any> = {};
     list.forEach((b) => { dateOf[b.id] = b; });
 
-    (ps ?? []).forEach((p) => {
+    ps.forEach((p) => {
       const t = byBattle[p.battle_id];
       if (t) {
         t.people += 1;
@@ -1316,7 +1354,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     if (list.length === 0) return { name, points: [] };
 
     const ids = list.map((b) => b.id);
-    const { data: ps } = await db.from("battle_players").select("*").in("battle_id", ids).eq("side", "my");
+    const ps = await fetchAll((a, b) =>
+      db.from("battle_players").select("*").in("battle_id", ids).eq("side", "my").order("id").range(a, b));
 
     const KEYS = ["kills", "assists", "res", "pvp", "bld", "heal", "tank", "heavy", "feather", "bone"];
 
@@ -1326,14 +1365,14 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
 
     // 一場一組：我方全部的人，之後再從裡面挑出同職業的當對照組
     const byBattle: Record<string, any[]> = {};
-    (ps ?? []).forEach((p) => {
+    ps.forEach((p) => {
       (byBattle[p.battle_id] ?? (byBattle[p.battle_id] = [])).push(p);
     });
 
     // 主要職業：這個區間裡上場時最常用的那個。
     // 沒上場的場次沒有 job 可用，拿它來挑對照組，那幾列才顯示得出職均。
     const jobCount: Record<string, number> = {};
-    (ps ?? []).forEach((p) => {
+    ps.forEach((p) => {
       if (canon(alias, p.name) === target && p.job) jobCount[p.job] = (jobCount[p.job] ?? 0) + 1;
     });
     let mainJob = "";
@@ -1404,7 +1443,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const ids = (battles ?? []).map((b) => b.id);
     if (ids.length === 0) return { battleCount: 0, rows: [] };
 
-    const { data: ps } = await db.from("battle_players").select("*").in("battle_id", ids).eq("side", "my");
+    const ps = await fetchAll((a, b) =>
+      db.from("battle_players").select("*").in("battle_id", ids).eq("side", "my").order("id").range(a, b));
     const { data: roster } = await db.from("roster_members").select("name,job,category");
     const cat: Record<string, string> = {};
     (roster ?? []).forEach((r) => { cat[r.name] = r.category; });
@@ -1415,7 +1455,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const byJob = !!opts?.byJob;
     const KEYS = ["kills", "assists", "res", "pvp", "bld", "heal", "tank", "heavy", "feather", "bone"];
     const acc: Record<string, any> = {};
-    (ps ?? []).forEach((p) => {
+    ps.forEach((p) => {
       const nm = canon(alias, p.name);
       const job = p.job || "";
       const key = byJob ? nm + "\u0000" + job : nm;
