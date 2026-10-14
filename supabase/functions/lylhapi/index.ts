@@ -983,17 +983,20 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       statusMap[label + "|" + r.name] = r.status;
     });
     const labels = Object.keys(labelSet).sort();
-    const header = ["姓名", "職業", ...labels, "出勤數", "請假數", "X數"];
+    // 四種狀態各給一欄合計。順序跟畫面上的統計框一致。
+    const STATUSES = ["出勤", "請假", "臨時請假", "X"];
+    const header = ["姓名", "職業", ...labels, ...STATUSES.map((st) => st + "數")];
     const lines = [header];
     members.forEach((m) => {
       const row: string[] = [m.name, m.job ?? ""];
-      const counts: Record<string, number> = { "出勤": 0, "請假": 0, "X": 0 };
+      const counts: Record<string, number> = {};
+      STATUSES.forEach((st) => { counts[st] = 0; });
       labels.forEach((label) => {
         const status = statusMap[label + "|" + m.name] || "出勤";
         row.push(status);
         if (status in counts) counts[status]++;
       });
-      row.push(String(counts["出勤"]), String(counts["請假"]), String(counts["X"]));
+      STATUSES.forEach((st) => row.push(String(counts[st])));
       lines.push(row);
     });
     const csv = "﻿" + lines.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
@@ -1121,7 +1124,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const myKills = Math.round(sum("my", "kills"));
     const oppKills = Math.round(sum("opp", "kills"));
 
-    // 進度那四欄是人工填的，這裡故意不送 —— upsert 只會賋值給它有送的欄位，
+    // 進度那四欄是人工填的，這裡故意不送 —— upsert 只會賦值給它有送的欄位，
     // 所以重傳 CSV 不會把已經填好的進度洗掉。
     const [battle] = await chk(db.from("battles").upsert({
       battle_date: date,

@@ -571,9 +571,10 @@
     }
 
     /* 請假只是排表時的參考，人多的時候會把左邊整條撐得很長，
-       把它壓短、超過的自己捲。 */
+       把它壓短、超過的自己捲。這一格現在放兩份（請假＋臨時請假），
+       所以每份再收一點，整格才不會比中間的排表還長。 */
     .roster-substitutes-panel-short .roster-substitutes-list {
-      max-height: 20vh;
+      max-height: 16vh;
     }
 
     /* 括號裡的人數不用跟標題一樣大、一樣鬆，不然窗格只有 150px 寬，
@@ -2968,6 +2969,8 @@
               <div class="roster-substitutes-panel roster-substitutes-panel-short">
                 <div class="roster-substitutes-title">請假<span id="roster-leave-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-leave-list"></div>
+                <div class="roster-substitutes-title">臨時請假<span id="roster-temp-leave-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-temp-leave-list"></div>
               </div>
               <div class="roster-substitutes-panel roster-substitutes-panel-tall">
                 <div class="roster-substitutes-title">外援<span id="roster-guest-substitutes-count"></span></div>
@@ -3047,6 +3050,10 @@
             </div>
             <div class="attendance-stat-box">
               <span class="attendance-stat-value" id="stat-temp-leave">0</span>
+              <span class="attendance-stat-label">臨時請假數</span>
+            </div>
+            <div class="attendance-stat-box">
+              <span class="attendance-stat-value" id="stat-absent">0</span>
               <span class="attendance-stat-label">X 數</span>
             </div>
           </div>
@@ -3524,7 +3531,13 @@
 
     // 「X」原本叫「臨時請假」。資料庫存的就是這個字串，
     // attendance_records 的 check 約束要一起改。
-    var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', 'X'];
+    /* 四種狀態的意思：
+         請假     ＝ 事前就說不來
+         臨時請假 ＝ 當天臨時才說不來
+         X        ＝ 沒說一聲就沒出現
+       （0006 migration 曾經把「臨時請假」整個改名成 X，那是同一件事換名字；
+         現在是在 X 之外再多一種，兩者並存，舊的 X 不會被改回去。） */
+    var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', '臨時請假', 'X'];
 
     // 所有可切換的畫面，以及各畫面是否要用「一頁寬」樣式
     var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view', 'video-roster-view', 'battle-view', 'name-check-view'];
@@ -4183,15 +4196,24 @@
       }
     }
 
-    // 排表工具左側「請假」面板：顯示當天出勤系統標記為「請假／X」的人（右側小字顯示是哪一種）。
-    // 這份是純顯示、不會被排表指派影響，所以只在切換日期／開啟排表時載入。
+    // 排表工具左側的兩個面板：
+    //   「請假」    ＝ 事前就說不來的，加上沒說一聲就沒出現的 X（右側小字顯示是哪一種）
+    //   「臨時請假」＝ 當天臨時才說不來的，單獨一格 —— 排表當下最需要一眼看到的就是這些人
+    // 兩份都是純顯示、不會被排表指派影響，所以只在切換日期／開啟排表時載入。
     function loadRosterLeaveList(date) {
       function render(records) {
-        var leave = (records || [])
-          .filter(function (r) { return r.status && r.status !== '出勤'; }) // 請假＋X 都算沒出，不分
-          .map(function (r) { return { name: r.name, job: r.job }; })        // 名字後面顯示職業
-          .sort(compareByJob_);                                              // 按職業順序排序
-        renderRosterSubstituteList('roster-leave-list', 'roster-leave-count', leave, '目前沒有人請假');
+        var all = records || [];
+        var pick = function (fn) {
+          return all.filter(fn)
+            .map(function (r) { return { name: r.name, job: r.job }; })  // 名字後面顯示職業
+            .sort(compareByJob_);                                        // 按職業順序排序
+        };
+        renderRosterSubstituteList('roster-leave-list', 'roster-leave-count',
+          pick(function (r) { return r.status === '請假' || r.status === 'X'; }),
+          '目前沒有人請假');
+        renderRosterSubstituteList('roster-temp-leave-list', 'roster-temp-leave-count',
+          pick(function (r) { return r.status === '臨時請假'; }),
+          '目前沒有人臨時請假');
       }
       if (window.google && google.script && google.script.run) {
         google.script.run.withSuccessHandler(render).withFailureHandler(function () { render([]); }).getAttendanceByDate(date);
@@ -6093,7 +6115,7 @@
 
     function updateAttendanceSummary() {
       var rows = Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-row'));
-      var counts = { '出勤': 0, '請假': 0, 'X': 0 };
+      var counts = { '出勤': 0, '請假': 0, '臨時請假': 0, 'X': 0 };
 
       rows.forEach(function (row) {
         var status = row.querySelector('.attendance-status').value;
@@ -6103,7 +6125,9 @@
       document.getElementById('stat-total').textContent = rows.length;
       document.getElementById('stat-present').textContent = counts['出勤'];
       document.getElementById('stat-leave').textContent = counts['請假'];
-      document.getElementById('stat-temp-leave').textContent = counts['X'];
+      // stat-temp-leave 本來掛的是 X，現在名副其實給臨時請假，X 改用 stat-absent
+      document.getElementById('stat-temp-leave').textContent = counts['臨時請假'];
+      document.getElementById('stat-absent').textContent = counts['X'];
     }
 
     // 右側額外三個獨立窗格用的：算出某一區塊（主要／外援／試訓）裡，當天標記
