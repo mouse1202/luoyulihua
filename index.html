@@ -5167,13 +5167,24 @@
         var prev = statusSelect.dataset.prev || '出勤';
         var isMine = !!(currentAccessRoleName && name === currentAccessRoleName);
         var isPrivileged = (currentAccessCategory === '管理' || currentAccessCategory === '文書');
-        // 改到「不是自己」的名字時，先還原畫面並跳確認框，避免誤點到別人
-        if (!isMine && !isPrivileged) {
-          statusSelect.value = prev;
+        // 改到「不是自己」的名字時，先還原畫面並跳確認框，避免誤點到別人。
+        //
+        // 管理／文書以前不在這個保護範圍內 —— 點下去直接存，沒有任何提示，
+        // 可以一秒改一個人一路掃過去，而被改的人完全不會知道，事後只能去翻操作記錄。
+        // 9/27 就發生過一次：同一批人被一場一場設成 X，當事人以為是系統自動改的。
+        // 現在改成「只要不是自己就一律先問」，管理一樣改得了，只是要多按一次。
+        //
+        // 俱樂部全員調整走的是另一條路（直接呼叫 saveAttendanceStatus），
+        // 它本來就有自己的確認框，不會因為這裡變成一個人跳一次。
+        if (!isMine) {
+          statusSelect.value = prev;   // 先還原畫面，按了確定才真的改
           updateAttendanceSummary();
           var who = currentAccessRoleName ? '「' + currentAccessRoleName + '」' : '（尚未設定角色名）';
-          showConfirmModal('這不是你的名字',
-            '你登入的是' + who + '，但你正要修改「' + name + '」的出勤（改成「' + newVal + '」）。確定要幫別人修改嗎？',
+          var body = '你登入的是' + who + '，但你正要把「' + name + '」的出勤改成「' + newVal + '」。\n\n';
+          body += isPrivileged
+            ? '你是' + currentAccessCategory + '，可以幫別人改。按確定會立刻存檔，並把你的名字記進操作記錄。'
+            : '確定要幫別人修改嗎？';
+          showConfirmModal('這不是你的名字', body,
             function () {
               statusSelect.value = newVal;
               statusSelect.dataset.prev = newVal;
