@@ -879,6 +879,30 @@
     }
 
     /* 已經不在名單上（或那天沒出勤）的人，格子裡的名字要看得出來不一樣 */
+    .roster-show-all {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      color: #FFFFEF;
+      cursor: pointer;
+    }
+
+    .roster-show-all input { cursor: pointer; }
+
+    /* 「當天可排 N 人／共 M 格」。可排的人比格子少就轉成警示色 —— 這正是
+       「明明很多人沒請假卻選不到人」的那種狀況，要看得出來是人不夠，不是壞掉。 */
+    .roster-pool-note {
+      font-size: 13px;
+      color: #c8a45a;
+      margin-left: 10px;
+    }
+
+    .roster-pool-note.roster-pool-short {
+      color: #ff9797;
+      font-weight: 700;
+    }
+
     .roster-name-gone { color: #c8a45a; }
     .roster-person-row .roster-name-input.is-gone { color: #c8a45a; border-color: #8a6a2a; }
 
@@ -2968,11 +2992,17 @@
             <button type="button" class="roster-back-btn hidden" id="roster-copy-session1-btn" onclick="copyFromFirstSession()">複製第一場</button>
             <button type="button" class="roster-back-btn" id="roster-copy-other-btn" onclick="openCopyRosterConfigDialog()">複製其他天配置</button>
             <button type="button" class="roster-back-btn" id="roster-reload-btn" onclick="reloadRosterFromServer()">🔄 重新讀取</button>
+            <label class="roster-show-all" title="預設只列當天標記「出勤」的人。人不夠的時候（例如幫戰把俱樂部整批設成 X）勾起來就能連他們一起排。">
+              <input type="checkbox" id="roster-show-all-names" onchange="refreshAllRosterNameOptions()">連請假／X 的人也列出來
+            </label>
             <span class="roster-data-time" id="roster-data-time"></span>
             <span class="roster-stale hidden" id="roster-stale-note"></span>
           </div>
           <div class="attendance-date-row">
             <span class="attendance-summary" id="roster-date-hint">姓名下拉選單只列出當天出勤系統標記「出勤」的人</span>
+            <!-- 這一格獨立出來：roster-date-hint 會被自動存檔提示、複製提示輪流蓋掉，
+                 人數算出來寫進去會被洗掉。 -->
+            <span class="roster-pool-note" id="roster-pool-note"></span>
           </div>
           <div class="roster-content-row">
             <div class="roster-sidebar">
@@ -3786,6 +3816,13 @@
     // 名單上的所有人（不分類別、不管那天有沒有出勤）。
     // 用來分辨排表裡一個對不上的名字是「已經不在名單上」還是「那天沒出勤」。
     var rosterAllKnown = null;
+    // 同一份資料的完整版（name/job/job2/category），跟 rosterAllKnown 同一次抓回來。
+    // 「連請假／X 的人也列出來」要靠它才知道那些人的職業／二職。
+    var rosterAllMembers = null;
+    // 當天每個人的出勤狀態（姓名 → 出勤／請假／臨時請假／X），沒有紀錄的人不會在裡面。
+    var rosterDateStatus = {};
+    // 當天「不是出勤」的名單上的人。預設不會出現在姓名下拉，勾了才會。
+    var currentRosterExcluded = [];
 
     // 有時候一天會有兩場，用這個記住目前排的是第一場還第二場
     var currentRosterSession = '1';
@@ -3874,7 +3911,54 @@
             html += '<option value="' + m.name + '" data-second="1">' + m.name + '（二職）</option>';
           });
       }
+
+      // 勾了「連請假／X 的人也列出來」才會有這一段，預設沒有。
+      // 平常不列是對的（排到請假的人沒有意義），但像幫戰把 34 位俱樂部成員整批
+      // 設成 X 的時候，可排的人會比格子還少，那時候至少要排得下去。
+      // 主職二職都算，名字後面直接標他當天是什麼狀態。
+      if (rosterShowAllNames_()) {
+        var remOut = excludeMainNames ? excludeMainNames.slice() : null;
+        currentRosterExcluded
+          .filter(function (m) { return !job || m.job === job || (m.job2 && m.job2 === job); })
+          .filter(function (m) {
+            if (!remOut) return true;
+            var idx = remOut.indexOf(m.name);
+            if (idx === -1) return true;
+            remOut.splice(idx, 1);
+            return false;
+          })
+          .forEach(function (m) {
+            html += '<option value="' + m.name + '" class="roster-name-gone">' +
+              m.name + '（' + (rosterDateStatus[m.name] || '未出勤') + '）</option>';
+          });
+      }
       return html;
+    }
+
+    function rosterShowAllNames_() {
+      var cb = document.getElementById('roster-show-all-names');
+      return !!(cb && cb.checked);
+    }
+
+    // 「當天可排 N 人／共 M 格」。算的是名單上的人，不含已經退幫但排表裡還留著的名字。
+    function updateRosterPoolHint_() {
+      var el = document.getElementById('roster-pool-note');
+      if (!el) return;
+      if (!rosterAllMembers) { el.textContent = ''; return; }
+
+      var counts = { '請假': 0, '臨時請假': 0, 'X': 0 };
+      rosterAllMembers.forEach(function (m) {
+        var st = rosterDateStatus[m.name];
+        if (counts.hasOwnProperty(st)) counts[st]++;
+      });
+      var out = counts['請假'] + counts['臨時請假'] + counts['X'];
+      var pool = rosterAllMembers.length - out;
+      var slots = document.querySelectorAll('#roster-list .roster-name').length;
+
+      el.textContent = '當天可排 ' + pool + ' 人／共 ' + slots + ' 格' +
+        '（請假 ' + counts['請假'] + '、臨時請假 ' + counts['臨時請假'] +
+        '、X ' + counts['X'] + ' 不列入）';
+      el.classList.toggle('roster-pool-short', slots > 0 && pool < slots);
     }
 
     // 一個人已經被排進某一格之後，其他格的姓名下拉就不會再出現他，避免同一人被排到兩個位置。
@@ -3954,7 +4038,10 @@
         if (!opt.value) return; // 空白選項不用列在自訂清單裡
         if (q && opt.textContent.indexOf(q) === -1) return;
         var activeClass = opt.value === nameSelect.value ? ' active' : '';
-        optionsHtml += '<div class="roster-name-option' + activeClass + '" data-value="' + opt.value + '">' + opt.textContent + '</div>';
+        // 把 <option> 的樣式一起帶過來，不然「（請假）」那種人在這份清單裡
+        // 看起來跟正常出勤的人一模一樣
+        var optClass = opt.className ? ' ' + opt.className : '';
+        optionsHtml += '<div class="roster-name-option' + activeClass + optClass + '" data-value="' + opt.value + '">' + opt.textContent + '</div>';
       });
 
       popup.innerHTML = optionsHtml || '<div class="roster-name-option empty">（無符合的人）</div>';
@@ -4171,9 +4258,13 @@
       if (rosterAllKnown || !(window.google && google.script && google.script.run)) { if (cb) cb(); return; }
       google.script.run.withSuccessHandler(function (list) {
         rosterAllKnown = {};
-        (list || []).forEach(function (m) { rosterAllKnown[m.name] = m.category || ''; });
+        rosterAllMembers = list || [];
+        rosterAllMembers.forEach(function (m) { rosterAllKnown[m.name] = m.category || ''; });
         if (cb) cb();
-      }).withFailureHandler(function () { rosterAllKnown = {}; if (cb) cb(); }).getAttendanceCandidates();
+      }).withFailureHandler(function () {
+        rosterAllKnown = {}; rosterAllMembers = [];
+        if (cb) cb();
+      }).getAttendanceCandidates();
     }
 
     /* 排表裡存到的名字，如果已經不在當天的出勤名單裡：
@@ -4182,6 +4273,9 @@
        兩種都要把名字留在格子裡。以前是直接把格子設成空白，而排表是自動儲存的，
        下一次改別格就會把這格的空白一起寫回資料庫，等於歷史排表被默默洗掉。 */
     function goneRosterLabel_(name) {
+      // 知道當天的狀態就直接寫出來（請假／臨時請假／X），比一律寫「未出勤」有用
+      var st = rosterDateStatus[name];
+      if (st && st !== '出勤') return name + '（' + st + '）';
       if (rosterAllKnown && Object.prototype.hasOwnProperty.call(rosterAllKnown, name)) {
         return name + '（未出勤）';
       }
@@ -4202,6 +4296,7 @@
       function applyAttendees(records) {
         currentRosterAttendees = records || [];
         refreshAllRosterNameOptions();
+        updateRosterPoolHint_();
         if (callback) callback();
       }
 
@@ -4242,6 +4337,18 @@
 
       function render(records) {
         var all = records || [];
+
+        // 當天狀態表：給註記文字、可排人數、以及「連請假／X 的人也列出來」共用
+        rosterDateStatus = {};
+        all.forEach(function (r) { rosterDateStatus[r.name] = r.status; });
+        currentRosterExcluded = (rosterAllMembers || []).filter(function (m) {
+          var st = rosterDateStatus[m.name];
+          return st && st !== '出勤';
+        });
+        updateRosterPoolHint_();
+        // 勾選狀態下，下拉選單的內容跟這份名單有關，要重畫；沒勾就不用白做工。
+        if (rosterShowAllNames_()) refreshAllRosterNameOptions();
+
         var pick = function (club, statusOk) {
           return all
             .filter(function (r) { return isClub(r.name) === club && statusOk(r.status); })
