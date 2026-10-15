@@ -3824,6 +3824,12 @@
     // 當天「不是出勤」的名單上的人。預設不會出現在姓名下拉，勾了才會。
     var currentRosterExcluded = [];
 
+    // 「這次載入是第幾次」。切日期／切場次會再叫一次載入，而後端回應時間很浮動
+    // （實測同一支 getRosterAttendeesForDate 從 0.4 秒到 3 秒都有），
+    // 先送出的請求有可能後回來，把新日期的名單蓋成舊日期的。
+    // 每次載入拿一個號碼，回應回來時號碼不是最新的就整包丟掉。
+    var rosterLoadSeq = 0;
+
     // 有時候一天會有兩場，用這個記住目前排的是第一場還第二場
     var currentRosterSession = '1';
 
@@ -4293,14 +4299,16 @@
     }
 
     function loadRosterAttendeesForDate(date, callback) {
+      var seq = ++rosterLoadSeq;
       function applyAttendees(records) {
+        if (seq !== rosterLoadSeq) return; // 已經換過日期了，這是舊日期的回應
         currentRosterAttendees = records || [];
         refreshAllRosterNameOptions();
         updateRosterPoolHint_();
         if (callback) callback();
       }
 
-      loadRosterLeaveList(date); // 同時載入「當天請假名單」到左側請假面板
+      loadRosterLeaveList(date, seq); // 同時載入「當天請假名單」到左側請假面板
 
       if (window.google && google.script && google.script.run) {
         google.script.run.withSuccessHandler(applyAttendees).withFailureHandler(function (err) {
@@ -4319,7 +4327,10 @@
     //
     // 身分要另外查：getAttendanceByDate 只回姓名／職業／狀態，沒有 category，
     // 所以靠 rosterAllKnown（名單快取，姓名 → 身分）換算。
-    function loadRosterLeaveList(date) {
+    // seq 由 loadRosterAttendeesForDate 傳進來，跟出勤名單共用同一個號碼：
+    // 兩邊算的都是「同一天」的事，有一邊套用到舊日期的資料就會對不起來。
+    function loadRosterLeaveList(date, seq) {
+      var stale = function () { return seq != null && seq !== rosterLoadSeq; };
       var isClub = function (name) {
         return !!rosterAllKnown && rosterAllKnown[name] === 'club';
       };
@@ -4336,6 +4347,7 @@
       };
 
       function render(records) {
+        if (stale()) return;
         var all = records || [];
 
         // 當天狀態表：給註記文字、可排人數、以及「連請假／X 的人也列出來」共用
@@ -4371,6 +4383,7 @@
       // 先確定名單快取在手上（只有第一次會多一次請求），不然查不到身分，
       // 俱樂部的人會全部被歸到主要人員那一格。
       ensureRosterAllKnown_(function () {
+        if (stale()) return; // 等名單快取的時候就被換掉日期了，不用再去問了
         if (window.google && google.script && google.script.run) {
           google.script.run.withSuccessHandler(render).withFailureHandler(function () { render([]); }).getAttendanceByDate(date);
         } else {
