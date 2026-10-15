@@ -571,10 +571,20 @@
     }
 
     /* 請假只是排表時的參考，人多的時候會把左邊整條撐得很長，
-       把它壓短、超過的自己捲。這一格現在放兩份（請假＋臨時請假），
-       所以每份再收一點，整格才不會比中間的排表還長。 */
+       把它壓短、超過的自己捲。現在是兩個方框、每個放兩份（請假＋臨時請假），
+       所以每份再收一點，整條側欄才不會比中間的排表還長。 */
     .roster-substitutes-panel-short .roster-substitutes-list {
-      max-height: 16vh;
+      max-height: 12vh;
+    }
+
+    /* 方框最上面那行身分（主要人員／俱樂部）。底下兩個標題才是「請假／臨時請假」，
+       所以這一行要看得出是上一層，不跟標題搶。 */
+    .roster-substitutes-group {
+      font-size: 12px;
+      font-weight: 700;
+      color: #D4A828;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
     }
 
     /* 括號裡的人數不用跟標題一樣大、一樣鬆，不然窗格只有 150px 寬，
@@ -2966,11 +2976,22 @@
           </div>
           <div class="roster-content-row">
             <div class="roster-sidebar">
+              <!-- 請假名單照身分分成兩個方框。幫戰那種日子俱樂部成員會整批掛 X
+                   （34 位），跟主要人員混在同一格的話，真正要看的十幾筆請假
+                   會被整個擠到看不見。 -->
               <div class="roster-substitutes-panel roster-substitutes-panel-short">
+                <div class="roster-substitutes-group">主要人員</div>
                 <div class="roster-substitutes-title">請假<span id="roster-leave-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-leave-list"></div>
                 <div class="roster-substitutes-title">臨時請假<span id="roster-temp-leave-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-temp-leave-list"></div>
+              </div>
+              <div class="roster-substitutes-panel roster-substitutes-panel-short">
+                <div class="roster-substitutes-group">俱樂部</div>
+                <div class="roster-substitutes-title">請假<span id="roster-club-leave-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-club-leave-list"></div>
+                <div class="roster-substitutes-title">臨時請假<span id="roster-club-temp-leave-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-club-temp-leave-list"></div>
               </div>
               <div class="roster-substitutes-panel roster-substitutes-panel-tall">
                 <div class="roster-substitutes-title">外援<span id="roster-guest-substitutes-count"></span></div>
@@ -4196,30 +4217,59 @@
       }
     }
 
-    // 排表工具左側的兩個面板：
-    //   「請假」    ＝ 事前就說不來的，加上沒說一聲就沒出現的 X（右側小字顯示是哪一種）
+    // 排表工具左側的兩個方框、每個方框兩份名單（主要人員／俱樂部 × 請假／臨時請假）：
+    //   「請假」    ＝ 事前就說不來的，加上沒說一聲就沒出現的 X（兩種併在一起看）
     //   「臨時請假」＝ 當天臨時才說不來的，單獨一格 —— 排表當下最需要一眼看到的就是這些人
-    // 兩份都是純顯示、不會被排表指派影響，所以只在切換日期／開啟排表時載入。
+    // 四份都是純顯示、不會被排表指派影響，所以只在切換日期／開啟排表時載入。
+    //
+    // 身分要另外查：getAttendanceByDate 只回姓名／職業／狀態，沒有 category，
+    // 所以靠 rosterAllKnown（名單快取，姓名 → 身分）換算。
     function loadRosterLeaveList(date) {
+      var isClub = function (name) {
+        return !!rosterAllKnown && rosterAllKnown[name] === 'club';
+      };
+
+      // 外援／試訓跟主要人員放同一格，照 rosterDisplayName_ 的慣例在名字後面加註記；
+      // 已經不在名單上的人也要留著、標成（已退），不然會變成一排來路不明的名字。
+      var labelOf = function (name) {
+        if (!rosterAllKnown) return name;
+        if (!Object.prototype.hasOwnProperty.call(rosterAllKnown, name)) {
+          // 名單讀取失敗時 rosterAllKnown 會是空的，那就別把每個人都標成已退
+          return Object.keys(rosterAllKnown).length ? name + '（已退）' : name;
+        }
+        return rosterDisplayName_({ name: name, category: rosterAllKnown[name] });
+      };
+
       function render(records) {
         var all = records || [];
-        var pick = function (fn) {
-          return all.filter(fn)
-            .map(function (r) { return { name: r.name, job: r.job }; })  // 名字後面顯示職業
-            .sort(compareByJob_);                                        // 按職業順序排序
+        var pick = function (club, statusOk) {
+          return all
+            .filter(function (r) { return isClub(r.name) === club && statusOk(r.status); })
+            .map(function (r) { return { name: labelOf(r.name), job: r.job }; })  // 名字後面顯示職業
+            .sort(compareByJob_);                                                 // 按職業順序排序
         };
+        var leave = function (st) { return st === '請假' || st === 'X'; };
+        var temp = function (st) { return st === '臨時請假'; };
+
         renderRosterSubstituteList('roster-leave-list', 'roster-leave-count',
-          pick(function (r) { return r.status === '請假' || r.status === 'X'; }),
-          '目前沒有人請假');
+          pick(false, leave), '目前沒有人請假');
         renderRosterSubstituteList('roster-temp-leave-list', 'roster-temp-leave-count',
-          pick(function (r) { return r.status === '臨時請假'; }),
-          '目前沒有人臨時請假');
+          pick(false, temp), '目前沒有人臨時請假');
+        renderRosterSubstituteList('roster-club-leave-list', 'roster-club-leave-count',
+          pick(true, leave), '俱樂部沒有人請假');
+        renderRosterSubstituteList('roster-club-temp-leave-list', 'roster-club-temp-leave-count',
+          pick(true, temp), '俱樂部沒有人臨時請假');
       }
-      if (window.google && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(render).withFailureHandler(function () { render([]); }).getAttendanceByDate(date);
-      } else {
-        render([]);
-      }
+
+      // 先確定名單快取在手上（只有第一次會多一次請求），不然查不到身分，
+      // 俱樂部的人會全部被歸到主要人員那一格。
+      ensureRosterAllKnown_(function () {
+        if (window.google && google.script && google.script.run) {
+          google.script.run.withSuccessHandler(render).withFailureHandler(function () { render([]); }).getAttendanceByDate(date);
+        } else {
+          render([]);
+        }
+      });
     }
 
     // 把「當天已經存過的排表」帶回畫面：先確定姓名下拉選項是當天的出勤名單，
