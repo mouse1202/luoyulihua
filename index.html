@@ -3188,15 +3188,16 @@
             </div>
           </div>
           <div class="member-section-title">主要成員（幫眾＋俱樂部）</div>
-          <!-- 整批調整只有俱樂部這一組有。幫眾、幫眾&俱樂部、外援、試訓刻意沒有 ——
-               那幾組是一個一個自己登記的，整批蓋掉會把別人填的東西洗掉。
-               名單合併之後它改成「依身分組挑人」，精確比對「俱樂部」，
-               不會掃到「幫眾&俱樂部」（那是獨立的第三種身分）。 -->
+          <!-- 整批調整跟著左邊的身分組按鈕走：選哪一組就套用到那一組。
+               精確比對 ——「幫眾&俱樂部」是獨立的第三種身分，選「俱樂部」掃不到他。
+               選「全部」時就是整個主要成員區。外援、試訓沒有身分組，
+               一律不在這個按鈕的範圍裡（那兩組是一個一個自己登記的）。
+               按鈕旁邊的提示會隨時寫出現在會動到幾個人。 -->
           <div class="attendance-date-row admin-only-btn hidden" id="club-bulk-row">
             <label for="club-bulk-status" class="attendance-date-label">全員調整：</label>
             <select id="club-bulk-status" class="attendance-date-input"></select>
-            <button type="button" class="roster-back-btn" onclick="bulkSetClubAttendance()">套用到全部俱樂部成員</button>
-            <span class="attendance-summary" id="club-bulk-hint">只會動身分組是「俱樂部」的人</span>
+            <button type="button" class="roster-back-btn" onclick="bulkSetSquadAttendance()">套用到目前選的身分組成員</button>
+            <span class="attendance-summary" id="club-bulk-hint"></span>
           </div>
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
@@ -6271,6 +6272,7 @@
     function setAttendanceSquadFilter(squad) {
       attendanceSquadFilter = squad || '';
       refreshSquadFilterButtons_();
+      refreshClubBulkHint_();
       applyAttendanceJobFilter();   // 顯示/隱藏統一由它決定，免得兩個篩選互相蓋掉
     }
 
@@ -6304,6 +6306,7 @@
         ensureJobFilterOptions();
         ensureClubBulkOptions_();
         refreshSquadFilterButtons_();
+        refreshClubBulkHint_();
         applyAttendanceJobFilter(); // 重新渲染後套用目前的職業／身分組篩選（只篩主要成員）
 
         var date = document.getElementById('attendance-date').value;
@@ -6412,9 +6415,7 @@
        只有「管理」看得到這排（.admin-only-btn），按下去還要再過一次管理密碼 ——
        一次蓋掉一整組人的出勤，跟旁邊的「刪除此紀錄」「設定調整截止時間」同一個等級。
 
-       只有俱樂部這一組有。主要成員／外援／試訓是每個人自己登記的，
-       整批蓋過去會把別人填的請假洗掉。 */
-    // 名單合併之後，「俱樂部那一區有沒有人」改成看主要成員裡有沒有身分組＝俱樂部的
+       只動主要成員區。外援／試訓沒有身分組，也不在這個按鈕的範圍裡。 */
     function ensureClubBulkOptions_() {
       var sel = document.getElementById('club-bulk-status');
       if (!sel || sel.options.length) return;
@@ -6423,7 +6424,26 @@
       }).join('');
     }
 
-    function bulkSetClubAttendance() {
+    // 左邊選的那一組（'' ＝全部）現在要套用到幾個人、怎麼稱呼
+    function squadBulkTarget_() {
+      var sq = attendanceSquadFilter;
+      var rows = Array.prototype.slice.call(
+        document.querySelectorAll('#attendance-list .attendance-row'))
+        .filter(function (r) { return !sq || r.dataset.squad === sq; });
+      return { squad: sq, label: sq || '全部', rows: rows };
+    }
+
+    // 按鈕旁邊要隨時寫清楚「現在按下去會動到誰」，不然選了別組還以為是俱樂部
+    function refreshClubBulkHint_() {
+      var el = document.getElementById('club-bulk-hint');
+      if (!el) return;
+      var t = squadBulkTarget_();
+      el.textContent = t.squad
+        ? '只會動身分組是「' + t.squad + '」的 ' + t.rows.length + ' 人'
+        : '目前選「全部」，會動到主要成員全部 ' + t.rows.length + ' 人';
+    }
+
+    function bulkSetSquadAttendance() {
       var sel = document.getElementById('club-bulk-status');
       var status = sel ? sel.value : '';
       if (!status) { showAlertModal('請先選要設成哪一個狀態'); return; }
@@ -6431,12 +6451,10 @@
       var date = document.getElementById('attendance-date').value;
       if (!date) { showAlertModal('請先選日期／場次'); return; }
 
-      // 名單合併之後沒有「俱樂部那一區」了，改成從主要成員裡挑身分組＝俱樂部的人。
-      // 精確比對：「幫眾&俱樂部」是獨立的第三種身分，不會被掃到。
-      var rows = Array.prototype.slice.call(
-        document.querySelectorAll('#attendance-list .attendance-row'))
-        .filter(function (r) { return r.dataset.squad === '俱樂部'; });
-      if (!rows.length) { showAlertModal('目前沒有身分組是「俱樂部」的人。'); return; }
+      // 跟著左邊的身分組按鈕走。精確比對：選「俱樂部」掃不到「幫眾&俱樂部」。
+      var target = squadBulkTarget_();
+      var rows = target.rows;
+      if (!rows.length) { showAlertModal('目前選的「' + target.label + '」沒有人。'); return; }
 
       // 只算真的會變的人，不然訊息會寫「改了 21 人」但其實只有 3 個人有變
       var willChange = rows.filter(function (r) {
@@ -6444,22 +6462,28 @@
         return st && st.value !== status;
       });
       if (!willChange.length) {
-        showAlertModal('身分組「俱樂部」（' + rows.length + ' 人）本來就全部都是「' + status + '」了，不用再改。');
+        showAlertModal('「' + target.label + '」（' + rows.length + ' 人）本來就全部都是「' + status + '」了，不用再改。');
         return;
       }
 
       // 過管理密碼。免密期內會直接往下走
-      if (!needUnlockThen_('admin', 'attendance-view', bulkSetClubAttendance)) return;
+      if (!needUnlockThen_('admin', 'attendance-view', bulkSetSquadAttendance)) return;
 
+      var others = target.squad
+        ? SQUAD_OPTIONS.filter(function (sq) { return sq !== target.squad; }).concat(['外援', '試訓'])
+        : ['外援', '試訓'];
       showConfirmModal('全員調整出勤',
-        '把「' + date + '」的俱樂部成員出勤狀態全部設成「' + status + '」？\n\n' +
-        '身分組是「俱樂部」的共 ' + rows.length + ' 人，其中 ' + willChange.length + ' 人會被改動。\n' +
-        '幫眾、幫眾&俱樂部、外援、試訓不會動到。\n\n' +
+        '把「' + date + '」的「' + target.label + '」出勤狀態全部設成「' + status + '」？\n\n' +
+        (target.squad
+          ? '身分組是「' + target.squad + '」的共 ' + rows.length + ' 人，'
+          : '主要成員全部 ' + rows.length + ' 人，') +
+        '其中 ' + willChange.length + ' 人會被改動。\n' +
+        others.join('、') + '不會動到。\n\n' +
         '每一筆都會記進操作記錄。',
-        function () { applyClubBulk_(status, willChange, date); });
+        function () { applyClubBulk_(status, willChange, date, target.label); });
     }
 
-    function applyClubBulk_(status, rows, date) {
+    function applyClubBulk_(status, rows, date, bulkLabel) {
       var done = 0;
       rows.forEach(function (row) {
         var st = row.querySelector('.attendance-status');
@@ -6471,7 +6495,7 @@
         done++;
       });
       updateAttendanceSummary();
-      showAlertModal('已把 ' + done + ' 位身分組「俱樂部」的成員（' + date + '）的出勤狀態設成「' + status + '」');
+      showAlertModal('已把 ' + done + ' 位「' + bulkLabel + '」成員（' + date + '）的出勤狀態設成「' + status + '」');
     }
 
     function updateAttendanceSummary() {
