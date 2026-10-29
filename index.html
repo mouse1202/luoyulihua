@@ -2666,8 +2666,10 @@
     .squad-filter-btn.active .squad-filter-count { color: #FFFFEF; }
 
     /* 左邊的空白夠放才浮上去（跟 .side-nav 同一套做法：fixed，不佔版面寬度）。
-       1250px 以下左邊沒有那麼多空位，會壓到卡片，所以維持橫排在上面。 */
-    @media (min-width: 1250px) {
+       門檻是算出來的：容器固定 1096px、置中，左右各剩 (視窗-1096)/2。
+       側欄 150px ＋ 左邊 16px ＋ 跟卡片留 10px，所以要 1096+2*176=1448 才放得下。
+       不夠寬就維持橫排在卡片上面 —— 硬浮上去會壓到卡片左緣（1400px 時實測壓 14px）。 */
+    @media (min-width: 1448px) {
       .squad-filter-sidebar { position: fixed; left: 16px; top: 16px; width: 150px; z-index: 5; }
       #attendance-squad-filter { flex-direction: column; }
       .squad-filter-btn { flex: 0 0 auto; }
