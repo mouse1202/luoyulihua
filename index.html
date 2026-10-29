@@ -3193,7 +3193,7 @@
                選「全部」時就是整個主要成員區。外援、試訓沒有身分組，
                一律不在這個按鈕的範圍裡（那兩組是一個一個自己登記的）。
                按鈕旁邊的提示會隨時寫出現在會動到幾個人。 -->
-          <div class="attendance-date-row admin-only-btn hidden" id="club-bulk-row">
+          <div class="attendance-date-row export-allowed-btn hidden" id="club-bulk-row">
             <label for="club-bulk-status" class="attendance-date-label">全員調整：</label>
             <select id="club-bulk-status" class="attendance-date-input"></select>
             <button type="button" class="roster-back-btn" onclick="bulkSetSquadAttendance()">套用到目前選的身分組成員</button>
@@ -6418,11 +6418,13 @@
       }
     }
 
-    /* ── 俱樂部成員：全員調整出勤狀況 ──────────────────────
-       只有「管理」看得到這排（.admin-only-btn），按下去還要再過一次管理密碼 ——
-       一次蓋掉一整組人的出勤，跟旁邊的「刪除此紀錄」「設定調整截止時間」同一個等級。
+    /* ── 全員調整出勤狀況 ──────────────────────────────────
+       只有「管理」與「文書」看得到這排（.export-allowed-btn），按下去還要再過一次
+       密碼（管理密碼或文書密碼都可以）—— 一次蓋掉一整組人的出勤，不是隨手的操作。
 
-       只動主要成員區。外援／試訓沒有身分組，也不在這個按鈕的範圍裡。 */
+       只動主要成員區。外援／試訓沒有身分組，不在這個按鈕的範圍裡。
+       已經請假／臨時請假的人一律跳過（BULK_KEEP_STATUSES）。
+       鎖表後文書只能整批設「出勤／X」，跟他一列一列改的限制一致。 */
     function ensureClubBulkOptions_() {
       var sel = document.getElementById('club-bulk-status');
       if (!sel || sel.options.length) return;
@@ -6463,6 +6465,15 @@
       var date = document.getElementById('attendance-date').value;
       if (!date) { showAlertModal('請先選日期／場次'); return; }
 
+      // 鎖表後文書只能設「出勤／X」。整批調整直接呼叫 saveAttendanceStatus，
+      // 不經過那一列的 onchange，所以同一條規則要在這裡自己再擋一次 ——
+      // 不然文書拿整批工具就繞過去了。
+      if (clerkRestrictedNow_() && CLERK_LOCKED_ALLOWED.indexOf(status) === -1) {
+        showAlertModal('這個場次已過調整截止時間。文書只能整批設成「出勤」或「X」，' +
+          '要設成「' + status + '」請聯繫管理。');
+        return;
+      }
+
       // 跟著左邊的身分組按鈕走。精確比對：選「俱樂部」掃不到「幫眾&俱樂部」。
       var target = squadBulkTarget_();
       var rows = target.rows;
@@ -6487,7 +6498,7 @@
       }
 
       // 過管理密碼。免密期內會直接往下走
-      if (!needUnlockThen_('admin', 'attendance-view', bulkSetSquadAttendance)) return;
+      if (!needUnlockThen_('export', 'attendance-view', bulkSetSquadAttendance)) return;
 
       var others = target.squad
         ? SQUAD_OPTIONS.filter(function (sq) { return sq !== target.squad; }).concat(['外援', '試訓'])
