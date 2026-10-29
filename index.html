@@ -3655,6 +3655,12 @@
     /* 身分組：主要成員這一份名單裡，每個人是幫眾、俱樂部、還是兩邊都算。
        「幫眾&俱樂部」是獨立的第三種，選「幫眾」或「俱樂部」的篩選／整批操作
        都不會掃到他（使用者明確要求）。外援、試訓沒有身分組。 */
+    /* 整批調整一律跳過的狀態。
+       請假是本人自己登記的，被整批蓋成 X 之後，紀錄上就從「有請假」變成
+       「沒說一聲就沒出現」—— 1017幫戰那次的抱怨就是這樣來的。
+       臨時請假一起保護：一樣是本人登記的，差別只在講的時間早晚。 */
+    var BULK_KEEP_STATUSES = ['請假', '臨時請假'];
+
     var SQUAD_OPTIONS = ['幫眾', '俱樂部', '幫眾&俱樂部'];
     var SQUAD_DEFAULT = '幫眾';
 
@@ -5309,6 +5315,7 @@
         statusSelect.dataset.prev = newVal;
         saveAttendanceStatus(name, job, newVal, true);
         updateAttendanceSummary();
+        refreshClubBulkHint_();   // 有人改成請假，整批調整要跳過的人數就變了
       };
 
       // 把「自己」那一列標記出來，方便一眼找到
@@ -6438,9 +6445,14 @@
       var el = document.getElementById('club-bulk-hint');
       if (!el) return;
       var t = squadBulkTarget_();
-      el.textContent = t.squad
+      var leave = t.rows.filter(function (r) {
+        var st = r.querySelector('.attendance-status');
+        return st && BULK_KEEP_STATUSES.indexOf(st.value) !== -1;
+      }).length;
+      el.textContent = (t.squad
         ? '只會動身分組是「' + t.squad + '」的 ' + t.rows.length + ' 人'
-        : '目前選「全部」，會動到主要成員全部 ' + t.rows.length + ' 人';
+        : '目前選「全部」，會動到主要成員全部 ' + t.rows.length + ' 人')
+        + (leave ? '，其中已請假的 ' + leave + ' 人會跳過' : '');
     }
 
     function bulkSetSquadAttendance() {
@@ -6456,13 +6468,21 @@
       var rows = target.rows;
       if (!rows.length) { showAlertModal('目前選的「' + target.label + '」沒有人。'); return; }
 
-      // 只算真的會變的人，不然訊息會寫「改了 21 人」但其實只有 3 個人有變
-      var willChange = rows.filter(function (r) {
+      // 已經請假／臨時請假的人一律跳過，整批調整碰不到他們（見 BULK_KEEP_STATUSES）
+      var statusOf = function (r) {
         var st = r.querySelector('.attendance-status');
-        return st && st.value !== status;
-      });
+        return st ? st.value : '';
+      };
+      var kept = rows.filter(function (r) { return BULK_KEEP_STATUSES.indexOf(statusOf(r)) !== -1; });
+      var touchable = rows.filter(function (r) { return BULK_KEEP_STATUSES.indexOf(statusOf(r)) === -1; });
+
+      // 只算真的會變的人，不然訊息會寫「改了 21 人」但其實只有 3 個人有變
+      var willChange = touchable.filter(function (r) { return statusOf(r) !== status; });
       if (!willChange.length) {
-        showAlertModal('「' + target.label + '」（' + rows.length + ' 人）本來就全部都是「' + status + '」了，不用再改。');
+        showAlertModal('「' + target.label + '」沒有需要改的人。\n\n' +
+          '共 ' + rows.length + ' 人' +
+          (kept.length ? '，其中 ' + kept.length + ' 人已經請假／臨時請假（跳過）' : '') +
+          '，其餘本來就是「' + status + '」了。');
         return;
       }
 
@@ -6478,6 +6498,9 @@
           ? '身分組是「' + target.squad + '」的共 ' + rows.length + ' 人，'
           : '主要成員全部 ' + rows.length + ' 人，') +
         '其中 ' + willChange.length + ' 人會被改動。\n' +
+        (kept.length
+          ? '已經請假／臨時請假的 ' + kept.length + ' 人會跳過，不會被蓋掉。\n'
+          : '') +
         others.join('、') + '不會動到。\n\n' +
         '每一筆都會記進操作記錄。',
         function () { applyClubBulk_(status, willChange, date, target.label); });
