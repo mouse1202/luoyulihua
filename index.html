@@ -2891,7 +2891,7 @@
         <button class="nav-btn" onclick="openAttendanceView()">梨花雨落影友情，相伴共行共此生。</button>
       </div>
       <div class="btn-row">
-        <button class="nav-btn not-club-btn" onclick="openVideoView()">影片上傳</button>
+        <button class="nav-btn" onclick="openVideoView()">影片上傳</button>
       </div>
       <div class="btn-row">
         <button class="nav-btn not-club-btn" onclick="openBattleView()">戰績</button>
@@ -3591,7 +3591,9 @@
     function applyAccessCategoryUI() {
       var isAdmin = currentAccessCategory === '管理';
       var canExport = isAdmin || currentAccessCategory === '文書';
-      // 俱樂部只保留出勤：影片上傳與戰績都藏起來
+      /* 登入身分是「俱樂部」的人只藏戰績。影片上傳不藏 ——
+         除了外援、試訓以外每個人都要能交影片，俱樂部也不例外。
+         （注意這個「俱樂部」是登入身分，跟名單上的身分組是兩回事。） */
       var isClub = currentAccessCategory === '俱樂部';
       Array.prototype.slice.call(document.querySelectorAll('.not-club-btn')).forEach(function (btn) {
         btn.classList.toggle('hidden', isClub);
@@ -7159,10 +7161,11 @@
         seen[m.name] = true;
         out.push(m);
       };
-      // 以前是「主名單的人」。名單合併之後俱樂部也變成 member，所以要再看身分組 ——
-      // 俱樂部成員本來就不在影片清冊裡，不能因為合併就多出 50 個人。
+      // 主名單的人全都要列，不分身分組（幫眾／俱樂部／幫眾&俱樂部）——
+      // 他們都要交影片，清冊上就得看得到誰交了誰沒交。
+      // 外援、試訓不在這裡（category 不是 member），他們不用交。
       (cands || []).forEach(function (m) {
-        if (m.category === 'member' && squadOf_(m) !== '俱樂部') push(m);
+        if (m.category === 'member') push(m);
       });
       (cands || []).forEach(function (m) { if (teamMap[m.name]) push(m); });
       (records || []).forEach(function (r) {
