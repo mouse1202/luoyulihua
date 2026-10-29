@@ -5165,6 +5165,17 @@
       statusSelect.onchange = function () {
         var newVal = statusSelect.value;
         var prev = statusSelect.dataset.prev || '出勤';
+
+        // 鎖表後的文書只能設「出勤／X」。選項那邊已經 disabled 了，
+        // 這裡是第二道 —— 選項是畫面上的狀態，值有別的路徑能被設進來。
+        if (clerkRestrictedNow_() && CLERK_LOCKED_ALLOWED.indexOf(newVal) === -1) {
+          statusSelect.value = prev;
+          updateAttendanceSummary();
+          showAlertModal('這個場次已過調整截止時間。文書可以把人改成「出勤」或「X」，' +
+            '要改成「' + newVal + '」請聯繫管理。');
+          return;
+        }
+
         var isMine = !!(currentAccessRoleName && name === currentAccessRoleName);
         var isPrivileged = (currentAccessCategory === '管理' || currentAccessCategory === '文書');
         // 改到「不是自己」的名字時，先還原畫面並跳確認框，避免誤點到別人。
@@ -5800,7 +5811,32 @@
       return !label || attendanceDeadlines[label] !== undefined;
     }
 
-    // 是否已過截止時間（純時間判斷；「誰能改」由 applyAttendanceLockState 決定：鎖表後只有管理能改）
+    /* 文書權限多的那一條：鎖表後照樣能改出勤，但只能改成「出勤」或「X」。
+       請假／臨時請假是本人自己要登記的，截止之後就不該再由文書補登 ——
+       真的要補，找管理。
+
+       還沒讀到截止時間（deadlineKnown_ 為 false）時一律當成已鎖：
+       寧可先把選項收起來、問到之後再放開，也不要先放開再收回去。 */
+    var CLERK_LOCKED_ALLOWED = ['出勤', 'X'];
+
+    function clerkRestrictedNow_() {
+      if (currentAccessCategory !== '文書') return false;
+      return !deadlineKnown_(getSharedDate()) || isAttendanceLockedNow();
+    }
+
+    /* 把「請假／臨時請假」兩個選項設成 disabled，而不是整個拿掉：
+       使用者要的是「看得到、選不到」，而且拿掉選項會害本來就是請假的那一列
+       在重畫時對不到值，變成空白。被選中的選項就算 disabled 也照樣顯示。 */
+    function applyClerkLockedOptions_(restrict) {
+      Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-status'))
+        .forEach(function (sel) {
+          Array.prototype.slice.call(sel.options).forEach(function (opt) {
+            opt.disabled = restrict && CLERK_LOCKED_ALLOWED.indexOf(opt.value) === -1;
+          });
+        });
+    }
+
+    // 是否已過截止時間（純時間判斷；「誰能改」由 applyAttendanceLockState 決定）
     function isAttendanceLockedNow() {
       var label = getSharedDate();
       if (!label) return false;
@@ -5816,15 +5852,18 @@
       var known = deadlineKnown_(label);
       var locked = known && isAttendanceLockedNow();
       var isAdmin = currentAccessCategory === '管理';
-      // 還沒問到截止時間就先鎖住（管理不受影響）。寧可晚幾秒才能改，
+      var isClerk = currentAccessCategory === '文書';
+      // 還沒問到截止時間就先鎖住（管理、文書不受影響）。寧可晚幾秒才能改，
       // 也不要在還不知道有沒有截止的情況下讓人改了才發現已經過期。
-      var disable = (!known || locked) && !isAdmin;
+      var disable = (!known || locked) && !isAdmin && !isClerk;
       var selects = Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-status'));
       selects.forEach(function (select) { select.disabled = disable; });
+      // 文書被放行之後，可選的狀態要收成「出勤／X」；沒鎖或不是文書就全部開放
+      applyClerkLockedOptions_(clerkRestrictedNow_());
 
       var lockRow = document.getElementById('attendance-lock-row');
       if (!known) {
-        document.getElementById('attendance-lock-msg').textContent = isAdmin
+        document.getElementById('attendance-lock-msg').textContent = (isAdmin || isClerk)
           ? '正在讀取這個場次的調整截止時間…'
           : '正在讀取這個場次的調整截止時間，讀到之前先不開放修改。';
         lockRow.classList.remove('hidden');
@@ -5832,9 +5871,17 @@
       }
       if (locked) {
         var cutoff = effectiveDeadline(label).replace('T', ' ');
-        document.getElementById('attendance-lock-msg').textContent = isAdmin
-          ? '「' + label + '」已過調整截止時間（' + cutoff + '），一般成員無法修改；你是管理，可直接編輯。'
-          : '「' + label + '」已過調整截止時間（' + cutoff + '），已無法修改，如需異動請聯繫管理。';
+        var head = '「' + label + '」已過調整截止時間（' + cutoff + '），';
+        var msg;
+        if (isAdmin) {
+          msg = head + '一般成員無法修改；你是管理，可直接編輯。';
+        } else if (isClerk) {
+          msg = head + '一般成員無法修改；你是文書，可以把人改成「出勤」或「X」，' +
+            '請假／臨時請假要找管理。';
+        } else {
+          msg = head + '已無法修改，如需異動請聯繫管理。';
+        }
+        document.getElementById('attendance-lock-msg').textContent = msg;
         lockRow.classList.remove('hidden');
       } else {
         lockRow.classList.add('hidden');
