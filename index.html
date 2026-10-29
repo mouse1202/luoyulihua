@@ -2639,6 +2639,28 @@
     .attendance-layout-row { display: flex; gap: 16px; align-items: flex-start; width: 100%; }
     .attendance-layout-row > .roster-section { flex: 1; min-width: 0; }
     .announce-sidebar { flex: 0 0 340px; width: 340px; position: sticky; top: 12px; }
+
+    /* 身分組篩選（只有出勤系統有）。跟右邊的約戰公告一樣是側欄，只是放左邊。 */
+    .squad-filter-sidebar { flex: 0 0 170px; width: 170px; position: sticky; top: 12px; }
+    .squad-filter-panel {
+      background: #0A0A0A; border: 1px solid #6B1023; border-radius: 8px; padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .squad-filter-title {
+      font-size: 15px; font-weight: 900; color: #FFFFEF; letter-spacing: 2px;
+      padding-bottom: 6px; border-bottom: 1px solid rgba(212, 168, 40, 0.35);
+    }
+    #attendance-squad-filter { display: flex; flex-direction: column; gap: 6px; }
+    .squad-filter-btn {
+      display: flex; justify-content: space-between; align-items: center; gap: 6px;
+      background: #0A0A0A; border: 1px solid #6B1023; border-radius: 6px;
+      color: #FFFFEF; padding: 7px 9px; font-size: 13px; font-family: inherit;
+      cursor: pointer; text-align: left;
+    }
+    .squad-filter-btn:hover { border-color: #f0d060; }
+    .squad-filter-btn.active { background: #6B1023; border-color: #f0d060; font-weight: 700; }
+    .squad-filter-count { color: #c8a45a; font-size: 12px; flex-shrink: 0; }
+    .squad-filter-btn.active .squad-filter-count { color: #FFFFEF; }
     .announce-display { white-space: pre-wrap; word-break: break-word; color: #f5e8c0; font-size: 15px; line-height: 1.7; min-height: 48px; }
     .announce-display.announce-empty { color: #8a7440; font-style: italic; }
     .announce-edit { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid rgba(212, 168, 40, 0.3); padding-top: 12px; }
@@ -2649,6 +2671,10 @@
     @media (max-width: 900px) {
       .attendance-layout-row { flex-direction: column; }
       .announce-sidebar { flex: none; width: 100%; position: static; }
+      /* 窄螢幕：身分組按鈕改成橫排，不要佔掉一整欄 */
+      .squad-filter-sidebar { flex: none; width: 100%; position: static; }
+      #attendance-squad-filter { flex-direction: row; flex-wrap: wrap; }
+      .squad-filter-btn { flex: 1 1 auto; }
     }
   </style>
 </head>
@@ -3085,6 +3111,21 @@
     <!-- Attendance view -->
     <div class="view hidden" id="attendance-view">
       <div class="attendance-layout-row">
+      <!-- 身分組篩選。只有出勤系統有這一排，其他頁面沒有。
+           按一下只看那一組，按「全部」回來。身分組是在管理名單設好的。
+           跟職業篩選一樣只動主要成員區：外援／試訓不受影響，上面的統計數字
+           也不會跟著變（那是全部人的數字，不是篩選後的）。 -->
+      <div class="squad-filter-sidebar">
+        <div class="squad-filter-panel">
+          <div class="squad-filter-title">身分組</div>
+          <div id="attendance-squad-filter">
+            <button type="button" class="squad-filter-btn active" data-squad="" onclick="setAttendanceSquadFilter('')">全部<span class="squad-filter-count"></span></button>
+            <button type="button" class="squad-filter-btn" data-squad="幫眾" onclick="setAttendanceSquadFilter('幫眾')">幫眾<span class="squad-filter-count"></span></button>
+            <button type="button" class="squad-filter-btn" data-squad="俱樂部" onclick="setAttendanceSquadFilter('俱樂部')">俱樂部<span class="squad-filter-count"></span></button>
+            <button type="button" class="squad-filter-btn" data-squad="幫眾&amp;俱樂部" onclick="setAttendanceSquadFilter('幫眾&amp;俱樂部')">幫眾&amp;俱樂部<span class="squad-filter-count"></span></button>
+          </div>
+        </div>
+      </div>
       <div class="roster-section">
         <div class="roster-header">
           <span class="roster-title">出勤系統</span>
@@ -6207,8 +6248,36 @@
       var rows = Array.prototype.slice.call(document.querySelectorAll('#attendance-list .attendance-row'));
       rows.forEach(function (row) {
         var ok = (!job || row.dataset.job === job) &&
-                 (!job2 || row.dataset.job2 === job2);
+                 (!job2 || row.dataset.job2 === job2) &&
+                 (!attendanceSquadFilter || row.dataset.squad === attendanceSquadFilter);
         row.style.display = ok ? '' : 'none';
+      });
+    }
+
+    /* 目前選的身分組，'' 代表全部。
+       精確比對：選「俱樂部」不會列出「幫眾&俱樂部」的人，選「幫眾」也一樣 ——
+       那是獨立的第三種身分（使用者指定的規則，整批調整也是同一套）。 */
+    var attendanceSquadFilter = '';
+
+    function setAttendanceSquadFilter(squad) {
+      attendanceSquadFilter = squad || '';
+      refreshSquadFilterButtons_();
+      applyAttendanceJobFilter();   // 顯示/隱藏統一由它決定，免得兩個篩選互相蓋掉
+    }
+
+    // 按鈕上的人數跟著名單走，不是寫死的。切日期重畫之後也要再算一次。
+    function refreshSquadFilterButtons_() {
+      var box = document.getElementById('attendance-squad-filter');
+      if (!box) return;
+      var rows = Array.prototype.slice.call(document.querySelectorAll('#attendance-list .attendance-row'));
+      Array.prototype.slice.call(box.querySelectorAll('.squad-filter-btn')).forEach(function (btn) {
+        var sq = btn.dataset.squad || '';
+        var count = sq
+          ? rows.filter(function (r) { return r.dataset.squad === sq; }).length
+          : rows.length;
+        var cEl = btn.querySelector('.squad-filter-count');
+        if (cEl) cEl.textContent = count;
+        btn.classList.toggle('active', sq === attendanceSquadFilter);
       });
     }
 
@@ -6225,7 +6294,8 @@
         renderAttendanceGroup_('attendance-trial-list', 'attendance-trial-empty', trialMembers);
         ensureJobFilterOptions();
         ensureClubBulkOptions_();
-        applyAttendanceJobFilter(); // 重新渲染後套用目前的職業篩選（只篩主要成員）
+        refreshSquadFilterButtons_();
+        applyAttendanceJobFilter(); // 重新渲染後套用目前的職業／身分組篩選（只篩主要成員）
 
         var date = document.getElementById('attendance-date').value;
         applyAttendanceStatusesForDate(date);
