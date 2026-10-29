@@ -2636,12 +2636,14 @@
     /* ── 約戰公告：出勤系統右側的獨立側邊視窗 ── */
     .container.attendance-wide { max-width: 1096px; }
     .container.video-wide { max-width: 920px; }
-    .attendance-layout-row { display: flex; gap: 16px; align-items: flex-start; width: 100%; }
+    .attendance-layout-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; width: 100%; }
     .attendance-layout-row > .roster-section { flex: 1; min-width: 0; }
     .announce-sidebar { flex: 0 0 340px; width: 340px; position: sticky; top: 12px; }
 
-    /* 身分組篩選（只有出勤系統有）。跟右邊的約戰公告一樣是側欄，只是放左邊。 */
-    .squad-filter-sidebar { flex: 0 0 170px; width: 170px; position: sticky; top: 12px; }
+    /* 身分組篩選（只有出勤系統有）。
+       預設排在卡片上面、橫向一列 —— 當成左欄塞進 flex 的話會直接從表格身上
+       拿走將近 190px，姓名欄會縮到名字換行。螢幕夠寬才浮到左邊的空白處。 */
+    .squad-filter-sidebar { flex: 1 1 100%; width: 100%; order: -1; }
     .squad-filter-panel {
       background: #0A0A0A; border: 1px solid #6B1023; border-radius: 8px; padding: 10px 12px;
       display: flex; flex-direction: column; gap: 8px;
@@ -2650,8 +2652,9 @@
       font-size: 15px; font-weight: 900; color: #FFFFEF; letter-spacing: 2px;
       padding-bottom: 6px; border-bottom: 1px solid rgba(212, 168, 40, 0.35);
     }
-    #attendance-squad-filter { display: flex; flex-direction: column; gap: 6px; }
+    #attendance-squad-filter { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; }
     .squad-filter-btn {
+      flex: 1 1 auto;
       display: flex; justify-content: space-between; align-items: center; gap: 6px;
       background: #0A0A0A; border: 1px solid #6B1023; border-radius: 6px;
       color: #FFFFEF; padding: 7px 9px; font-size: 13px; font-family: inherit;
@@ -2661,6 +2664,14 @@
     .squad-filter-btn.active { background: #6B1023; border-color: #f0d060; font-weight: 700; }
     .squad-filter-count { color: #c8a45a; font-size: 12px; flex-shrink: 0; }
     .squad-filter-btn.active .squad-filter-count { color: #FFFFEF; }
+
+    /* 左邊的空白夠放才浮上去（跟 .side-nav 同一套做法：fixed，不佔版面寬度）。
+       1250px 以下左邊沒有那麼多空位，會壓到卡片，所以維持橫排在上面。 */
+    @media (min-width: 1250px) {
+      .squad-filter-sidebar { position: fixed; left: 16px; top: 16px; width: 150px; z-index: 5; }
+      #attendance-squad-filter { flex-direction: column; }
+      .squad-filter-btn { flex: 0 0 auto; }
+    }
     .announce-display { white-space: pre-wrap; word-break: break-word; color: #f5e8c0; font-size: 15px; line-height: 1.7; min-height: 48px; }
     .announce-display.announce-empty { color: #8a7440; font-style: italic; }
     .announce-edit { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid rgba(212, 168, 40, 0.3); padding-top: 12px; }
@@ -2671,10 +2682,6 @@
     @media (max-width: 900px) {
       .attendance-layout-row { flex-direction: column; }
       .announce-sidebar { flex: none; width: 100%; position: static; }
-      /* 窄螢幕：身分組按鈕改成橫排，不要佔掉一整欄 */
-      .squad-filter-sidebar { flex: none; width: 100%; position: static; }
-      #attendance-squad-filter { flex-direction: row; flex-wrap: wrap; }
-      .squad-filter-btn { flex: 1 1 auto; }
     }
   </style>
 </head>
