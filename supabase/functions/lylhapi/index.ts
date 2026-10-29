@@ -91,9 +91,11 @@ async function appendVideoLog(actorEmail: string, actorRole: string, description
   }
 }
 
+// squad（身分組：幫眾／俱樂部／幫眾&俱樂部）只有主名單這一份有，外援與試訓是 null。
+// 見 0022 migration：主名單與俱樂部合併成同一份之後，身分改用這個欄位分。
 async function listByCategory(category: string) {
-  const { data } = await db.from("roster_members").select("name,job,job2").eq("category", category).order("sort_order");
-  return (data ?? []).map((r) => ({ name: r.name, job: r.job, job2: r.job2 ?? "" }));
+  const { data } = await db.from("roster_members").select("name,job,job2,squad").eq("category", category).order("sort_order");
+  return (data ?? []).map((r) => ({ name: r.name, job: r.job, job2: r.job2 ?? "", squad: r.squad ?? "" }));
 }
 // 名單存檔是「整份刪掉再寫入」。9/17 22:25 有人在主名單沒載入成功的畫面按了儲存，
 // 送上來的主名單是空的，69 人整批消失。所以現在：
@@ -127,15 +129,22 @@ async function saveByCategory(category: string, rows: any[], opts?: any) {
     }
   }
   await chk(db.from("roster_members").delete().eq("category", category).select("id"));
+  // squad 只有主名單會送上來；外援／試訓送空字串，存成 null（check 約束只收那三種值）
   const clean = (rows ?? []).filter((r) => r && r.name)
-    .map((r, i) => ({ category, name: r.name, job: r.job ?? "", job2: r.job2 ?? "", sort_order: i }));
+    .map((r, i) => ({
+      category, name: r.name, job: r.job ?? "", job2: r.job2 ?? "",
+      squad: r.squad ? String(r.squad) : null,
+      sort_order: i,
+    }));
   if (clean.length > 0) await chk(db.from("roster_members").insert(clean).select("id"));
   return { success: true, count: clean.length };
 }
 
 async function getAttendanceCandidates() {
-  const { data } = await db.from("roster_members").select("name,job,job2,category").order("category").order("sort_order");
-  return (data ?? []).map((r) => ({ name: r.name, job: r.job, job2: r.job2 ?? "", category: r.category }));
+  const { data } = await db.from("roster_members").select("name,job,job2,category,squad").order("category").order("sort_order");
+  return (data ?? []).map((r) => ({
+    name: r.name, job: r.job, job2: r.job2 ?? "", category: r.category, squad: r.squad ?? "",
+  }));
 }
 
 async function getAttendanceByDate(date: string) {
@@ -441,7 +450,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     records.forEach((r) => { statusByName[r.name] = r.status; });
     const cands = await getAttendanceCandidates();
     return cands.filter((c) => (statusByName[c.name] || "出勤") === "出勤")
-      .map((c) => ({ name: c.name, job: c.job, job2: c.job2 ?? "", category: c.category }));
+      .map((c) => ({ name: c.name, job: c.job, job2: c.job2 ?? "", category: c.category, squad: c.squad ?? "" }));
   },
   // 讀舊值與寫新值走同一個資料庫函式（0007 migration），中間不會被插隊。
   // 以前是分兩步，兩個請求靠得近時會雙雙讀到「還沒有紀錄」，
