@@ -574,7 +574,7 @@
        把它壓短、超過的自己捲。現在是兩個方框、每個放兩份（請假＋臨時請假），
        所以每份再收一點，整條側欄才不會比中間的排表還長。 */
     .roster-substitutes-panel-short .roster-substitutes-list {
-      max-height: 12vh;
+      max-height: 10vh;
     }
 
     /* 方框最上面那行身分（主要人員／俱樂部）。底下兩個標題才是「請假／臨時請假」，
@@ -901,6 +901,26 @@
     .roster-pool-note.roster-pool-short {
       color: #ff9797;
       font-weight: 700;
+    }
+
+    /* 名單管理的身分組下拉，寬度跟職業欄一致，不然三欄會對不齊 */
+    .attendance-squad {
+      flex: 1 1 0;
+      min-width: 0;
+      background: #0A0A0A;
+      border: 1px solid #6B1023;
+      border-radius: 6px;
+      color: #FFFFEF;
+      padding: 6px 8px;
+      font-size: 13px;
+    }
+
+    /* 出勤系統合併之後，列上要看得出誰是俱樂部的 */
+    .attendance-squad-tag {
+      font-size: 11px;
+      color: #c8a45a;
+      margin-left: 6px;
+      white-space: nowrap;
     }
 
     .roster-name-gone { color: #c8a45a; }
@@ -3023,6 +3043,13 @@
                 <div class="roster-substitutes-title">臨時請假<span id="roster-club-temp-leave-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-club-temp-leave-list"></div>
               </div>
+              <div class="roster-substitutes-panel roster-substitutes-panel-short">
+                <div class="roster-substitutes-group">幫眾&amp;俱樂部</div>
+                <div class="roster-substitutes-title">請假<span id="roster-both-leave-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-both-leave-list"></div>
+                <div class="roster-substitutes-title">臨時請假<span id="roster-both-temp-leave-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-both-temp-leave-list"></div>
+              </div>
               <div class="roster-substitutes-panel roster-substitutes-panel-tall">
                 <div class="roster-substitutes-title">外援<span id="roster-guest-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-guest-substitutes-list"></div>
@@ -3032,6 +3059,8 @@
                 <div class="roster-substitutes-list" id="roster-trial-substitutes-list"></div>
                 <div class="roster-substitutes-title">俱樂部<span id="roster-club-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-club-substitutes-list"></div>
+                <div class="roster-substitutes-title">幫眾&amp;俱樂部<span id="roster-both-substitutes-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-both-substitutes-list"></div>
               </div>
             </div>
             <div class="roster-list" id="roster-list"></div>
@@ -3108,7 +3137,17 @@
               <span class="attendance-stat-label">X 數</span>
             </div>
           </div>
-          <div class="member-section-title">主要成員</div>
+          <div class="member-section-title">主要成員（幫眾＋俱樂部）</div>
+          <!-- 整批調整只有俱樂部這一組有。幫眾、幫眾&俱樂部、外援、試訓刻意沒有 ——
+               那幾組是一個一個自己登記的，整批蓋掉會把別人填的東西洗掉。
+               名單合併之後它改成「依身分組挑人」，精確比對「俱樂部」，
+               不會掃到「幫眾&俱樂部」（那是獨立的第三種身分）。 -->
+          <div class="attendance-date-row admin-only-btn hidden" id="club-bulk-row">
+            <label for="club-bulk-status" class="attendance-date-label">全員調整：</label>
+            <select id="club-bulk-status" class="attendance-date-input"></select>
+            <button type="button" class="roster-back-btn" onclick="bulkSetClubAttendance()">套用到全部俱樂部成員</button>
+            <span class="attendance-summary" id="club-bulk-hint">只會動身分組是「俱樂部」的人</span>
+          </div>
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
             <span class="attendance-col-job">職業
@@ -3145,24 +3184,6 @@
           <div class="attendance-list" id="attendance-trial-list"></div>
           <p class="attendance-empty hidden" id="attendance-trial-empty">目前沒有試訓名單。</p>
 
-          <div class="member-section-title">俱樂部成員</div>
-          <!-- 整批調整只有俱樂部這一組有。主要成員／外援／試訓刻意沒有 —— 那幾組
-               是一個一個自己登記的，整批蓋掉會把別人填的東西洗掉。 -->
-          <div class="attendance-date-row admin-only-btn hidden" id="club-bulk-row">
-            <label for="club-bulk-status" class="attendance-date-label">全員調整：</label>
-            <select id="club-bulk-status" class="attendance-date-input"></select>
-            <button type="button" class="roster-back-btn" onclick="bulkSetClubAttendance()">套用到全部俱樂部成員</button>
-            <span class="attendance-summary" id="club-bulk-hint">只會動俱樂部成員</span>
-          </div>
-          <div class="attendance-header-row">
-            <span class="attendance-col-name">姓名</span>
-            <span class="attendance-col-job">職業</span>
-            <span class="attendance-col-job">二職</span>
-            <span class="attendance-col-status">是否出勤</span>
-            <span class="attendance-col-updated">最後修改</span>
-          </div>
-          <div class="attendance-list" id="attendance-club-list"></div>
-          <p class="attendance-empty hidden" id="attendance-club-empty">目前沒有俱樂部成員名單。</p>
         </div>
         <div class="roster-footer">
           <button type="button" class="roster-export-btn export-allowed-btn hidden" id="attendance-export-btn" onclick="openPasswordGate(exportAttendanceMonthData, 'attendance-view', false, 'export')">匯出出勤紀錄</button>
@@ -3196,13 +3217,14 @@
         </div>
         <div class="roster-body">
           <input type="file" id="member-import-input" accept=".xlsx,.xls" style="display:none" onchange="handleMemberImportFile(event)" />
-          <p class="password-hint">匯入的 Excel 檔需有「姓名」「職業」欄位（或第一欄為姓名、第二欄為職業），會匯入到「主名單」</p>
+          <p class="password-hint">匯入的 Excel 檔需有「姓名」「職業」欄位（或第一欄為姓名、第二欄為職業），會匯入到「主要成員」，身分組預設「幫眾」</p>
 
-          <div class="member-section-title">主名單</div>
+          <div class="member-section-title">主要成員（幫眾＋俱樂部）</div>
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
             <span class="attendance-col-job">職業</span>
             <span class="attendance-col-job">二職</span>
+            <span class="attendance-col-job">身分組</span>
             <span class="attendance-col-spacer"></span>
           </div>
           <div class="attendance-list" id="member-list"></div>
@@ -3228,15 +3250,6 @@
           <div class="attendance-list" id="trial-list"></div>
           <button type="button" class="attendance-add-btn" onclick="addTrialRow()">＋ 新增一列</button>
 
-          <div class="member-section-title">俱樂部成員名單</div>
-          <div class="attendance-header-row">
-            <span class="attendance-col-name">姓名</span>
-            <span class="attendance-col-job">職業</span>
-            <span class="attendance-col-job">二職</span>
-            <span class="attendance-col-spacer"></span>
-          </div>
-          <div class="attendance-list" id="club-list"></div>
-          <button type="button" class="attendance-add-btn" onclick="addClubRow()">＋ 新增一列</button>
         </div>
         <div class="roster-footer">
           <button type="button" class="roster-save-btn" id="member-save-btn" onclick="saveMemberListData()">儲存名單</button>
@@ -3588,6 +3601,16 @@
          X        ＝ 沒說一聲就沒出現
        （0006 migration 曾經把「臨時請假」整個改名成 X，那是同一件事換名字；
          現在是在 X 之外再多一種，兩者並存，舊的 X 不會被改回去。） */
+    /* 身分組：主要成員這一份名單裡，每個人是幫眾、俱樂部、還是兩邊都算。
+       「幫眾&俱樂部」是獨立的第三種，選「幫眾」或「俱樂部」的篩選／整批操作
+       都不會掃到他（使用者明確要求）。外援、試訓沒有身分組。 */
+    var SQUAD_OPTIONS = ['幫眾', '俱樂部', '幫眾&俱樂部'];
+    var SQUAD_DEFAULT = '幫眾';
+
+    function squadOf_(m) {
+      return (m && m.squad) || SQUAD_DEFAULT;
+    }
+
     var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', '臨時請假', 'X'];
 
     // 所有可切換的畫面，以及各畫面是否要用「一頁寬」樣式
@@ -3819,6 +3842,8 @@
     // 同一份資料的完整版（name/job/job2/category），跟 rosterAllKnown 同一次抓回來。
     // 「連請假／X 的人也列出來」要靠它才知道那些人的職業／二職。
     var rosterAllMembers = null;
+    // 姓名 → 身分組（只有主要成員那份有）。外援、試訓、已退的人查不到。
+    var rosterSquadByName = {};
     // 當天每個人的出勤狀態（姓名 → 出勤／請假／臨時請假／X），沒有紀錄的人不會在裡面。
     var rosterDateStatus = {};
     // 當天「不是出勤」的名單上的人。預設不會出現在姓名下拉，勾了才會。
@@ -4237,16 +4262,22 @@
         return false;
       });
 
-      // 候補（一般成員）／外援／試訓分成三個獨立窗格，外觀/排序邏輯完全一樣，只是名單來源不同
-      var memberSubstitutes = unassigned.filter(function (m) { return m.category === 'member'; }).sort(compareByJob_);
+      // 候補／外援／試訓分成獨立窗格，外觀/排序邏輯完全一樣，只是名單來源不同。
+      // 主名單合併之後，候補那一格再依身分組拆成幫眾／俱樂部／幫眾&俱樂部三份。
+      var inSquad = function (sq) {
+        return function (m) { return m.category === 'member' && squadOf_(m) === sq; };
+      };
+      var memberSubstitutes = unassigned.filter(inSquad('幫眾')).sort(compareByJob_);
       var guestSubstitutes = unassigned.filter(function (m) { return m.category === 'guest'; }).sort(compareByJob_);
       var trialSubstitutes = unassigned.filter(function (m) { return m.category === 'trial'; }).sort(compareByJob_);
 
       renderRosterSubstituteList('roster-substitutes-list', 'roster-substitutes-count', memberSubstitutes, '目前沒有候補');
       renderRosterSubstituteList('roster-guest-substitutes-list', 'roster-guest-substitutes-count', guestSubstitutes, '目前沒有外援');
       renderRosterSubstituteList('roster-trial-substitutes-list', 'roster-trial-substitutes-count', trialSubstitutes, '目前沒有試訓');
-      var clubSubstitutes = unassigned.filter(function (m) { return m.category === 'club'; }).sort(compareByJob_);
-      renderRosterSubstituteList('roster-club-substitutes-list', 'roster-club-substitutes-count', clubSubstitutes, '目前沒有俱樂部成員');
+      renderRosterSubstituteList('roster-club-substitutes-list', 'roster-club-substitutes-count',
+        unassigned.filter(inSquad('俱樂部')).sort(compareByJob_), '目前沒有俱樂部成員');
+      renderRosterSubstituteList('roster-both-substitutes-list', 'roster-both-substitutes-count',
+        unassigned.filter(inSquad('幫眾&俱樂部')).sort(compareByJob_), '目前沒有幫眾&俱樂部');
 
       // 二職候補：當天出勤、有設二職的人，用「二職」顯示。
       // 用主職排上的人仍留著（提醒他還能改當二職用），只有「已經用二職排上」的才移除。
@@ -4266,6 +4297,11 @@
         rosterAllKnown = {};
         rosterAllMembers = list || [];
         rosterAllMembers.forEach(function (m) { rosterAllKnown[m.name] = m.category || ''; });
+        // 姓名 → 身分組。請假面板要照身分組分三格，但 getAttendanceByDate 只回姓名／職業／狀態。
+        rosterSquadByName = {};
+        rosterAllMembers.forEach(function (m) {
+          if (m.category === 'member') rosterSquadByName[m.name] = squadOf_(m);
+        });
         if (cb) cb();
       }).withFailureHandler(function () {
         rosterAllKnown = {}; rosterAllMembers = [];
@@ -4331,8 +4367,10 @@
     // 兩邊算的都是「同一天」的事，有一邊套用到舊日期的資料就會對不起來。
     function loadRosterLeaveList(date, seq) {
       var stale = function () { return seq != null && seq !== rosterLoadSeq; };
-      var isClub = function (name) {
-        return !!rosterAllKnown && rosterAllKnown[name] === 'club';
+      // 身分組決定要放進哪一格。查不到的（外援、試訓、已經退幫的）歸「幫眾」那一格，
+      // 不然他們會整個從側欄消失。
+      var squadFor = function (name) {
+        return rosterSquadByName[name] || SQUAD_DEFAULT;
       };
 
       // 外援／試訓跟主要人員放同一格，照 rosterDisplayName_ 的慣例在名字後面加註記；
@@ -4361,9 +4399,9 @@
         // 勾選狀態下，下拉選單的內容跟這份名單有關，要重畫；沒勾就不用白做工。
         if (rosterShowAllNames_()) refreshAllRosterNameOptions();
 
-        var pick = function (club, statusOk) {
+        var pick = function (squad, statusOk) {
           return all
-            .filter(function (r) { return isClub(r.name) === club && statusOk(r.status); })
+            .filter(function (r) { return squadFor(r.name) === squad && statusOk(r.status); })
             .map(function (r) { return { name: labelOf(r.name), job: r.job }; })  // 名字後面顯示職業
             .sort(compareByJob_);                                                 // 按職業順序排序
         };
@@ -4371,13 +4409,17 @@
         var temp = function (st) { return st === '臨時請假'; };
 
         renderRosterSubstituteList('roster-leave-list', 'roster-leave-count',
-          pick(false, leave), '目前沒有人請假');
+          pick('幫眾', leave), '目前沒有人請假');
         renderRosterSubstituteList('roster-temp-leave-list', 'roster-temp-leave-count',
-          pick(false, temp), '目前沒有人臨時請假');
+          pick('幫眾', temp), '目前沒有人臨時請假');
         renderRosterSubstituteList('roster-club-leave-list', 'roster-club-leave-count',
-          pick(true, leave), '俱樂部沒有人請假');
+          pick('俱樂部', leave), '俱樂部沒有人請假');
         renderRosterSubstituteList('roster-club-temp-leave-list', 'roster-club-temp-leave-count',
-          pick(true, temp), '俱樂部沒有人臨時請假');
+          pick('俱樂部', temp), '俱樂部沒有人臨時請假');
+        renderRosterSubstituteList('roster-both-leave-list', 'roster-both-leave-count',
+          pick('幫眾&俱樂部', leave), '沒有人請假');
+        renderRosterSubstituteList('roster-both-temp-leave-list', 'roster-both-temp-leave-count',
+          pick('幫眾&俱樂部', temp), '沒有人臨時請假');
       }
 
       // 先確定名單快取在手上（只有第一次會多一次請求），不然查不到身分，
@@ -5139,16 +5181,25 @@
     // 使用者只能選「是否出勤」，不能自行新增/刪除人名。
     // 選了狀態就依「目前選的日期」自動存到後端（不用另外按儲存）。
     // 主要成員跟外援現在分成兩個窗格顯示，不用再靠文字標註「（外援）」區分。
-    function createAttendanceDisplayRow(name, job, job2) {
+    function createAttendanceDisplayRow(name, job, job2, squad) {
       var row = document.createElement('div');
       row.className = 'attendance-row';
       row.dataset.name = name;
       row.dataset.job = job;
       row.dataset.job2 = job2 || '';
+      // 身分組放進 dataset：俱樂部全員調整要靠它挑人，之後的篩選按鈕也是
+      row.dataset.squad = squad || '';
 
       var nameSpan = document.createElement('span');
       nameSpan.className = 'attendance-name attendance-name-display';
       nameSpan.textContent = name;
+      // 合併成一區之後，名字後面標一下是哪一組（幫眾不標，不然整排都是字）
+      if (squad && squad !== SQUAD_DEFAULT) {
+        var tag = document.createElement('span');
+        tag.className = 'attendance-squad-tag';
+        tag.textContent = '（' + squad + '）';
+        nameSpan.appendChild(tag);
+      }
 
       var jobSpan = document.createElement('span');
       jobSpan.className = 'attendance-job attendance-job-display';
@@ -6124,7 +6175,7 @@
       } else {
         emptyEl.classList.add('hidden');
         people.forEach(function (m) {
-          listEl.appendChild(createAttendanceDisplayRow(m.name, m.job, m.job2));
+          listEl.appendChild(createAttendanceDisplayRow(m.name, m.job, m.job2, m.squad));
         });
       }
     }
@@ -6164,15 +6215,14 @@
     function loadAttendanceFromMembers() {
       function renderMembers(members) {
         members = members || [];
+        // 幫眾與俱樂部現在同一份名單（category 都是 member），照職業混排成一區
         var mainMembers = members.filter(function (m) { return m.category === 'member'; }).sort(compareByJob_);
         var guestMembers = members.filter(function (m) { return m.category === 'guest'; }).sort(compareByJob_);
         var trialMembers = members.filter(function (m) { return m.category === 'trial'; }).sort(compareByJob_);
-        var clubMembers = members.filter(function (m) { return m.category === 'club'; }).sort(compareByJob_);
 
         renderAttendanceGroup_('attendance-list', 'attendance-empty', mainMembers);
         renderAttendanceGroup_('attendance-guest-list', 'attendance-guest-empty', guestMembers);
         renderAttendanceGroup_('attendance-trial-list', 'attendance-trial-empty', trialMembers);
-        renderAttendanceGroup_('attendance-club-list', 'attendance-club-empty', clubMembers);
         ensureJobFilterOptions();
         ensureClubBulkOptions_();
         applyAttendanceJobFilter(); // 重新渲染後套用目前的職業篩選（只篩主要成員）
@@ -6285,6 +6335,7 @@
 
        只有俱樂部這一組有。主要成員／外援／試訓是每個人自己登記的，
        整批蓋過去會把別人填的請假洗掉。 */
+    // 名單合併之後，「俱樂部那一區有沒有人」改成看主要成員裡有沒有身分組＝俱樂部的
     function ensureClubBulkOptions_() {
       var sel = document.getElementById('club-bulk-status');
       if (!sel || sel.options.length) return;
@@ -6301,9 +6352,12 @@
       var date = document.getElementById('attendance-date').value;
       if (!date) { showAlertModal('請先選日期／場次'); return; }
 
+      // 名單合併之後沒有「俱樂部那一區」了，改成從主要成員裡挑身分組＝俱樂部的人。
+      // 精確比對：「幫眾&俱樂部」是獨立的第三種身分，不會被掃到。
       var rows = Array.prototype.slice.call(
-        document.querySelectorAll('#attendance-club-list .attendance-row'));
-      if (!rows.length) { showAlertModal('目前沒有俱樂部成員。'); return; }
+        document.querySelectorAll('#attendance-list .attendance-row'))
+        .filter(function (r) { return r.dataset.squad === '俱樂部'; });
+      if (!rows.length) { showAlertModal('目前沒有身分組是「俱樂部」的人。'); return; }
 
       // 只算真的會變的人，不然訊息會寫「改了 21 人」但其實只有 3 個人有變
       var willChange = rows.filter(function (r) {
@@ -6311,7 +6365,7 @@
         return st && st.value !== status;
       });
       if (!willChange.length) {
-        showAlertModal('俱樂部成員（' + rows.length + ' 人）本來就全部都是「' + status + '」了，不用再改。');
+        showAlertModal('身分組「俱樂部」（' + rows.length + ' 人）本來就全部都是「' + status + '」了，不用再改。');
         return;
       }
 
@@ -6320,8 +6374,8 @@
 
       showConfirmModal('全員調整出勤',
         '把「' + date + '」的俱樂部成員出勤狀態全部設成「' + status + '」？\n\n' +
-        '俱樂部成員共 ' + rows.length + ' 人，其中 ' + willChange.length + ' 人會被改動。\n' +
-        '主要成員、外援、試訓不會動到。\n\n' +
+        '身分組是「俱樂部」的共 ' + rows.length + ' 人，其中 ' + willChange.length + ' 人會被改動。\n' +
+        '幫眾、幫眾&俱樂部、外援、試訓不會動到。\n\n' +
         '每一筆都會記進操作記錄。',
         function () { applyClubBulk_(status, willChange, date); });
     }
@@ -6338,7 +6392,7 @@
         done++;
       });
       updateAttendanceSummary();
-      showAlertModal('已把 ' + done + ' 位俱樂部成員（' + date + '）的出勤狀態設成「' + status + '」');
+      showAlertModal('已把 ' + done + ' 位身分組「俱樂部」的成員（' + date + '）的出勤狀態設成「' + status + '」');
     }
 
     function updateAttendanceSummary() {
@@ -6365,11 +6419,18 @@
     // 目前各職業分別有幾個人，職業順序照 JOB_OPTIONS（出勤系統本身用的職業順序）排。
     // 名單管理這裡沒有「出勤狀態」的概念，就是單純算目前名單上的總人數，
     // 不是某一天的出勤人數。
-    function countMembersByJob_(listElId) {
+    // squadFilter 有帶的話，只算身分組等於它的人（名單合併之後「俱樂部」那一格要用）
+    function countMembersByJob_(listElId, squadFilter) {
       var countByJob = {};
       JOB_OPTIONS.forEach(function (job) { countByJob[job] = 0; });
 
       var rows = Array.prototype.slice.call(document.querySelectorAll('#' + listElId + ' .attendance-row'));
+      if (squadFilter) {
+        rows = rows.filter(function (row) {
+          var sq = row.querySelector('.attendance-squad');
+          return sq && sq.value === squadFilter;
+        });
+      }
       rows.forEach(function (row) {
         var jobSelect = row.querySelector('.attendance-job');
         var job = jobSelect ? jobSelect.value : '';
@@ -6398,7 +6459,8 @@
       mainEl.innerHTML = buildJobCountRowHtml_(countMembersByJob_('member-list'));
       guestEl.innerHTML = buildJobCountRowHtml_(countMembersByJob_('guest-list'));
       trialEl.innerHTML = buildJobCountRowHtml_(countMembersByJob_('trial-list'));
-      if (clubEl) clubEl.innerHTML = buildJobCountRowHtml_(countMembersByJob_('club-list'));
+      // 「主要」是整份（幫眾＋俱樂部＋幫眾&俱樂部），「俱樂部」只算身分組是俱樂部的
+      if (clubEl) clubEl.innerHTML = buildJobCountRowHtml_(countMembersByJob_('member-list', '俱樂部'));
     }
 
 
@@ -6960,7 +7022,11 @@
         seen[m.name] = true;
         out.push(m);
       };
-      (cands || []).forEach(function (m) { if (m.category === 'member') push(m); });
+      // 以前是「主名單的人」。名單合併之後俱樂部也變成 member，所以要再看身分組 ——
+      // 俱樂部成員本來就不在影片清冊裡，不能因為合併就多出 50 個人。
+      (cands || []).forEach(function (m) {
+        if (m.category === 'member' && squadOf_(m) !== '俱樂部') push(m);
+      });
       (cands || []).forEach(function (m) { if (teamMap[m.name]) push(m); });
       (records || []).forEach(function (r) {
         if (seen[r.name]) return;
@@ -6970,11 +7036,14 @@
       return out;
     }
 
-    function videoCatTag_(cat) {
+    function videoCatTag_(cat, squad) {
       if (cat === 'guest') return '<span class="battle-tag">外援</span>';
       if (cat === 'trial') return '<span class="battle-tag">試訓</span>';
-      if (cat === 'club') return '<span class="battle-tag">俱樂部</span>';
-      if (cat === 'member') return '';
+      if (cat === 'member') {
+        // 身分組合併進主名單之後，俱樂部要靠 squad 才標得出來
+        return squad && squad !== SQUAD_DEFAULT
+          ? '<span class="battle-tag">' + squad + '</span>' : '';
+      }
       return '<span class="battle-tag battle-tag-none">非名單</span>';
     }
 
@@ -6994,7 +7063,7 @@
         var second = slot && slot.isSecond && m.job2;
         var showJob = second ? m.job2 : (m.job || '');
         return '<div class="video-row" data-name="' + (m.name || '').replace(/"/g, '&quot;') + '" data-job="' + showJob.replace(/"/g, '&quot;') + '">' +
-          '<span class="video-col-name">' + m.name + videoCatTag_(m.category) + '</span>' +
+          '<span class="video-col-name">' + m.name + videoCatTag_(m.category, m.squad) + '</span>' +
           '<span class="video-col-job">' + showJob + (second ? '<span class="team-2nd">二職</span>' : '') + '</span>' +
           '<span class="vr-col-s">' + cell(rec.url1, rec.time1) + '</span>' +
           '<span class="vr-col-s">' + cell(rec.url2, rec.time2) + '</span>' +
@@ -7220,7 +7289,8 @@
     }
 
     /* ── 名單管理（需管理員密碼）── */
-    function createMemberRow(name, job, job2) {
+    // squad 傳 undefined 代表這份名單沒有身分組（外援、試訓）；傳字串才會長出那一欄。
+    function createMemberRow(name, job, job2, squad) {
       var row = document.createElement('div');
       row.className = 'attendance-row';
 
@@ -7251,25 +7321,29 @@
       row.appendChild(nameInput);
       row.appendChild(jobSelect);
       row.appendChild(job2Select);
+      if (squad !== undefined) {
+        var squadSelect = document.createElement('select');
+        squadSelect.className = 'attendance-squad';
+        squadSelect.innerHTML = SQUAD_OPTIONS.map(function (sq) {
+          return '<option value="' + sq + '">' + sq + '</option>';
+        }).join('');
+        squadSelect.value = squad || SQUAD_DEFAULT;
+        // 右邊的職業人數窗格是依身分組分的，改身分組要重算
+        squadSelect.onchange = function () { updateMemberJobCounts(); };
+        row.appendChild(squadSelect);
+      }
       row.appendChild(delBtn);
       return row;
     }
 
-    function addMemberRow(name, job, job2) {
+    function addMemberRow(name, job, job2, squad) {
       var list = document.getElementById('member-list');
-      list.appendChild(createMemberRow(name, job, job2));
+      list.appendChild(createMemberRow(name, job, job2, squad || SQUAD_DEFAULT));
       updateMemberJobCounts();
     }
 
     function addGuestRow(name, job, job2) {
       var list = document.getElementById('guest-list');
-      list.appendChild(createMemberRow(name, job, job2));
-      updateMemberJobCounts();
-    }
-
-    function addClubRow(name, job, job2) {
-      var list = document.getElementById('club-list');
-      if (!list) return;
       list.appendChild(createMemberRow(name, job, job2));
       updateMemberJobCounts();
     }
@@ -7353,7 +7427,7 @@
     function loadMemberListIntoForm() {
       var seq = ++memberLoadSeq;
       var stale = function () { return seq !== memberLoadSeq; };
-      memberLoadState = { member: null, guest: null, trial: null, club: null };
+      memberLoadState = { member: null, guest: null, trial: null };
       setMemberSaveEnabled_();
       var memberList = document.getElementById('member-list');
       var guestList = document.getElementById('guest-list');
@@ -7370,7 +7444,10 @@
         if (!members || members.length === 0) {
           for (var i = 0; i < 5; i++) addMemberRow();
         } else {
-          members.forEach(function (m) { addMemberRow(m.name, m.job, m.job2); });
+          // 幫眾跟俱樂部合併成一份之後，照職業混排（使用者指定），不照存檔順序
+          members.slice().sort(compareByJob_).forEach(function (m) {
+            addMemberRow(m.name, m.job, m.job2, m.squad);
+          });
         }
       }
 
@@ -7398,19 +7475,6 @@
         }
       }
 
-      function renderClubs(clubs, failed) {
-        if (stale()) return;                       // 舊的一次載入回來了，丟掉
-        memberLoadState.club = failed ? 'failed' : (clubs || []).length;
-        setMemberSaveEnabled_();
-        var list = document.getElementById('club-list');
-        if (list) list.innerHTML = '';
-        if (!clubs || clubs.length === 0) {
-          for (var i = 0; i < 3; i++) addClubRow();
-        } else {
-          clubs.forEach(function (c) { addClubRow(c.name, c.job, c.job2); });
-        }
-      }
-
       if (window.google && google.script && google.script.run) {
         google.script.run.withSuccessHandler(renderMembers).withFailureHandler(function (err) {
           showAlertModal('讀取主名單失敗：' + err.message + '\n\n這時候不能儲存名單，請重新整理頁面再進來。');
@@ -7427,16 +7491,11 @@
           renderTrials([], true);
         }).getTrialList();
 
-        google.script.run.withSuccessHandler(renderClubs).withFailureHandler(function (err) {
-          showAlertModal('讀取俱樂部成員名單失敗：' + err.message + '\n\n這時候不能儲存名單，請重新整理頁面再進來。');
-          renderClubs([], true);
-        }).getClubList();
       } else {
         console.log('local preview: 未連接 Google Apps Script，名單管理改用空白列');
         renderMembers([]);
         renderGuests([]);
         renderTrials([]);
-        renderClubs([]);
       }
     }
 
@@ -7905,17 +7964,19 @@
       var rows = Array.prototype.slice.call(document.querySelectorAll('#' + containerId + ' .attendance-row'));
       return rows.map(function (row) {
         var j2 = row.querySelector('.attendance-job2');
+        var sq = row.querySelector('.attendance-squad');   // 只有主要成員那份有
         return {
           name: row.querySelector('.attendance-name').value.trim(),
           job: row.querySelector('.attendance-job').value,
-          job2: j2 ? j2.value : ''
+          job2: j2 ? j2.value : '',
+          squad: sq ? sq.value : ''
         };
       }).filter(function (r) { return r.name; });
     }
 
     function memberListsReady_() {
       var st = memberLoadState;
-      return ['member', 'guest', 'trial', 'club'].every(function (k) {
+      return ['member', 'guest', 'trial'].every(function (k) {
         return typeof st[k] === 'number';
       });
     }
@@ -7938,14 +7999,12 @@
       var memberData = collectListRows_('member-list');
       var guestData = collectListRows_('guest-list');
       var trialData = collectListRows_('trial-list');
-      var clubData = collectListRows_('club-list');
 
       // 同一份名單裡有重複的名字就不准存。名字在這套系統裡等於識別碼，
       // 一份名單本來就不該有兩個一樣的 —— 出現重複代表畫面疊到了，
       // 存下去出勤系統就會看到同一個人好幾行。這個不給 force 略過。
       var dupFound = [
-        ['主名單', memberData], ['外援', guestData],
-        ['試訓', trialData], ['俱樂部成員', clubData]
+        ['主要成員', memberData], ['外援', guestData], ['試訓', trialData]
       ].map(function (x) {
         var seen = {}, dups = [];
         x[1].forEach(function (r) {
@@ -7965,10 +8024,9 @@
       // 跟載入時的人數比。清空或少掉一大半的，先講清楚再讓人決定
       if (!force) {
         var warn = [
-          ['主名單', memberLoadState.member, memberData.length],
+          ['主要成員', memberLoadState.member, memberData.length],
           ['外援', memberLoadState.guest, guestData.length],
-          ['試訓', memberLoadState.trial, trialData.length],
-          ['俱樂部成員', memberLoadState.club, clubData.length]
+          ['試訓', memberLoadState.trial, trialData.length]
         ].filter(function (x) {
           var had = x[1], now = x[2];
           return (had > 0 && now === 0) || (had >= 10 && now < had * 0.5);
@@ -7989,7 +8047,7 @@
       saveBtn.disabled = true;
       saveBtn.textContent = '儲存中...';
 
-      var pending = 4;   // 主名單／外援／試訓／俱樂部成員
+      var pending = 3;   // 主要成員／外援／試訓（俱樂部已經併進主要成員）
       var hadError = false;
 
       function checkDone() {
@@ -8000,7 +8058,7 @@
         if (!hadError) {
           // 存成功之後，下次比對的基準改成這次存進去的人數
           memberLoadState = { member: memberData.length, guest: guestData.length,
-                              trial: trialData.length, club: clubData.length };
+                              trial: trialData.length };
           showAlertModal('已儲存名單');
         }
       }
@@ -8024,10 +8082,9 @@
             checkDone();
           };
         };
-        google.script.run.withSuccessHandler(ok('主名單')).withFailureHandler(onFailure('主名單')).saveMemberList(memberData, opts);
+        google.script.run.withSuccessHandler(ok('主要成員名單')).withFailureHandler(onFailure('主要成員名單')).saveMemberList(memberData, opts);
         google.script.run.withSuccessHandler(ok('外援名單')).withFailureHandler(onFailure('外援名單')).saveGuestList(guestData, opts);
         google.script.run.withSuccessHandler(ok('試訓名單')).withFailureHandler(onFailure('試訓名單')).saveTrialList(trialData, opts);
-        google.script.run.withSuccessHandler(ok('俱樂部成員名單')).withFailureHandler(onFailure('俱樂部成員名單')).saveClubList(clubData, opts);
       } else {
         console.log('member list data (local preview, no GAS backend):', memberData);
         console.log('guest list data (local preview, no GAS backend):', guestData);
