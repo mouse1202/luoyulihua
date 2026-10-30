@@ -1159,22 +1159,29 @@
       flex: 1;
     }
 
-    /* 標記「自己」那一列：姓名格加金框＋金色「你」徽章 */
+    /* 標記「自己」那一列：姓名格加金框＋金色「你」圓圈 */
     .attendance-row-mine .attendance-name.attendance-name-display {
       background: rgba(212, 168, 40, 0.20);
       border-color: #d4a828;
       color: #ffe9a8;
       font-weight: 700;
     }
+    /* 圓圈，放在名字前面。
+       以前是名字後面的長條標籤 —— 名字後面又多了身分組標籤之後，它會被往右推，
+       推出姓名格就被旁邊「職業」格的不透明黑底整個蓋掉（窄螢幕實測超出 42～72px，
+       有身分組的人完全看不到自己那列）。放前面就不會再被任何東西擠出去。 */
     .attendance-mine-badge {
-      margin-left: 6px;
-      font-size: 11px;
-      padding: 0 7px;
-      border-radius: 8px;
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      margin-right: 6px;
+      border-radius: 50%;
       background: #d4a828;
       color: #1a0e00;
+      font-size: 11px;
       font-weight: 700;
-      flex: 0 0 auto;
+      line-height: 18px;
+      text-align: center;
     }
 
     .attendance-name:focus,
@@ -1194,6 +1201,11 @@
       display: flex;
       align-items: center;
     }
+
+    /* 窄螢幕塞不下時在格子邊緣切掉。不切的話內容會溢到隔壁「職業」格底下 ——
+       那一格是不透明黑底又畫在後面，看起來就是「東西不見了」。
+       「你」圓圈排在最前面，切到的一定是後面的身分組標籤。 */
+    .attendance-name.attendance-name-display { overflow: hidden; }
 
     .attendance-empty {
       color: #8a7440;
@@ -3666,6 +3678,16 @@
     var SQUAD_OPTIONS = ['幫眾', '俱樂部', '幫眾&俱樂部'];
     var SQUAD_DEFAULT = '幫眾';
 
+    /* 出勤列上的身分組只放簡寫。全名「幫眾&俱樂部」在姓名格裡要 91px，
+       直接把名字擠到換行（一列從 41px 變 102px），窄螢幕還會把標籤擠出格子。
+       左邊的篩選按鈕、名單管理的下拉、匯出的檔案都還是全名。 */
+    var SQUAD_SHORT = { '幫眾': '幫', '俱樂部': '俱', '幫眾&俱樂部': '幫&俱' };
+
+    // 外援／試訓沒有身分組（傳進來是空字串），不標；主要成員沒設過就算幫眾
+    function squadTagText_(squad) {
+      return SQUAD_SHORT[squad] || '';
+    }
+
     function squadOf_(m) {
       return (m && m.squad) || SQUAD_DEFAULT;
     }
@@ -5249,14 +5271,24 @@
       // 身分組放進 dataset：俱樂部全員調整要靠它挑人，之後的篩選按鈕也是
       row.dataset.squad = squad || '';
 
+      var isMineRow = !!(currentAccessRoleName && name === currentAccessRoleName);
+
       var nameSpan = document.createElement('span');
       nameSpan.className = 'attendance-name attendance-name-display';
-      nameSpan.textContent = name;
-      // 合併成一區之後，名字後面標一下是哪一組（幫眾不標，不然整排都是字）
-      if (squad && squad !== SQUAD_DEFAULT) {
+      // 順序就是畫面上的順序：你 → 名字 → （身分組）。
+      // 「你」一定要排在最前面，排後面會被身分組標籤擠出格子（見 .attendance-mine-badge）。
+      if (isMineRow) {
+        var mineBadge = document.createElement('span');
+        mineBadge.className = 'attendance-mine-badge';
+        mineBadge.textContent = '你';
+        nameSpan.appendChild(mineBadge);
+      }
+      nameSpan.appendChild(document.createTextNode(name));
+      var squadTag = squadTagText_(squad);
+      if (squadTag) {
         var tag = document.createElement('span');
         tag.className = 'attendance-squad-tag';
-        tag.textContent = '（' + squad + '）';
+        tag.textContent = '（' + squadTag + '）';
         nameSpan.appendChild(tag);
       }
 
@@ -5320,14 +5352,8 @@
         refreshClubBulkHint_();   // 有人改成請假，整批調整要跳過的人數就變了
       };
 
-      // 把「自己」那一列標記出來，方便一眼找到
-      if (currentAccessRoleName && name === currentAccessRoleName) {
-        row.classList.add('attendance-row-mine');
-        var mineBadge = document.createElement('span');
-        mineBadge.className = 'attendance-mine-badge';
-        mineBadge.textContent = '你';
-        nameSpan.appendChild(mineBadge);
-      }
+      // 把「自己」那一列標記出來，方便一眼找到（圓圈在上面組姓名格時就放好了）
+      if (isMineRow) row.classList.add('attendance-row-mine');
 
       // 這一筆最後是什麼時候被改的。操作記錄滿了會把最舊的蓋掉，
       // 到時候查不到「是誰」，但這個時間一直都在。
@@ -6235,7 +6261,10 @@
       } else {
         emptyEl.classList.add('hidden');
         people.forEach(function (m) {
-          listEl.appendChild(createAttendanceDisplayRow(m.name, m.job, m.job2, m.squad));
+          // 外援／試訓沒有身分組，傳空字串；主要成員沒設過的算幫眾，
+          // 這樣左邊篩選按鈕的人數加起來才會剛好等於「全部」。
+          var squad = m.category === 'member' ? squadOf_(m) : '';
+          listEl.appendChild(createAttendanceDisplayRow(m.name, m.job, m.job2, squad));
         });
       }
     }
