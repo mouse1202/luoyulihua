@@ -994,10 +994,11 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const labels = Object.keys(labelSet).sort();
     // 四種狀態各給一欄合計。順序跟畫面上的統計框一致。
     const STATUSES = ["出勤", "請假", "臨時請假", "X"];
-    const header = ["姓名", "職業", ...labels, ...STATUSES.map((st) => st + "數")];
-    const lines = [header];
-    members.forEach((m) => {
-      const row: string[] = [m.name, m.job ?? ""];
+    const header = ["姓名", "職業", "身分組", ...labels, ...STATUSES.map((st) => st + "數")];
+    const lines: string[][] = [header];
+
+    const rowFor = (m: any): string[] => {
+      const row: string[] = [m.name, m.job ?? "", m.squad ?? ""];
       const counts: Record<string, number> = {};
       STATUSES.forEach((st) => { counts[st] = 0; });
       labels.forEach((label) => {
@@ -1006,7 +1007,32 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
         if (status in counts) counts[status]++;
       });
       STATUSES.forEach((st) => row.push(String(counts[st])));
-      lines.push(row);
+      return row;
+    };
+
+    /* 只匯出主名單，依身分組分成三段，每段前面插一列標題。
+       外援、試訓不列（使用者指定）—— 他們是另一回事，混在同一張表裡
+       算出勤率會把分母弄歪。
+
+       段內照職業排、同職業再照姓名，跟名單管理與出勤系統畫面上的順序同一套
+       （前端的 JOB_OPTIONS / compareByJob_）。這兩邊的順序要是對不起來，
+       拿匯出的表去跟畫面核對就會一直找不到人。 */
+    const JOB_ORDER = ["龍吟", "碎夢", "素問", "九靈", "神相", "玄機", "潮光", "鐵衣", "血河"];
+    const jobIdx = (j: unknown) => {
+      const i = JOB_ORDER.indexOf(String(j ?? ""));
+      return i < 0 ? JOB_ORDER.length : i;
+    };
+    const SQUADS = ["幫眾", "俱樂部", "幫眾&俱樂部"];
+
+    SQUADS.forEach((squad) => {
+      const group = members
+        .filter((m) => m.category === "member" && (m.squad || "幫眾") === squad)
+        .sort((x, y) =>
+          jobIdx(x.job) - jobIdx(y.job) ||
+          String(x.name).localeCompare(String(y.name), "zh-Hant"));
+      // 0 人的段落照樣留標題，才看得出是「真的沒有人」而不是漏掉了
+      lines.push(["■ " + squad + "（" + group.length + " 人）"]);
+      group.forEach((m) => lines.push(rowFor(m)));
     });
     const csv = "﻿" + lines.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
     const filename = `${GUILD_NAME}出勤總表${month ? "_" + month + "月" : ""}.csv`;
