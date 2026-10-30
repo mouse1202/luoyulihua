@@ -992,8 +992,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       statusMap[label + "|" + r.name] = r.status;
     });
     const labels = Object.keys(labelSet).sort();
-    // 四種狀態各給一欄合計。順序跟畫面上的統計框一致。
-    const STATUSES = ["出勤", "請假", "臨時請假", "X"];
+    // 五種狀態各給一欄合計。順序跟畫面上的統計框一致（黃牌是 0023 加的）。
+    const STATUSES = ["出勤", "請假", "臨時請假", "X", "黃牌"];
     const header = ["姓名", "職業", "身分組", ...labels, ...STATUSES.map((st) => st + "數")];
     const lines: string[][] = [header];
 

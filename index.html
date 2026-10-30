@@ -1184,6 +1184,15 @@
       text-align: center;
     }
 
+    /* 黃牌那一列的狀態框打黃底。一百多個人的表裡，沒有顏色根本找不到被記的人。
+       選擇器要帶 #attendance-view 才蓋得過上面那條把狀態框設成黑底紅框的規則。 */
+    #attendance-view .attendance-row-yellow .attendance-status {
+      background: #3d3008;
+      border-color: #d4a828;
+      color: #ffe08a;
+      font-weight: 700;
+    }
+
     .attendance-name:focus,
     .attendance-job:focus,
     .attendance-status:focus {
@@ -3198,6 +3207,10 @@
               <span class="attendance-stat-value" id="stat-absent">0</span>
               <span class="attendance-stat-label">X 數</span>
             </div>
+            <div class="attendance-stat-box">
+              <span class="attendance-stat-value" id="stat-yellow">0</span>
+              <span class="attendance-stat-label">黃牌數</span>
+            </div>
           </div>
           <div class="member-section-title">主要成員（幫眾＋俱樂部）</div>
           <!-- 整批調整跟著左邊的身分組按鈕走：選哪一組就套用到那一組。
@@ -3673,7 +3686,9 @@
        請假是本人自己登記的，被整批蓋成 X 之後，紀錄上就從「有請假」變成
        「沒說一聲就沒出現」—— 1017幫戰那次的抱怨就是這樣來的。
        臨時請假一起保護：一樣是本人登記的，差別只在講的時間早晚。 */
-    var BULK_KEEP_STATUSES = ['請假', '臨時請假'];
+    /* 黃牌一起保護：它是管理／文書一個一個記上去的處分，
+       被「全員調整成出勤」一次洗掉的話，誰被記過就查不出來了。 */
+    var BULK_KEEP_STATUSES = ['請假', '臨時請假', '黃牌'];
 
     var SQUAD_OPTIONS = ['幫眾', '俱樂部', '幫眾&俱樂部'];
     var SQUAD_DEFAULT = '幫眾';
@@ -3692,7 +3707,22 @@
       return (m && m.squad) || SQUAD_DEFAULT;
     }
 
-    var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', '臨時請假', 'X'];
+    /* 黃牌（第五種）跟前面四種不一樣：那四種是「本人有沒有來」的事實，
+       黃牌是管理／文書給的處分。所以多兩條規則：
+         1. 只有管理／文書選得動；一般幫眾看得到但是灰色的 —— 看得到才知道自己被記了，
+            而且下拉要顯示得出目前的狀態，整個拿掉選項那一列會變空白。
+         2. 「全員調整」的下拉不放黃牌。處分是對個人的，不該一次蓋一整組人。
+       排表那邊不用特別處理：後端 getRosterAttendeesForDate 只收「出勤」，
+       黃牌的人本來就不會被排進格子。 */
+    var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', '臨時請假', 'X', '黃牌'];
+
+    // 只有管理／文書能設的狀態
+    var PRIVILEGED_ONLY_STATUSES = ['黃牌'];
+
+    function canSetStatus_(status) {
+      if (PRIVILEGED_ONLY_STATUSES.indexOf(status) === -1) return true;
+      return currentAccessCategory === '管理' || currentAccessCategory === '文書';
+    }
 
     // 所有可切換的畫面，以及各畫面是否要用「一頁寬」樣式
     var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view', 'video-roster-view', 'battle-view', 'name-check-view'];
@@ -4058,18 +4088,20 @@
       if (!el) return;
       if (!rosterAllMembers) { el.textContent = ''; return; }
 
-      var counts = { '請假': 0, '臨時請假': 0, 'X': 0 };
+      var counts = { '請假': 0, '臨時請假': 0, 'X': 0, '黃牌': 0 };
       rosterAllMembers.forEach(function (m) {
         var st = rosterDateStatus[m.name];
         if (counts.hasOwnProperty(st)) counts[st]++;
       });
-      var out = counts['請假'] + counts['臨時請假'] + counts['X'];
+      // 黃牌的人後端本來就不會送進候選名單，這裡一起扣掉，
+      // 不然「可排人數」會比下拉真的挑得到的人多。
+      var out = counts['請假'] + counts['臨時請假'] + counts['X'] + counts['黃牌'];
       var pool = rosterAllMembers.length - out;
       var slots = document.querySelectorAll('#roster-list .roster-name').length;
 
       el.textContent = '當天可排 ' + pool + ' 人／共 ' + slots + ' 格' +
         '（請假 ' + counts['請假'] + '、臨時請假 ' + counts['臨時請假'] +
-        '、X ' + counts['X'] + ' 不列入）';
+        '、X ' + counts['X'] + '、黃牌 ' + counts['黃牌'] + ' 不列入）';
       el.classList.toggle('roster-pool-short', slots > 0 && pool < slots);
     }
 
@@ -5308,12 +5340,20 @@
         var newVal = statusSelect.value;
         var prev = statusSelect.dataset.prev || '出勤';
 
-        // 鎖表後的文書只能設「出勤／X」。選項那邊已經 disabled 了，
+        // 黃牌是處分，只有管理／文書能設。選項那邊已經 disabled 了，
         // 這裡是第二道 —— 選項是畫面上的狀態，值有別的路徑能被設進來。
+        if (!canSetStatus_(newVal)) {
+          statusSelect.value = prev;
+          updateAttendanceSummary();
+          showAlertModal('「' + newVal + '」只有管理／文書可以設定。');
+          return;
+        }
+
+        // 鎖表後的文書只能設「出勤／X／黃牌」，同樣再擋一次。
         if (clerkRestrictedNow_() && CLERK_LOCKED_ALLOWED.indexOf(newVal) === -1) {
           statusSelect.value = prev;
           updateAttendanceSummary();
-          showAlertModal('這個場次已過調整截止時間。文書可以把人改成「出勤」或「X」，' +
+          showAlertModal('這個場次已過調整截止時間。文書可以把人改成「出勤」「X」或「黃牌」，' +
             '要改成「' + newVal + '」請聯繫管理。');
           return;
         }
@@ -5954,21 +5994,26 @@
 
        還沒讀到截止時間（deadlineKnown_ 為 false）時一律當成已鎖：
        寧可先把選項收起來、問到之後再放開，也不要先放開再收回去。 */
-    var CLERK_LOCKED_ALLOWED = ['出勤', 'X'];
+    var CLERK_LOCKED_ALLOWED = ['出勤', 'X', '黃牌'];
 
     function clerkRestrictedNow_() {
       if (currentAccessCategory !== '文書') return false;
       return !deadlineKnown_(getSharedDate()) || isAttendanceLockedNow();
     }
 
-    /* 把「請假／臨時請假」兩個選項設成 disabled，而不是整個拿掉：
-       使用者要的是「看得到、選不到」，而且拿掉選項會害本來就是請假的那一列
-       在重畫時對不到值，變成空白。被選中的選項就算 disabled 也照樣顯示。 */
-    function applyClerkLockedOptions_(restrict) {
+    /* 哪些選項選得動。兩條規則疊在一起：
+         ① 黃牌只有管理／文書能設（PRIVILEGED_ONLY_STATUSES）
+         ② 鎖表後的文書只能設 CLERK_LOCKED_ALLOWED 裡的那幾種
+       一律用 disabled，不要整個拿掉選項：要的是「看得到、選不到」，
+       而且拿掉選項會害本來就是那個狀態的人在重畫時對不到值，下拉變空白。
+       被選中的選項就算 disabled 也照樣顯示得出來。 */
+    function applyStatusOptionPermissions_() {
+      var restrict = clerkRestrictedNow_();
       Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-status'))
         .forEach(function (sel) {
           Array.prototype.slice.call(sel.options).forEach(function (opt) {
-            opt.disabled = restrict && CLERK_LOCKED_ALLOWED.indexOf(opt.value) === -1;
+            opt.disabled = !canSetStatus_(opt.value) ||
+              (restrict && CLERK_LOCKED_ALLOWED.indexOf(opt.value) === -1);
           });
         });
     }
@@ -5995,8 +6040,8 @@
       var disable = (!known || locked) && !isAdmin && !isClerk;
       var selects = Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-status'));
       selects.forEach(function (select) { select.disabled = disable; });
-      // 文書被放行之後，可選的狀態要收成「出勤／X」；沒鎖或不是文書就全部開放
-      applyClerkLockedOptions_(clerkRestrictedNow_());
+      // 黃牌只有管理／文書選得動；文書被放行之後可選的狀態再收成「出勤／X／黃牌」
+      applyStatusOptionPermissions_();
 
       var lockRow = document.getElementById('attendance-lock-row');
       if (!known) {
@@ -6013,7 +6058,7 @@
         if (isAdmin) {
           msg = head + '一般成員無法修改；你是管理，可直接編輯。';
         } else if (isClerk) {
-          msg = head + '一般成員無法修改；你是文書，可以把人改成「出勤」或「X」，' +
+          msg = head + '一般成員無法修改；你是文書，可以把人改成「出勤」「X」或「黃牌」，' +
             '請假／臨時請假要找管理。';
         } else {
           msg = head + '已無法修改，如需異動請聯繫管理。';
@@ -6459,9 +6504,12 @@
     function ensureClubBulkOptions_() {
       var sel = document.getElementById('club-bulk-status');
       if (!sel || sel.options.length) return;
-      sel.innerHTML = ATTENDANCE_STATUS_OPTIONS.map(function (st) {
-        return '<option value="' + st + '">' + st + '</option>';
-      }).join('');
+      // 黃牌不放進來：處分是對個人的，一次蓋一整組人沒有道理，
+      // 放進來只會變成誤點的風險。要記黃牌就一列一列記。
+      sel.innerHTML = ATTENDANCE_STATUS_OPTIONS
+        .filter(function (st) { return PRIVILEGED_ONLY_STATUSES.indexOf(st) === -1; })
+        .map(function (st) { return '<option value="' + st + '">' + st + '</option>'; })
+        .join('');
     }
 
     // 左邊選的那一組（'' ＝全部）現在要套用到幾個人、怎麼稱呼
@@ -6565,11 +6613,14 @@
 
     function updateAttendanceSummary() {
       var rows = Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-row'));
-      var counts = { '出勤': 0, '請假': 0, '臨時請假': 0, 'X': 0 };
+      var counts = { '出勤': 0, '請假': 0, '臨時請假': 0, 'X': 0, '黃牌': 0 };
 
       rows.forEach(function (row) {
         var status = row.querySelector('.attendance-status').value;
         if (counts.hasOwnProperty(status)) counts[status]++;
+        // 順便把黃牌那一列標出來。這個函式在改狀態之後跟讀完紀錄之後都會跑，
+        // 掛在這裡就不用在每個改狀態的地方各補一次。
+        row.classList.toggle('attendance-row-yellow', status === '黃牌');
       });
 
       document.getElementById('stat-total').textContent = rows.length;
@@ -6578,6 +6629,7 @@
       // stat-temp-leave 本來掛的是 X，現在名副其實給臨時請假，X 改用 stat-absent
       document.getElementById('stat-temp-leave').textContent = counts['臨時請假'];
       document.getElementById('stat-absent').textContent = counts['X'];
+      document.getElementById('stat-yellow').textContent = counts['黃牌'];
     }
 
     // 右側額外三個獨立窗格用的：算出某一區塊（主要／外援／試訓）裡，當天標記
