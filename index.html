@@ -4661,7 +4661,8 @@
           return;
         }
         applyRosterResultToForm(result, null, false); // 複製過來的還沒存過，整份寫進去
-        saveRosterData(); // 複製後立即存檔，變成第二場自己的資料（存檔成功會顯示「已自動儲存」）
+        // 帶 reason：操作記錄要寫得出「這是整份複製」，不是一格一格手改的
+        saveRosterData(null, null, { kind: 'copySession1' });
       }
 
       if (window.google && google.script && google.script.run) {
@@ -4748,7 +4749,20 @@
       overlay.querySelector('.modal-btn-confirm').onclick = function () {
         var srcDate = document.getElementById('copy-roster-source').value;
         close();
-        doCopyRosterConfig(srcDate);
+
+        /* 這個按鈕是整份覆蓋，而且排表沒有歷史版本，蓋掉就真的沒了。
+           10/31 就發生過一次：人在幫戰那一天，選了俱樂部的場次當來源，
+           整張排好的幫戰表被換成俱樂部名單，事後救不回來。
+           所以要把「覆蓋誰、換成誰」白紙黑字寫出來再問一次。 */
+        var filled = collectRosterData().filter(function (r) { return r.name; }).length;
+        showConfirmModal('確定要覆蓋排表嗎？',
+          '即將把「' + currentDate + '」' + sessionText + '的排表整份覆蓋掉。\n\n' +
+          '　被覆蓋：「' + currentDate + '」' + sessionText +
+          '（目前排了 ' + filled + ' 個人）\n' +
+          '　覆蓋成：「' + srcDate + '」' + sessionText + ' 的配置\n\n' +
+          '姓名、職業、備註、指揮會整份換成來源那天的內容。\n' +
+          '排表沒有歷史版本，覆蓋之後救不回來。',
+          function () { doCopyRosterConfig(srcDate); });
       };
     }
 
@@ -4769,7 +4783,8 @@
         if (!hasAny) { showAlertModal('「' + srcDate + '」的這一場沒有排表資料可以複製'); return; }
         // 複製過來的還沒存進目前這天這場，整份寫進去
         applyRosterResultToForm(result, '已複製「' + srcDate + '」的配置，改動會自動存檔', false);
-        saveRosterData(); // 複製後立即存檔，變成目前這天這場自己的資料
+        // 帶 reason＋來源：操作記錄要寫得出「被誰、用哪一天的配置整份蓋掉」
+        saveRosterData(null, null, { kind: 'copyOtherDay', from: srcDate });
       }
       google.script.run
         .withSuccessHandler(function (rows) { result.rows = rows || []; done(); })
@@ -5068,7 +5083,9 @@
     //
     // rosterBaseline 為 null 代表畫面上這份還沒存進這個日期／場次
     // （自動帶入或複製過來的），那種情況還是要整份寫進去。
-    function saveRosterData(dateOverride, sessionOverride) {
+    /* reason 是給操作記錄看的：分得出這次是手改一格，還是整份複製覆蓋。
+       不帶就是一般的自動存檔。 */
+    function saveRosterData(dateOverride, sessionOverride, reason) {
       var date = dateOverride || document.getElementById('roster-date').value;
       var session = sessionOverride || currentRosterSession;
       var all = collectRosterData(); // 完整 60 個位置（含空白）
@@ -5090,7 +5107,12 @@
         if (!rows.length && !commanders.length) return; // 什麼都沒改就不用打後端
       }
 
-      var payload = { date: date, session: session, rows: rows, commanders: commanders };
+      var payload = {
+        date: date, session: session, rows: rows, commanders: commanders,
+        // 排表以前不記是誰存的，被整份蓋掉時查不出人。現在跟出勤走同一套署名。
+        actorEmail: currentAccessName, actorRoleName: currentAccessRoleName,
+        reason: reason || null
+      };
 
       // 存出去的內容先留一份：成功之後把它併進基準，
       // 而不是重讀表單 —— 請求在路上時使用者可能又改了別的格子，

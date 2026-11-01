@@ -83,6 +83,61 @@ async function appendActivityLog(actorEmail: string, actorRole: string, descript
   }
 }
 
+/* 一次排表存檔寫成一筆操作記錄。
+   前端只會送「跟畫面載入時不一樣」的格子，所以 rows 就是這次動到的範圍：
+   自動存檔通常 1 格，「複製其他天配置」「複製第一場」則是一次 60 格。
+   reason 由前端帶進來，分得出是手改的還是整份複製 —— 這兩件事的嚴重度差很多。 */
+async function logRosterSave_(
+  payload: any, date: string, session: string,
+  rows: any[], commanders: any[],
+  before: Record<string, { name: string; job: string; note: string }>,
+  slotKey: (g: unknown, t: unknown, sl: unknown) => string,
+) {
+  const who = payload.actorRoleName || payload.actorEmail || "有人";
+  const where = `「${date}」（${session === "2" ? "第二場" : "第一場"}）`;
+  const reason = payload.reason || {};
+  const blank = (v: string) => v || "（空白）";
+
+  const nameChanged = rows.filter((r: any) => {
+    const old = before[slotKey(r.group, r.team, r.slot)];
+    return (old ? old.name : "") !== (r.name || "");
+  });
+  const otherChanged = rows.filter((r: any) => {
+    const old = before[slotKey(r.group, r.team, r.slot)] || { name: "", job: "", note: "" };
+    return old.name === (r.name || "") &&
+      (old.job !== (r.job || "") || old.note !== (r.note || ""));
+  });
+  const one = (r: any) => {
+    const old = before[slotKey(r.group, r.team, r.slot)];
+    return `${r.group} ${r.team} 第${r.slot}格：「${blank(old ? old.name : "")}」→「${blank(r.name || "")}」`;
+  };
+
+  let msg = "";
+  if (reason.kind === "copyOtherDay") {
+    msg = `${who} 把${where}的排表整份覆蓋成「${reason.from}」的配置` +
+      `（寫入 ${rows.length} 格，其中 ${nameChanged.length} 格換人）`;
+  } else if (reason.kind === "copySession1") {
+    msg = `${who} 把${where}的排表整份複製自第一場` +
+      `（寫入 ${rows.length} 格，其中 ${nameChanged.length} 格換人）`;
+  } else if (nameChanged.length === 1) {
+    msg = `${who} 改了${where}排表的 ${one(nameChanged[0])}`;
+  } else if (nameChanged.length > 1) {
+    msg = `${who} 一次改了${where}排表的 ${nameChanged.length} 格：` +
+      nameChanged.slice(0, 3).map(one).join("；") +
+      (nameChanged.length > 3 ? " …等" : "");
+  } else if (otherChanged.length > 0) {
+    msg = `${who} 調整了${where}排表的 ${otherChanged.length} 格職業／備註（沒有換人）`;
+  }
+
+  if (commanders.length > 0) {
+    const cmd = commanders.map((c: any) => `${c.group}＝${blank(c.name)}`).join("、");
+    msg = msg ? `${msg}；指揮：${cmd}` : `${who} 改了${where}的指揮：${cmd}`;
+  }
+
+  // 什麼都沒真的變就不記（例如複製過來跟原本一模一樣），跟出勤那邊同一條規則
+  if (msg) await appendActivityLog(payload.actorEmail, payload.actorRoleName, msg);
+}
+
 async function appendVideoLog(actorEmail: string, actorRole: string, description: string) {
   await db.from("video_activity_log").insert({ actor_email: actorEmail || "", actor_role: actorRole || "", description });
   const { data } = await db.from("video_activity_log").select("id").order("id", { ascending: false }).range(ACTIVITY_LOG_KEEP, ACTIVITY_LOG_KEEP);
@@ -920,6 +975,24 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const rows = payload.rows || [];
     const commanders = payload.commanders || [];
     const now = new Date().toISOString();
+
+    /* 存檔前先把「這幾格原本是誰」讀起來，不然事後查不出改了什麼。
+       排表以前完全不留痕跡：沒有操作記錄，也沒有記是誰存的 ——
+       10/31 整張幫戰排表被「複製其他天配置」整份蓋成俱樂部名單，
+       事後只能靠每一格的 updated_at 猜，連按的人都查不出來。
+       一次存檔只寫一筆記錄（不是一格一筆），記錄不會被洗掉。 */
+    const slotKey = (g: unknown, t: unknown, sl: unknown) => `${g}|${t}|${sl}`;
+    const before: Record<string, { name: string; job: string; note: string }> = {};
+    if (rows.length > 0) {
+      const { data: oldRows } = await db.from("roster_slots")
+        .select("grp,team,slot,name,job,note")
+        .eq("date_label", date).eq("session", session);
+      (oldRows || []).forEach((r: any) => {
+        before[slotKey(r.grp, r.team, r.slot)] =
+          { name: r.name || "", job: r.job || "", note: r.note || "" };
+      });
+    }
+
     if (rows.length > 0) {
       await chk(db.from("roster_slots").upsert(
         rows.map((r: any) => ({
@@ -939,6 +1012,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
         { onConflict: "date_label,session,grp" },
       ).select("id"));
     }
+
+    await logRosterSave_(payload, date, session, rows, commanders, before, slotKey);
     return { success: true, count: rows.length };
   },
   getRosterByDate: (date: string, session: string) => getRosterByDate(date, session || "1"),
