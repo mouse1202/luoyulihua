@@ -458,6 +458,14 @@
       border-bottom: 1px solid rgba(212, 168, 40, 0.3);
     }
 
+    /* 標題列是 space-between：按鈕要先包成一組，不然三個小孩會被平均撐開，
+       「操作記錄」會跑到正中間去。 */
+    .roster-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
     .roster-title {
       font-size: 22px;
       font-weight: 900;
@@ -3056,7 +3064,14 @@
       <div class="roster-section">
         <div class="roster-header">
           <span class="roster-title">排表工具</span>
-          <button type="button" class="roster-back-btn" onclick="closeRosterView()">返回出勤系統</button>
+          <!-- 這一頁看不到左邊那條側邊導覽（整頁寬的版面會被它壓到，見
+               SIDE_NAV_OFF_VIEWS），所以「操作記錄」要自己長在這裡。
+               走 gotoAdminView 跟側邊導覽那顆同一條路：它會記下現在是從
+               排表進去的，開出來就是「操作記錄（排表）」那一份。 -->
+          <div class="roster-header-actions">
+            <button type="button" class="roster-back-btn" onclick="gotoAdminView(openActivityLogView, false)">操作記錄</button>
+            <button type="button" class="roster-back-btn" onclick="closeRosterView()">返回出勤系統</button>
+          </div>
         </div>
         <div class="roster-body">
           <div class="attendance-date-row">
