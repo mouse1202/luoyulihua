@@ -70,8 +70,8 @@
     }
 
     /* 排表工具（含密碼頁）改為一頁寬顯示，不受主頁 680px 限制；
-       多加 432px（左右各一個側邊欄，各 200px 窗格 + 16px 間距＝216px，
-       左邊放外援／試訓、右邊放候補）讓兩側窗格都是額外多出來的空間，
+       左右各一個側邊欄，各 150px 窗格 + 16px 間距＝166px（左邊放請假，
+       右邊放當天排得上的人），兩側都是額外多出來的空間，
        不會壓縮到原本表格的寬度 */
     .container.wide {
       max-width: 1816px;
@@ -521,7 +521,7 @@
       overflow-y: auto;
     }
 
-    /* 候補／外援／試訓窗格用的側邊欄容器，左右各一個 */
+    /* 側邊欄容器，左右各一個：左邊放請假，右邊放當天排得上的人 */
     .roster-sidebar {
       flex: 0 0 150px;
       width: 150px;
@@ -561,7 +561,8 @@
       overflow-y: auto;
     }
 
-    /* 外援／試訓現在左側只有兩個窗格一起分，比原本三個擠在一起時可以拉高一些 */
+    /* 右欄那兩個「可以出勤」的窗格：裡面名單多，給它一個下限高度，
+       人少的時候兩格也不會一高一低。 */
     .roster-substitutes-panel-tall {
       min-height: 320px;
     }
@@ -571,10 +572,11 @@
     }
 
     /* 請假只是排表時的參考，人多的時候會把左邊整條撐得很長，
-       把它壓短、超過的自己捲。現在是兩個方框、每個放兩份（請假＋臨時請假），
-       所以每份再收一點，整條側欄才不會比中間的排表還長。 */
+       把它壓短、超過的自己捲。三個方框、每個放兩份（請假＋臨時請假）。
+       可出勤的名單搬到右欄之後左邊空出來了，所以每份從 10vh 放寬到 18vh，
+       一般情況不用捲就看得完。 */
     .roster-substitutes-panel-short .roster-substitutes-list {
-      max-height: 10vh;
+      max-height: 18vh;
     }
 
     /* 方框最上面那行身分（主要人員／俱樂部）。底下兩個標題才是「請假／臨時請假」，
@@ -600,9 +602,10 @@
       margin-top: 14px;
     }
 
-    /* 一格裡放兩份名單，各自的高度上限要收斂一點，免得整格比中間的表格還長 */
-    .roster-substitutes-panel-split .roster-substitutes-list {
-      max-height: 34vh;
+    /* 右欄一格放三份名單（候補／俱樂部／幫眾&俱樂部），再收一次高度，
+       不然三份都排滿的時候整條右欄會比中間的排表還長一倍。 */
+    .roster-substitutes-panel-trio .roster-substitutes-list {
+      max-height: 24vh;
     }
 
     .roster-substitute-item {
@@ -619,7 +622,7 @@
     }
 
     /* 窄螢幕（手機）：側邊欄不要跟表格並排擠壓姓名欄位，改成堆疊在表格下方。
-       表格（.roster-list）排第一個，外援／試訓、候補兩個側邊欄接在後面，
+       表格（.roster-list）排第一個，請假、可出勤兩個側邊欄接在後面，
        各自維持原本內部的排列順序。 */
     @media (max-width: 900px) {
       .roster-content-row {
@@ -646,7 +649,7 @@
 
       .roster-substitutes-panel-tall .roster-substitutes-list,
       .roster-substitutes-panel-short .roster-substitutes-list,
-      .roster-substitutes-panel-split .roster-substitutes-list,
+      .roster-substitutes-panel-trio .roster-substitutes-list,
       .roster-substitutes-list {
         max-height: 240px;
       }
@@ -3082,9 +3085,10 @@
           </div>
           <div class="roster-content-row">
             <div class="roster-sidebar">
-              <!-- 請假名單照身分分成兩個方框。幫戰那種日子俱樂部成員會整批掛 X
-                   （34 位），跟主要人員混在同一格的話，真正要看的十幾筆請假
-                   會被整個擠到看不見。 -->
+              <!-- 左欄一律是「請假的人」，照身分組分成三個方框。
+                   幫戰那種日子俱樂部成員會整批掛 X（34 位），跟主要人員混在
+                   同一格的話，真正要看的十幾筆請假會被整個擠到看不見。
+                   排得上的人全部在右邊那一欄。 -->
               <div class="roster-substitutes-panel roster-substitutes-panel-short">
                 <div class="roster-substitutes-group">幫眾</div>
                 <div class="roster-substitutes-title">請假<span id="roster-leave-count"></span></div>
@@ -3106,28 +3110,31 @@
                 <div class="roster-substitutes-title">臨時請假<span id="roster-both-temp-leave-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-both-temp-leave-list"></div>
               </div>
-              <div class="roster-substitutes-panel roster-substitutes-panel-tall">
-                <div class="roster-substitutes-title">外援<span id="roster-guest-substitutes-count"></span></div>
-                <div class="roster-substitutes-list" id="roster-guest-substitutes-list"></div>
-              </div>
-              <div class="roster-substitutes-panel roster-substitutes-panel-tall">
-                <div class="roster-substitutes-title">試訓<span id="roster-trial-substitutes-count"></span></div>
-                <div class="roster-substitutes-list" id="roster-trial-substitutes-list"></div>
+            </div>
+            <div class="roster-list" id="roster-list"></div>
+            <div class="roster-sidebar">
+              <!-- 右邊一律是「當天排得上的人」，左邊一律是「請假的人」。
+                   以前外援／試訓／俱樂部候補擺在左邊，跟請假名單混在一起 ——
+                   排表時眼睛要在左右兩邊來回找「還有誰可以用」。
+                   這幾份的來源都是同一個 currentRosterAttendees 扣掉已排上的人，
+                   本來就是同一類東西，放在一起才對得起來。 -->
+              <div class="roster-substitutes-panel roster-substitutes-panel-tall roster-substitutes-panel-trio">
+                <div class="roster-substitutes-group">主名單</div>
+                <div class="roster-substitutes-title">候補<span id="roster-substitutes-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-substitutes-list"></div>
                 <div class="roster-substitutes-title">俱樂部<span id="roster-club-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-club-substitutes-list"></div>
                 <div class="roster-substitutes-title">幫眾&amp;俱樂部<span id="roster-both-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-both-substitutes-list"></div>
               </div>
-            </div>
-            <div class="roster-list" id="roster-list"></div>
-            <div class="roster-sidebar">
-              <!-- 候補與二職候補放同一格：兩個都是「還沒排上的人」，
-                   分成左右兩邊看反而要來回找，右邊也會只剩一格空著。 -->
-              <div class="roster-substitutes-panel roster-substitutes-panel-tall roster-substitutes-panel-split">
-                <div class="roster-substitutes-title">候補<span id="roster-substitutes-count"></span></div>
-                <div class="roster-substitutes-list" id="roster-substitutes-list"></div>
+              <div class="roster-substitutes-panel roster-substitutes-panel-tall roster-substitutes-panel-trio">
+                <div class="roster-substitutes-group">其他可用</div>
                 <div class="roster-substitutes-title">二職候補<span id="roster-second-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-second-substitutes-list"></div>
+                <div class="roster-substitutes-title">外援<span id="roster-guest-substitutes-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-guest-substitutes-list"></div>
+                <div class="roster-substitutes-title">試訓<span id="roster-trial-substitutes-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-trial-substitutes-list"></div>
               </div>
             </div>
           </div>
