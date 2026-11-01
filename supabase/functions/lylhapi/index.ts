@@ -135,7 +135,18 @@ async function logRosterSave_(
   }
 
   // 什麼都沒真的變就不記（例如複製過來跟原本一模一樣），跟出勤那邊同一條規則
-  if (msg) await appendActivityLog(payload.actorEmail, payload.actorRoleName, msg);
+  if (msg) await appendRosterLog(payload.actorEmail, payload.actorRoleName, msg);
+}
+
+/* 排表的記錄獨立一張表。跟出勤混在一起的話，出勤一天就有幾十筆，
+   排表存檔那幾筆會被沖到翻不到；而且保留上限是共用的，
+   出勤記錄多的時候會把排表記錄一起擠掉。影片那邊早就是這樣分開的。 */
+async function appendRosterLog(actorEmail: string, actorRole: string, description: string) {
+  await db.from("roster_activity_log").insert({ actor_email: actorEmail || "", actor_role: actorRole || "", description });
+  const { data } = await db.from("roster_activity_log").select("id").order("id", { ascending: false }).range(ACTIVITY_LOG_KEEP, ACTIVITY_LOG_KEEP);
+  if (data && data.length > 0) {
+    await db.from("roster_activity_log").delete().lte("id", data[0].id);
+  }
 }
 
 async function appendVideoLog(actorEmail: string, actorRole: string, description: string) {
@@ -368,7 +379,7 @@ const NEED_LEVEL: Record<string, "admin" | "export"> = {
   setAttendanceTempUnlock: "admin",
   addAccessMember: "admin", getAllAccessRequests: "admin", setAccessRequestStatus: "admin",
   setAccessRequestCategory: "admin", deleteAccessRequest: "admin", purgeRejected: "admin",
-  getActivityLog: "admin",
+  getActivityLog: "admin", getRosterActivityLog: "admin",
   saveBattle: "admin", deleteBattle: "admin", updateBattle: "admin",
   renamePlayer: "admin", markPlayerLeft: "admin", getPlayerLeftPreview: "admin",
   listRenameRequests: "admin", approveRenameRequest: "admin", rejectRenameRequest: "admin",
@@ -963,6 +974,15 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   getActivityLog: async () => {
     const data = await fetchAll((a, b) =>
       db.from("activity_log").select("*").order("id", { ascending: false }).range(a, b));
+    return data.map((r) => ({
+      time: r.created_at ? String(r.created_at).slice(0, 19).replace("T", " ") : "",
+      actorEmail: r.actor_email, actorRoleName: r.actor_role, description: r.description,
+    }));
+  },
+
+  getRosterActivityLog: async () => {
+    const data = await fetchAll((a, b) =>
+      db.from("roster_activity_log").select("*").order("id", { ascending: false }).range(a, b));
     return data.map((r) => ({
       time: r.created_at ? String(r.created_at).slice(0, 19).replace("T", " ") : "",
       actorEmail: r.actor_email, actorRoleName: r.actor_role, description: r.description,
