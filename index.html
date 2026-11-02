@@ -83,6 +83,11 @@
       max-width: 1096px;
     }
 
+    /* 出勤率：11 欄的表格 + 240px 的篩選欄 */
+    .container.stats-wide {
+      max-width: 1400px;
+    }
+
     /* ── Badge ── */
     .badge {
       border: 2px solid #f0d060;
@@ -375,7 +380,8 @@
     #member-view .roster-section,
     #password-view .roster-section,
     #access-admin-view .roster-section,
-    #activity-log-view .roster-section {
+    #activity-log-view .roster-section,
+    #stats-view .roster-section {
       background: rgba(0, 0, 0, 0.184);
       border-color: #FF0000;
       color: #FFFFEF;
@@ -388,12 +394,14 @@
     #password-view .roster-title,
     #access-admin-view .roster-title,
     #activity-log-view .roster-title,
+    #stats-view .roster-title,
     #roster-view .roster-back-btn,
     #attendance-view .roster-back-btn,
     #member-view .roster-back-btn,
     #password-view .roster-back-btn,
     #access-admin-view .roster-back-btn,
     #activity-log-view .roster-back-btn,
+    #stats-view .roster-back-btn,
     #roster-view .attendance-date-label,
     #attendance-view .attendance-date-label,
     #roster-view .attendance-date-input,
@@ -2349,6 +2357,111 @@
       background: rgba(255,202,40,0.08);
     }
 
+    /* ── 出勤率 ──
+       窗格全部沿用其他頁的作法：底色是純黑的 rgba（只有底色半透明，
+       文字跟框線維持不透明），霧化是 body.bg-frosted 把底圖模糊掉，
+       不是在面板上加 backdrop-filter —— 那樣會連同裡面的字一起糊。 */
+    .st-cards {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 12px; margin-bottom: 14px;
+    }
+    .st-card {
+      border: 1px solid #6B1023; border-radius: 8px;
+      background: rgba(0, 0, 0, 0.25); padding: 12px 14px;
+    }
+    .st-card-label { font-size: 12px; color: #c0a860; letter-spacing: 1px; }
+    .st-card-value { font-size: 26px; font-weight: 900; color: #f5e8c0; margin-top: 4px; }
+    .st-card-note { font-size: 11.5px; color: #FFFFEF; opacity: .55; margin-top: 4px; line-height: 1.6; }
+
+    .st-main { display: flex; gap: 14px; align-items: flex-start; }
+    .st-side { flex: 0 0 240px; display: flex; flex-direction: column; gap: 12px; }
+    .st-right { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+    .st-box {
+      border: 1px solid #6B1023; border-radius: 8px;
+      background: rgba(0, 0, 0, 0.25); padding: 10px 12px;
+    }
+    .st-box-title {
+      font-size: 13px; font-weight: 700; color: #d4a828; letter-spacing: 2px;
+      padding-bottom: 6px; margin-bottom: 8px;
+      border-bottom: 1px solid rgba(212, 168, 40, 0.3);
+      display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+    }
+    .st-box-title small { font-size: 11px; color: #FFFFEF; opacity: .5; font-weight: 400; letter-spacing: 0; }
+    .st-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .st-chip {
+      cursor: pointer; border: 1px solid #6e5e30; border-radius: 999px;
+      background: none; color: #c0a860; font-family: inherit;
+      font-size: 12px; padding: 3px 10px; letter-spacing: 1px;
+    }
+    .st-chip:hover { border-color: #d4a828; color: #f0d060; }
+    .st-chip.on { background: rgba(212, 168, 40, 0.18); border-color: #d4a828; color: #f5e8c0; }
+    .st-chip small { opacity: .6; margin-left: 4px; font-size: 11px; letter-spacing: 0; }
+    .st-formula { font-size: 12px; color: #FFFFEF; line-height: 1.9; }
+    .st-formula b { color: #f0d060; }
+    .st-formula ul { margin: 6px 0 0; padding-left: 18px; opacity: .72; line-height: 1.75; }
+    .st-ses { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; }
+    .st-ses label {
+      display: flex; gap: 6px; align-items: center; font-size: 12px;
+      color: #FFFFEF; cursor: pointer; padding: 3px 2px;
+    }
+    .st-ses label:hover { background: rgba(212, 168, 40, 0.07); }
+    .st-ses .st-future { opacity: .45; }
+    .st-ses-tag { margin-left: auto; font-size: 10.5px; color: #c0a860; opacity: .85; white-space: nowrap; }
+    .st-mini {
+      cursor: pointer; background: none; border: 0; font-family: inherit;
+      color: #c0a860; font-size: 11.5px; padding: 0; text-decoration: underline;
+    }
+    .st-mini:hover { color: #f0d060; }
+
+    .st-row {
+      display: grid;
+      grid-template-columns: 1.5fr .75fr .6fr .5fr .7fr .5fr .62fr .5fr .5fr .62fr .72fr;
+      gap: 6px; align-items: center; padding: 7px 10px;
+      border: 1px solid #2a0a12; border-radius: 6px; margin-bottom: 4px;
+      color: #FFFFEF; font-size: 12.5px; text-align: center;
+    }
+    .st-row > span:first-child { text-align: left; font-weight: 700; }
+    .st-head {
+      border: 0; color: #d4af37; font-weight: 700;
+      padding-bottom: 2px; margin-bottom: 2px; font-size: 12px;
+    }
+    .st-head span { cursor: pointer; }
+    .st-head span:hover { color: #f0d060; }
+    .st-zero { opacity: .3; }
+    .st-unreg { color: #9a9288; }
+    .st-rate-bad { color: #ff8a80; font-weight: 700; }
+    .st-rate-mid { color: #ffca28; }
+    .st-rate-good { color: #9ccc65; }
+
+    .st-bar-row {
+      display: grid; grid-template-columns: 190px 1fr 58px;
+      gap: 10px; align-items: center; font-size: 12px; color: #FFFFEF; padding: 4px 0;
+    }
+    .st-bar { height: 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+    .st-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #8a6a2a, #d4a828); }
+    .st-bar-pct { text-align: right; color: #f0d060; }
+    .st-bar-note { font-size: 11px; color: #FFFFEF; opacity: .5; line-height: 1.7; }
+
+    .st-warn {
+      border: 1px solid #ffca28; border-radius: 6px; background: rgba(255, 202, 40, 0.08);
+      color: #ffca28; font-size: 12px; padding: 8px 12px; line-height: 1.7; margin-bottom: 12px;
+    }
+    .st-empty { color: #FFFFEF; opacity: .6; font-size: 13px; padding: 24px; text-align: center; }
+    .st-type-row {
+      display: grid; grid-template-columns: 1fr 150px; gap: 10px;
+      align-items: center; font-size: 12.5px; color: #FFFFEF; padding: 3px 0;
+    }
+    .st-type-row select { font-family: inherit; font-size: 12px; }
+
+    @media (max-width: 900px) {
+      .st-cards { grid-template-columns: repeat(2, 1fr); }
+      .st-main { flex-direction: column; }
+      .st-side { flex: none; width: 100%; }
+      .st-ses { max-height: 220px; }
+      .st-row { grid-template-columns: 1fr 1fr 1fr; font-size: 12px; text-align: left; }
+      .st-bar-row { grid-template-columns: 120px 1fr 48px; }
+    }
+
     /* 素問專頁 */
     .bt-sw-row {
       display: grid;
@@ -2723,7 +2836,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','getRosterActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias','markPlayerLeft','getPlayerLeftPreview','nameInUse','submitRenameRequest','getMyRenameRequest','cancelRenameRequest','listRenameRequests','approveRenameRequest','rejectRenameRequest'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceStats','setDateLabelType','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','getRosterActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias','markPlayerLeft','getPlayerLeftPreview','nameInUse','submitRenameRequest','getMyRenameRequest','cancelRenameRequest','listRenameRequests','approveRenameRequest','rejectRenameRequest'];
 
   // 排表匯出的職業底色。存的是不含 # 的六碼，argb() 會補上 FF。
   // 都是淺色系，配預設的黑字才看得清楚。
@@ -2900,11 +3013,12 @@
   <!-- 管理專用導覽（顯示與否由 updateSideNav 控制，不用 .admin-only-btn，
        因為它還要跟著目前在哪一頁決定要不要出現） -->
   <div class="side-nav hidden" id="side-nav">
-    <button type="button" class="side-nav-link" onclick="gotoAdminView(openRosterView, true)">排表工具</button>
-    <button type="button" class="side-nav-link" onclick="gotoAdminView(openMemberView, false)">管理名單</button>
-    <button type="button" class="side-nav-link" onclick="gotoAdminView(openAccessAdminView, false)">審核申請</button>
-    <button type="button" class="side-nav-link" onclick="gotoAdminView(openActivityLogView, false)">操作記錄</button>
-    <button type="button" class="side-nav-link" onclick="gotoAdminView(openNameCheckView, false)">名字對照</button>
+    <button type="button" class="side-nav-link admin-only-btn" onclick="gotoAdminView(openRosterView, true)">排表工具</button>
+    <button type="button" class="side-nav-link admin-only-btn" onclick="gotoAdminView(openMemberView, false)">管理名單</button>
+    <button type="button" class="side-nav-link admin-only-btn" onclick="gotoAdminView(openAccessAdminView, false)">審核申請</button>
+    <button type="button" class="side-nav-link admin-only-btn" onclick="gotoAdminView(openActivityLogView, false)">操作記錄</button>
+    <button type="button" class="side-nav-link admin-only-btn" onclick="gotoAdminView(openNameCheckView, false)">名字對照</button>
+    <button type="button" class="side-nav-link clerk-admin-btn" onclick="gotoStatsView()">出勤率</button>
   </div>
   <div class="container">
 
@@ -2965,6 +3079,23 @@
         </div>
         <div class="roster-body">
           <div id="name-check-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 出勤率 -->
+    <div class="view hidden" id="stats-view">
+      <div class="roster-section">
+        <div class="roster-header">
+          <span class="roster-title">出勤率</span>
+          <div class="roster-header-actions">
+            <button type="button" class="roster-back-btn admin-only-btn" onclick="toggleStatsTypes()">場次類型</button>
+            <button type="button" class="roster-back-btn" onclick="loadAttendanceStats()">🔄 重新讀取</button>
+            <button type="button" class="roster-back-btn" onclick="closeStatsView()">返回出勤系統</button>
+          </div>
+        </div>
+        <div class="roster-body">
+          <div id="st-body"></div>
         </div>
       </div>
     </div>
@@ -3659,15 +3790,17 @@
        要同時滿足兩件事才顯示：身分是「管理」、而且現在不在下面這幾頁。
        排表工具跟戰績會用到整個視窗寬度，左邊那一條會直接壓在表格上；
        首頁是底圖的主視覺，不要有東西掛在旁邊。 */
-    var SIDE_NAV_OFF_VIEWS = ['main-view', 'roster-view', 'battle-view'];
+    var SIDE_NAV_OFF_VIEWS = ['main-view', 'roster-view', 'battle-view', 'stats-view'];
     var sideNavViewId = 'main-view';
 
     function updateSideNav(viewId) {
       if (viewId) sideNavViewId = viewId;
       var el = document.getElementById('side-nav');
       if (!el) return;
-      var show = currentAccessCategory === '管理' &&
-                 SIDE_NAV_OFF_VIEWS.indexOf(sideNavViewId) < 0;
+      /* 文書也看得到這一排 —— 但裡面只有「出勤率」那一顆沒有掛
+         admin-only-btn，其他五顆已經被 applyAccessCategoryUI 藏起來了。 */
+      var canSeeNav = currentAccessCategory === '管理' || currentAccessCategory === '文書';
+      var show = canSeeNav && SIDE_NAV_OFF_VIEWS.indexOf(sideNavViewId) < 0;
       el.classList.toggle('hidden', !show);
       // 窄畫面時它是貼在最上面的一橫排，要讓 body 空出那條的高度
       document.body.classList.toggle('has-side-nav', show);
@@ -3691,6 +3824,12 @@
     function gotoAdminView(fn, wide) {
       adminNavFrom = currentViewId();
       openPasswordGate(fn, adminNavFrom, !!wide);
+    }
+
+    // 出勤率：文書也能看，所以用 export 級的密碼關卡
+    function gotoStatsView() {
+      adminNavFrom = currentViewId();
+      openPasswordGate(openStatsView, adminNavFrom, false, 'export');
     }
 
     // 「X」原本叫「臨時請假」。資料庫存的就是這個字串，
@@ -3747,7 +3886,7 @@
     }
 
     // 所有可切換的畫面，以及各畫面是否要用「一頁寬」樣式
-    var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view', 'video-roster-view', 'battle-view', 'name-check-view'];
+    var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view', 'video-roster-view', 'battle-view', 'name-check-view', 'stats-view'];
     var VIEW_WIDE = {
       'main-view': false,
       'roster-view': true,
@@ -3785,6 +3924,8 @@
         document.querySelector('.container').classList.toggle('attendance-wide', id === 'attendance-view');
         // 錄影回報改為單欄上下堆疊，比主頁 680px 略寬一點比較好看
         document.querySelector('.container').classList.toggle('video-wide', id === 'video-view');
+        // 出勤率的表格有 11 欄，需要比主頁寬
+        document.querySelector('.container').classList.toggle('stats-wide', id === 'stats-view');
         // 面板底色是純黑 18.4%，底圖會直接透出來，所以除了首頁以外每一頁都要霧化。
         // 首頁沒有面板，那張底圖就是主視覺，維持清晰。
         //
@@ -6739,6 +6880,451 @@
       var html = placeholder ? '<option value="">' + placeholder + '</option>' : '';
       labels.forEach(function (l) { html += '<option value="' + l.replace(/"/g, '&quot;') + '">' + l + '</option>'; });
       sel.innerHTML = html;
+    }
+
+    /* ── 出勤率 ──
+       後端只回「原始的格子」（每人每場一個字元），出勤率是在這裡算的：
+       篩選一改就要全部重算，每改一次都往後端跑一趟會卡。
+
+       空白＝出勤。這是幫會的慣例，不是 bug：全部 1128 筆紀錄裡只有 123 筆
+       是「出勤」，607 筆是 X、381 筆是請假 —— 來了的人根本不會去登記，
+       只有例外才登記。所以空白要算成出勤，但另外開一欄「其中未登記」，
+       看得出某個人的出勤是真的有人按過，還是系統推定的。
+
+       分母是 出勤＋請假＋臨時請假＋黃牌。X 不算 —— 「沒說一聲就沒出現」
+       跟「加入名單之前的場次」都是 X，把它放進分母會把人的出勤率打到地上。 */
+    var STATS_EVENT_TYPES = ['幫戰', '龍虎決戰', '幫會約戰', '俱樂部約戰', '俱樂部賽事', '不計入'];
+    var STATS_UNCLASSIFIED = '未分類';
+
+    var statsData = null;
+    var statsTypesOpen = false;
+    var statsSel = {
+      squads: [], jobs: [], types: ['幫戰'], months: [],
+      labels: {}, sortKey: 'rate', sortDir: 1
+    };
+
+    function openStatsView() {
+      showView('stats-view');
+      loadAttendanceStats();
+    }
+    function closeStatsView() { showView('attendance-view'); }
+
+    function loadAttendanceStats() {
+      var box = document.getElementById('st-body');
+      if (!box) return;
+      box.innerHTML = '<div class="st-empty">讀取中…</div>';
+      if (!(window.google && google.script && google.script.run)) {
+        box.innerHTML = '<div class="st-empty">本機預覽模式，未連接後端</div>';
+        return;
+      }
+      google.script.run.withSuccessHandler(function (r) {
+        statsData = r || { labels: [], members: [] };
+        statsData.labels = statsData.labels || [];
+        statsData.members = statsData.members || [];
+        autoPickStatsLabels_();
+        renderStats();
+      }).withFailureHandler(function (err) {
+        box.innerHTML = '<div class="st-empty">讀取失敗：' + escapeBattleHtml(err.message) + '</div>';
+      }).getAttendanceStats();
+    }
+
+    // 場次名稱開頭的 MMDD 取月份。看不懂的回 0（歸到「看不出月份」）
+    function statsMonthOf_(label) {
+      var n = Number(String(label || '').slice(0, 2));
+      return (n >= 1 && n <= 12) ? n : 0;
+    }
+
+    function statsTypeOf_(L) { return L.type || STATS_UNCLASSIFIED; }
+
+    /* 預設勾哪些場次：類型跟月份對得上、而且比賽日已經過了的。
+       還沒打的場次每一格都是空白，空白算出勤 —— 勾進去出勤率會變成
+       100% 的假數字，所以預設不勾（但列出來，要勾也勾得到，會另外警告）。 */
+    function autoPickStatsLabels_() {
+      statsSel.labels = {};
+      (statsData ? statsData.labels : []).forEach(function (L) {
+        if (!L.past) return;
+        if (!statsMatchesFilters_(L)) return;
+        statsSel.labels[L.label] = true;
+      });
+    }
+
+    function statsMatchesFilters_(L) {
+      var t = statsTypeOf_(L);
+      if (t === '不計入') return false;
+      if (statsSel.types.length && statsSel.types.indexOf(t) < 0) return false;
+      if (statsSel.months.length && statsSel.months.indexOf(statsMonthOf_(L.label)) < 0) return false;
+      return true;
+    }
+
+    // 多選的小開關：點一下加進去／再點一下拿掉。全空＝全部
+    function statsToggle_(arr, v) {
+      var i = arr.indexOf(v);
+      if (i < 0) arr.push(v); else arr.splice(i, 1);
+    }
+
+    function statsPickType(t) { statsToggle_(statsSel.types, t); autoPickStatsLabels_(); renderStats(); }
+    function statsPickMonth(m) { statsToggle_(statsSel.months, m); autoPickStatsLabels_(); renderStats(); }
+    function statsPickSquad(q) { statsToggle_(statsSel.squads, q); renderStats(); }
+    function statsPickJob(j) { statsToggle_(statsSel.jobs, j); renderStats(); }
+    function statsPickLabel(i) {
+      var L = statsData.labels[i];
+      if (!L) return;
+      if (statsSel.labels[L.label]) delete statsSel.labels[L.label];
+      else statsSel.labels[L.label] = true;
+      renderStats();
+    }
+    function statsAllLabels(on) {
+      statsData.labels.forEach(function (L) {
+        if (!statsMatchesFilters_(L)) return;
+        // 「全選」只選已經打完的，不然會把下週的場次一起算進來
+        if (on && L.past) statsSel.labels[L.label] = true;
+        if (!on) delete statsSel.labels[L.label];
+      });
+      renderStats();
+    }
+    function statsSort(key) {
+      if (statsSel.sortKey === key) statsSel.sortDir = -statsSel.sortDir;
+      else { statsSel.sortKey = key; statsSel.sortDir = (key === 'rate' || key === 'name') ? 1 : -1; }
+      renderStats();
+    }
+    function toggleStatsTypes() { statsTypesOpen = !statsTypesOpen; renderStats(); }
+
+    // 選中的場次在 marks 字串裡是第幾個字元
+    function statsSelectedIdx_() {
+      var out = [];
+      statsData.labels.forEach(function (L, i) { if (statsSel.labels[L.label]) out.push(i); });
+      return out;
+    }
+
+    function statsCount_(marks, idx) {
+      var c = { present: 0, unreg: 0, leave: 0, temp: 0, yellow: 0, x: 0, other: 0 };
+      idx.forEach(function (i) {
+        var ch = marks.charAt(i);
+        if (ch === '-') { c.present++; c.unreg++; }
+        else if (ch === 'O') c.present++;
+        else if (ch === 'L') c.leave++;
+        else if (ch === 'T') c.temp++;
+        else if (ch === 'Y') c.yellow++;
+        else if (ch === 'X') c.x++;
+        else c.other++;
+      });
+      c.due = c.present + c.leave + c.temp + c.yellow;
+      c.rate = c.due ? c.present / c.due : null;
+      return c;
+    }
+
+    function statsAddCounts_(into, from) {
+      ['present', 'unreg', 'leave', 'temp', 'yellow', 'x', 'other', 'due'].forEach(function (k) {
+        into[k] += from[k];
+      });
+      into.rate = into.due ? into.present / into.due : null;
+      return into;
+    }
+
+    function statsRows_(idx) {
+      var out = [];
+      statsData.members.forEach(function (m) {
+        var squad = m.squad || SQUAD_DEFAULT;
+        if (statsSel.squads.length && statsSel.squads.indexOf(squad) < 0) return;
+        if (statsSel.jobs.length &&
+            statsSel.jobs.indexOf(m.job) < 0 && statsSel.jobs.indexOf(m.job2) < 0) return;
+        out.push({ m: m, squad: squad, c: statsCount_(m.marks, idx) });
+      });
+      var key = statsSel.sortKey, dir = statsSel.sortDir;
+      out.sort(function (a, b) {
+        if (key === 'name') return a.m.name < b.m.name ? -dir : (a.m.name > b.m.name ? dir : 0);
+        if (key === 'job') {
+          var aj = a.m.job || '', bj = b.m.job || '';
+          return aj < bj ? -dir : (aj > bj ? dir : 0);
+        }
+        if (key === 'squad') return a.squad < b.squad ? -dir : (a.squad > b.squad ? dir : 0);
+        if (key === 'rate') {
+          // 一場應出席都沒有的人（整段都是 X）排最後，不要混在 0% 裡面
+          var ar = a.c.rate, br = b.c.rate;
+          if (ar === null && br === null) return 0;
+          if (ar === null) return 1;
+          if (br === null) return -1;
+          if (ar !== br) return (ar - br) * dir;
+          return b.c.due - a.c.due;
+        }
+        var av = a.c[key] || 0, bv = b.c[key] || 0;
+        if (av !== bv) return (av - bv) * dir;
+        return a.m.name < b.m.name ? -1 : 1;
+      });
+      return out;
+    }
+
+    function statsPct_(r) { return r === null ? '—' : (r * 100).toFixed(1) + '%'; }
+    function statsRateClass_(r) {
+      if (r === null) return 'st-zero';
+      if (r < 0.6) return 'st-rate-bad';
+      if (r < 0.85) return 'st-rate-mid';
+      return 'st-rate-good';
+    }
+    function statsNum_(n, cls) {
+      return '<span class="' + (n ? (cls || '') : 'st-zero') + '">' + n + '</span>';
+    }
+
+    /* 要塞進 onclick="…" 裡面的字串參數。
+       不能用 JSON.stringify —— 它產生的是雙引號，雙引號會直接把 HTML 屬性
+       切斷（變成 onclick="statsPickSquad(" 幫眾")" 這種東西），整排按鈕就全死了。
+       改成單引號包起來、再整串 HTML 轉義：瀏覽器會先把 &#39; 還原成單引號
+       才交給 JS，兩層剛好對上。名字裡有單引號或反斜線也擋得住。 */
+    function statsArg_(v) {
+      var js = "'" + String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+      return escapeBattleHtml(js);
+    }
+
+    function statsChip_(on, fn, text, count) {
+      return '<button type="button" class="st-chip' + (on ? ' on' : '') + '" onclick="' + fn + '">' +
+             escapeBattleHtml(text) +
+             (count === undefined ? '' : '<small>' + count + '</small>') + '</button>';
+    }
+
+    function renderStats() {
+      var box = document.getElementById('st-body');
+      if (!box || !statsData) return;
+
+      var idx = statsSelectedIdx_();
+      var rows = statsRows_(idx);
+      var total = statsCount_('', []);
+      rows.forEach(function (r) { statsAddCounts_(total, r.c); });
+
+      box.innerHTML =
+        statsWarnHtml_(idx) +
+        statsTypesHtml_() +
+        statsCardsHtml_(rows, total) +
+        '<div class="st-main">' +
+          '<div class="st-side">' + statsFiltersHtml_(idx) + '</div>' +
+          '<div class="st-right">' + statsTableHtml_(rows) + statsEventsHtml_(idx) + '</div>' +
+        '</div>';
+    }
+
+    function statsWarnHtml_(idx) {
+      var out = [];
+      var unclassified = statsData.labels.filter(function (L) { return !L.type; });
+      if (unclassified.length) {
+        out.push('有 ' + unclassified.length + ' 場還沒分類（' +
+          escapeBattleHtml(unclassified.slice(0, 4).map(function (L) { return L.label; }).join('、')) +
+          (unclassified.length > 4 ? ' …' : '') +
+          '）。沒分類的場次不會被任何一種比賽類型掃到，要按右上角「場次類型」設一下。');
+      }
+      var future = statsData.labels.filter(function (L) { return statsSel.labels[L.label] && !L.past; });
+      if (future.length) {
+        out.push('你勾了 ' + future.length + ' 場還沒打的場次（' +
+          escapeBattleHtml(future.map(function (L) { return L.label; }).join('、')) +
+          '）。那些場次還沒有人登記，空白一律算出勤，出勤率會被拉高。');
+      }
+      var weird = 0;
+      statsData.members.forEach(function (m) { weird += statsCount_(m.marks, idx).other; });
+      if (weird) out.push('有 ' + weird + ' 格的狀態不在五種之內，沒有算進任何一欄。資料可能有問題。');
+      if (!out.length) return '';
+      return out.map(function (t) { return '<div class="st-warn">' + t + '</div>'; }).join('');
+    }
+
+    function statsCardsHtml_(rows, total) {
+      var unregPct = total.present ? (total.unreg / total.present * 100).toFixed(0) : 0;
+      return '<div class="st-cards">' +
+        '<div class="st-card"><div class="st-card-label">列入計算的人</div>' +
+          '<div class="st-card-value">' + rows.length + ' 人</div>' +
+          '<div class="st-card-note">主名單共 ' + statsData.members.length + ' 人</div></div>' +
+        '<div class="st-card"><div class="st-card-label">整體出勤率</div>' +
+          '<div class="st-card-value ' + statsRateClass_(total.rate) + '">' + statsPct_(total.rate) + '</div>' +
+          '<div class="st-card-note">' + total.present + ' ÷ ' + total.due + '（應出席人次）</div></div>' +
+        '<div class="st-card"><div class="st-card-label">出勤人次</div>' +
+          '<div class="st-card-value">' + total.present + '</div>' +
+          '<div class="st-card-note">其中 ' + total.unreg + ' 人次未登記（視同出勤，占 ' + unregPct + '%）</div></div>' +
+        '<div class="st-card"><div class="st-card-label">請假／臨時／黃牌</div>' +
+          '<div class="st-card-value">' + total.leave + '-' + total.temp + '-' + total.yellow + '</div>' +
+          '<div class="st-card-note">另有 ' + total.x + ' 人次是 X（不計入分母）</div></div>' +
+      '</div>';
+    }
+
+    function statsFiltersHtml_(idx) {
+      var squadCount = {}, jobCount = {};
+      statsData.members.forEach(function (m) {
+        var q = m.squad || SQUAD_DEFAULT;
+        squadCount[q] = (squadCount[q] || 0) + 1;
+        if (m.job) jobCount[m.job] = (jobCount[m.job] || 0) + 1;
+      });
+
+      var html = '';
+
+      html += '<div class="st-box"><div class="st-box-title">身分群組<small>' +
+        (statsSel.squads.length ? '已選 ' + statsSel.squads.length + ' 組' : '全部') +
+        '</small></div><div class="st-chips">' +
+        SQUAD_OPTIONS.map(function (q) {
+          return statsChip_(statsSel.squads.indexOf(q) >= 0,
+            'statsPickSquad(' + statsArg_(q) + ')', q, squadCount[q] || 0);
+        }).join('') + '</div></div>';
+
+      html += '<div class="st-box"><div class="st-box-title">職業<small>' +
+        (statsSel.jobs.length ? '已選 ' + statsSel.jobs.length + ' 種' : '全部') +
+        '</small></div><div class="st-chips">' +
+        JOB_OPTIONS.map(function (j) {
+          return statsChip_(statsSel.jobs.indexOf(j) >= 0,
+            'statsPickJob(' + statsArg_(j) + ')', j, jobCount[j] || 0);
+        }).join('') + '</div></div>';
+
+      var typeCount = {};
+      statsData.labels.forEach(function (L) {
+        var t = statsTypeOf_(L);
+        typeCount[t] = (typeCount[t] || 0) + 1;
+      });
+      var typeList = STATS_EVENT_TYPES.slice();
+      if (typeCount[STATS_UNCLASSIFIED]) typeList.push(STATS_UNCLASSIFIED);
+      html += '<div class="st-box"><div class="st-box-title">比賽類型<small>' +
+        (statsSel.types.length ? '已選 ' + statsSel.types.length + ' 類' : '全部') +
+        '</small></div><div class="st-chips">' +
+        typeList.map(function (t) {
+          return statsChip_(statsSel.types.indexOf(t) >= 0,
+            'statsPickType(' + statsArg_(t) + ')', t, typeCount[t] || 0);
+        }).join('') + '</div></div>';
+
+      var months = [];
+      statsData.labels.forEach(function (L) {
+        var m = statsMonthOf_(L.label);
+        if (months.indexOf(m) < 0) months.push(m);
+      });
+      months.sort(function (a, b) { return a - b; });
+      html += '<div class="st-box"><div class="st-box-title">月份<small>' +
+        (statsSel.months.length ? '已選 ' + statsSel.months.length + ' 個' : '全部') +
+        '</small></div><div class="st-chips">' +
+        months.map(function (m) {
+          return statsChip_(statsSel.months.indexOf(m) >= 0,
+            'statsPickMonth(' + m + ')', m ? m + ' 月' : '看不出月份');
+        }).join('') + '</div></div>';
+
+      var visible = [];
+      statsData.labels.forEach(function (L, i) { if (statsMatchesFilters_(L)) visible.push(i); });
+      html += '<div class="st-box"><div class="st-box-title">比賽場次<small>已選 ' +
+        idx.length + ' / ' + visible.length + '</small></div>' +
+        '<div class="st-chips" style="margin-bottom:6px;gap:10px">' +
+          '<button type="button" class="st-mini" onclick="statsAllLabels(true)">全選（只選打完的）</button>' +
+          '<button type="button" class="st-mini" onclick="statsAllLabels(false)">全不選</button>' +
+        '</div><div class="st-ses">' +
+        (visible.length ? visible.map(function (i) {
+          var L = statsData.labels[i];
+          var on = !!statsSel.labels[L.label];
+          return '<label class="' + (L.past ? '' : 'st-future') + '">' +
+            '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="statsPickLabel(' + i + ')">' +
+            '<span>' + escapeBattleHtml(L.label) + '</span>' +
+            '<span class="st-ses-tag">' +
+              (L.past ? (L.recorded ? L.recorded + ' 筆' : '沒人登記') : '還沒打') +
+            '</span>' +
+          '</label>';
+        }).join('') : '<div class="st-bar-note">這些篩選條件下沒有場次</div>') +
+        '</div></div>';
+
+      html += '<div class="st-box"><div class="st-box-title">計算方式</div>' +
+        '<div class="st-formula"><b>出勤率 ＝ 出勤 ÷（出勤＋請假＋臨時請假＋黃牌）</b>' +
+        '<ul>' +
+          '<li>沒有紀錄的算出勤。幫會的慣例是只有例外才登記，來的人不會去按。' +
+              '另開一欄「其中未登記」讓你看得出差別。</li>' +
+          '<li>X 不算在分母裡：沒說一聲就沒出現、還有加入名單之前的場次都是 X。</li>' +
+          '<li>黃牌算在分母，但不算出勤 —— 處分要反映在出勤率上。</li>' +
+          '<li>「不計入」類型的場次（例如只為了上傳影片而開的）完全跳過。</li>' +
+        '</ul></div></div>';
+
+      return html;
+    }
+
+    function statsTableHtml_(rows) {
+      var cols = [
+        ['name', '姓名'], ['job', '職業'], ['squad', '身分'], ['present', '出勤'],
+        ['unreg', '其中未登記'], ['leave', '請假'], ['temp', '臨時請假'],
+        ['yellow', '黃牌'], ['x', 'X'], ['due', '應出席'], ['rate', '出勤率']
+      ];
+      var head = '<div class="st-row st-head">' + cols.map(function (c) {
+        var mark = statsSel.sortKey === c[0] ? (statsSel.sortDir > 0 ? ' ▲' : ' ▼') : '';
+        return '<span onclick="statsSort(' + statsArg_(c[0]) + ')">' + c[1] + mark + '</span>';
+      }).join('') + '</div>';
+
+      if (!rows.length) {
+        return '<div class="st-box"><div class="st-box-title">名單</div>' +
+               '<div class="st-empty">這些篩選條件下沒有人</div></div>';
+      }
+
+      var body = rows.map(function (r) {
+        var c = r.c;
+        return '<div class="st-row">' +
+          '<span>' + escapeBattleHtml(r.m.name) + '</span>' +
+          '<span>' + escapeBattleHtml(r.m.job || '') + '</span>' +
+          '<span>' + escapeBattleHtml(squadTagText_(r.squad)) + '</span>' +
+          statsNum_(c.present) +
+          statsNum_(c.unreg, 'st-unreg') +
+          statsNum_(c.leave) + statsNum_(c.temp) + statsNum_(c.yellow) + statsNum_(c.x) +
+          statsNum_(c.due) +
+          '<span class="' + statsRateClass_(c.rate) + '">' + statsPct_(c.rate) + '</span>' +
+        '</div>';
+      }).join('');
+
+      return '<div class="st-box"><div class="st-box-title">名單<small>點欄位名稱可以換排序</small></div>' +
+             head + body + '</div>';
+    }
+
+    function statsEventsHtml_(idx) {
+      if (!idx.length) {
+        return '<div class="st-box"><div class="st-box-title">所選比賽的出勤概況</div>' +
+               '<div class="st-empty">左邊還沒勾任何場次</div></div>';
+      }
+      // 只是要「哪些人列入計算」這份名單，所以不帶場次進去算
+      var rows = statsRows_([]);
+      var html = idx.map(function (i) {
+        var L = statsData.labels[i];
+        var c = statsCount_('', []);
+        rows.forEach(function (r) { statsAddCounts_(c, statsCount_(r.m.marks, [i])); });
+        var w = c.rate === null ? 0 : Math.round(c.rate * 100);
+        return '<div class="st-bar-row">' +
+          '<span>' + escapeBattleHtml(L.label) + '</span>' +
+          '<span class="st-bar"><i style="width:' + w + '%"></i></span>' +
+          '<span class="st-bar-pct">' + statsPct_(c.rate) + '</span>' +
+        '</div>' +
+        '<div class="st-bar-note" style="margin:-2px 0 6px">出勤 ' + c.present +
+          '（未登記 ' + c.unreg + '）・請假 ' + c.leave + '・臨時 ' + c.temp +
+          '・黃牌 ' + c.yellow + '・X ' + c.x + '，應出席 ' + c.due + '</div>';
+      }).join('');
+      return '<div class="st-box"><div class="st-box-title">所選比賽的出勤概況<small>' +
+             idx.length + ' 場</small></div>' + html + '</div>';
+    }
+
+    /* 場次類型：改錯一場，那一類的出勤率就偏掉，所以只有管理改得動，
+       後端也會寫一筆操作記錄。 */
+    function statsTypesHtml_() {
+      if (!statsTypesOpen) return '';
+      var isAdmin = currentAccessCategory === '管理';
+      var rows = statsData.labels.slice().sort(function (a, b) {
+        return a.label < b.label ? -1 : (a.label > b.label ? 1 : 0);
+      }).map(function (L) {
+        var opts = [''].concat(STATS_EVENT_TYPES).map(function (t) {
+          return '<option value="' + escapeBattleHtml(t) + '"' +
+                 ((L.type || '') === t ? ' selected' : '') + '>' +
+                 (t || STATS_UNCLASSIFIED) + '</option>';
+        }).join('');
+        return '<div class="st-type-row"><span>' + escapeBattleHtml(L.label) + '</span>' +
+          '<select ' + (isAdmin ? '' : 'disabled ') +
+          'onchange="setStatsEventType(' + statsArg_(L.label) + ', this.value)">' + opts + '</select>' +
+        '</div>';
+      }).join('');
+      return '<div class="st-box" style="margin-bottom:14px">' +
+        '<div class="st-box-title">場次類型<small>' +
+        (isAdmin ? '改了馬上生效，會記在操作記錄裡' : '只有管理改得動') +
+        '</small></div>' + rows + '</div>';
+    }
+
+    function setStatsEventType(label, type) {
+      if (!(window.google && google.script && google.script.run)) return;
+      google.script.run.withSuccessHandler(function (res) {
+        if (res && res.success === false) {
+          showAlertModal(res.message || '改不動，請重新讀取再試一次');
+          return;
+        }
+        statsData.labels.forEach(function (L) { if (L.label === label) L.type = type; });
+        autoPickStatsLabels_();
+        renderStats();
+      }).withFailureHandler(function (err) {
+        showAlertModal('改不動：' + (err && err.message ? err.message : '未知錯誤'));
+      }).setDateLabelType(label, type, currentAccessName, currentAccessRoleName);
     }
 
     /* ── 名字對照 ──

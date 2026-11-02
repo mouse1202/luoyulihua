@@ -325,6 +325,66 @@ async function getCommandersByDate(date: string, session: string) {
   return (data ?? []).map((r) => ({ group: r.grp, name: r.name }));
 }
 
+/* ── 出勤率統計 ──
+   回傳「原始的格子」，不在後端算出勤率：前端的篩選（身分組、職業、
+   月份、比賽類型、哪幾場）換一下就要重算，每換一次都往後端跑一趟太慢，
+   而且 113 人 x 39 場 = 4407 格，用一個字元表示一格也才 4KB。
+
+   一格一個字元：
+     -  沒有紀錄（視同出勤 —— 這是幫會的慣例，只有例外才登記）
+     O  出勤        L  請假        T  臨時請假
+     Y  黃牌        X  X（沒說一聲就沒出現）
+     ?  其他看不懂的狀態（有就是資料有問題，前端會標出來）
+   出勤率 = 出勤 /（出勤＋請假＋臨時請假＋黃牌），X 不算在分母裡。 */
+const STATS_MARK: Record<string, string> = {
+  "出勤": "O", "請假": "L", "臨時請假": "T", "黃牌": "Y", "X": "X",
+};
+
+async function getAttendanceStats() {
+  const labelRows = await fetchAll((a, b) =>
+    db.from("date_labels").select("label,event_type").order("label").range(a, b));
+  const labels = labelRows.map((r: any) => String(r.label ?? "")).filter((l: string) => l);
+  const typeOf: Record<string, string> = {};
+  labelRows.forEach((r: any) => { typeOf[String(r.label ?? "")] = String(r.event_type ?? ""); });
+
+  const past = new Set(await pastLabels_());
+
+  const members = await fetchAll((a, b) =>
+    db.from("roster_members").select("name,job,job2,squad")
+      .eq("category", "member").order("sort_order").range(a, b));
+
+  const recs = await fetchAll((a, b) =>
+    db.from("attendance_records").select("date_label,name,status").order("id").range(a, b));
+  const byLabel: Record<string, Record<string, string>> = {};
+  recs.forEach((r: any) => {
+    const l = String(r.date_label ?? "");
+    if (!l) return;
+    (byLabel[l] = byLabel[l] || {})[String(r.name ?? "")] = String(r.status ?? "");
+  });
+
+  const rows = members.map((m: any) => {
+    const name = String(m.name ?? "");
+    let marks = "";
+    for (const l of labels) {
+      const st = byLabel[l] ? byLabel[l][name] : undefined;
+      marks += st === undefined ? "-" : (STATS_MARK[st] || "?");
+    }
+    return { name, job: String(m.job ?? ""), job2: String(m.job2 ?? ""), squad: String(m.squad ?? ""), marks };
+  });
+
+  return {
+    labels: labels.map((l: string) => ({
+      label: l,
+      type: typeOf[l] || "",
+      // past=false 是「比賽日還沒到」。前端預設不勾，也不讓它悄悄算進去。
+      past: past.has(l),
+      // 有幾個人被登記過（空白不算）。0 筆的通常是還沒開始登記
+      recorded: Object.keys(byLabel[l] || {}).length,
+    })),
+    members: rows,
+  };
+}
+
 async function getAllDateLabels(): Promise<string[]> {
   const labelTime: Record<string, number | null> = {};
   const att = await fetchAll((a, b) =>
@@ -446,6 +506,10 @@ async function verifyToken(tok: string): Promise<{ lvl: string; name: string } |
 /* 哪些 API 需要通行證。admin 的通行證同時滿足 export。
    沒列在這裡的就是一般幫眾日常要用的（登記出勤、看戰績、上傳自己的影片…），
    維持開放，不然一般人會整個不能用。 */
+/* 場次類型。跟 0025 migration 的 date_labels_event_type_check 一字不差，
+   要加新類型就兩邊一起改。"" ＝ 還沒分類。 */
+const EVENT_TYPES = ["", "幫戰", "龍虎決戰", "幫會約戰", "俱樂部約戰", "俱樂部賽事", "不計入"];
+
 const NEED_LEVEL: Record<string, "admin" | "export"> = {
   // 名單覆寫是「先刪光再寫入」，一次呼叫就能把整份名單清掉，最危險
   saveMemberList: "admin", saveGuestList: "admin", saveTrialList: "admin", saveClubList: "admin",
@@ -463,6 +527,9 @@ const NEED_LEVEL: Record<string, "admin" | "export"> = {
   // 文書也能做的
   exportAttendanceAll: "export", saveAnnouncement: "export",
   getVideoRoster: "export", getVideoActivityLog: "export",
+  getAttendanceStats: "export",
+  // 類型改錯會讓整類的出勤率偏掉，留給管理
+  setDateLabelType: "admin",
 };
 
 function parseMonthFromLabel(label: string): number | null {
@@ -579,6 +646,24 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   },
 
   getAllDateLabels: () => getAllDateLabels(),
+  getAttendanceStats: () => getAttendanceStats(),
+  /* 場次類型只有管理改得動。改錯一場，那一類的出勤率就偏掉，
+     所以也寫一筆操作記錄，查得出是誰改的。 */
+  setDateLabelType: async (label: string, type: string, actorEmail?: string, actorRole?: string) => {
+    const l = String(label ?? "").trim();
+    const t = String(type ?? "").trim();
+    if (!l) return { success: false, message: "沒有指定場次" };
+    if (EVENT_TYPES.indexOf(t) < 0) return { success: false, message: "不認得的類型：" + t };
+    const { data: before } = await db.from("date_labels").select("event_type").eq("label", l).maybeSingle();
+    if (!before) return { success: false, message: "找不到這個場次：" + l };
+    const old = String(before.event_type ?? "");
+    if (old === t) return { success: true, changed: false };
+    await chk(db.from("date_labels").update({ event_type: t }).eq("label", l).select("label"));
+    const who = actorRole || actorEmail || "有人";
+    await appendActivityLog(actorEmail ?? "", actorRole ?? "",
+      who + " 把「" + l + "」的比賽類型從「" + (old || "未分類") + "」改成「" + (t || "未分類") + "」");
+    return { success: true, changed: true };
+  },
   addDateLabel: async (label: string) => {
     const l = String(label ?? "").trim();
     if (!l) return { success: false };
