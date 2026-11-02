@@ -8325,7 +8325,9 @@
           return;
         }
       }
-      var opts = force ? { force: true } : {};
+      // 帶上是誰按的：新加進名單的人會自動補 X，那筆要寫進操作記錄
+      var opts = { actorEmail: currentAccessName, actorRoleName: currentAccessRoleName };
+      if (force) opts.force = true;
 
       var saveBtn = document.getElementById('member-save-btn');
       saveBtn.disabled = true;
@@ -8333,6 +8335,9 @@
 
       var pending = 3;   // 主要成員／外援／試訓（俱樂部已經併進主要成員）
       var hadError = false;
+      // 後端替新加的人補了幾場 X，存完一起講出來 —— 不講的話，
+      // 人家只會看到出勤系統突然多了一排 X，不知道是哪來的
+      var preJoinNote = '';
 
       function checkDone() {
         pending--;
@@ -8343,7 +8348,7 @@
           // 存成功之後，下次比對的基準改成這次存進去的人數
           memberLoadState = { member: memberData.length, guest: guestData.length,
                               trial: trialData.length };
-          showAlertModal('已儲存名單');
+          showAlertModal('已儲存名單' + preJoinNote);
         }
       }
 
@@ -8362,6 +8367,13 @@
             if (res && res.success === false) {
               hadError = true;
               showAlertModal(label + '沒有儲存：' + (res.message || '') + '\n\n請重新整理頁面確認名單後再存。');
+            } else if (res && res.preJoin && res.preJoin.written > 0) {
+              var p = res.preJoin;
+              preJoinNote = '\n\n新加進主名單的 ' + p.names.length + ' 人（' +
+                p.names.slice(0, 5).join('、') + (p.names.length > 5 ? ' …等' : '') + '）：\n' +
+                '加入前已經打完的 ' + p.labels + ' 場已自動記為 X，共寫入 ' + p.written + ' 筆。\n' +
+                '（不這樣做的話，沒有紀錄的場次會被算成「出勤」，出勤數會灌水。' +
+                '本來就有紀錄的場次沒有動，要改可以到出勤系統逐場調。）';
             }
             checkDone();
           };

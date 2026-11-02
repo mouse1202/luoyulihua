@@ -168,6 +168,59 @@ async function listByCategory(category: string) {
 //   · 要把一份有人的名單存成空的 → 拒絕
 //   · 一次少掉一半以上（原本 10 人以上時）→ 拒絕
 // 兩種都回傳目前人數，前端讓人確認過再帶 force 重送。
+/* 哪些場次「已經打完了」。
+   場次名稱只有 MMDD、沒有年份，直接比字串跨年會錯（1230 會被當成比 0105 大）。
+   date_labels.created_at 是場次被建立的時間，實際上都落在比賽日前後一個月內，
+   所以拿它來決定那個 MMDD 是哪一年：差超過半年就往前或往後挪一年。
+   名字開頭不是 MMDD 的場次一律跳過 —— 看不懂的寧可不動。 */
+async function pastLabels_(): Promise<string[]> {
+  const { data } = await db.from("date_labels").select("label,created_at");
+  // 幫會在台北，用台北的「今天」來算。比「今天」早的才算打完了，
+  // 今天這場不算（新加的人還可以自己登記）。
+  const taipeiNow = new Date(Date.now() + 8 * 3600 * 1000);
+  const todayUtcMs = Date.UTC(taipeiNow.getUTCFullYear(), taipeiNow.getUTCMonth(), taipeiNow.getUTCDate());
+  const HALF_YEAR = 180 * 24 * 3600 * 1000;
+  const out: string[] = [];
+  (data ?? []).forEach((r: any) => {
+    const m = String(r.label ?? "").match(/^(\d{2})(\d{2})/);
+    if (!m) return;
+    const mo = parseInt(m[1], 10), day = parseInt(m[2], 10);
+    if (mo < 1 || mo > 12 || day < 1 || day > 31) return;
+    const base = r.created_at ? new Date(r.created_at) : taipeiNow;
+    let year = base.getUTCFullYear();
+    let when = Date.UTC(year, mo - 1, day);
+    if (when - base.getTime() > HALF_YEAR) when = Date.UTC(year - 1, mo - 1, day);
+    else if (base.getTime() - when > HALF_YEAR) when = Date.UTC(year + 1, mo - 1, day);
+    if (when < todayUtcMs) out.push(String(r.label));
+  });
+  return out;
+}
+
+/* 名單新加進來的人，加入之前那些場次一律記成 X。
+   為什麼要寫進去：出勤沒有存過紀錄的人，畫面和匯出都當成「出勤」
+   （見 exportAttendanceAll 的 statusMap[...] || "出勤"），所以一個這個月
+   才進來的人，前面三十幾場會全部被算成出勤，出勤數整個灌水。
+
+   只動主名單：外援不在出勤率的計算裡。
+   只補已經打完的場次：還沒打的不碰，那是他可以自己登記的。
+   已經有紀錄的格子一律不覆蓋 —— 名字被刪掉又加回來的人，舊紀錄要留著。 */
+async function markPreJoinAbsent_(members: { name: string; job: string }[]) {
+  if (members.length === 0) return { labels: 0, written: 0 };
+  const labels = await pastLabels_();
+  if (labels.length === 0) return { labels: 0, written: 0 };
+  const rows: any[] = [];
+  labels.forEach((label) => {
+    members.forEach((m) => {
+      rows.push({ date_label: label, name: m.name, job: m.job, status: "X" });
+    });
+  });
+  // (date_label, name) 有 UNIQUE 約束，ignoreDuplicates 就是「已經有的就跳過」
+  const { data } = await db.from("attendance_records")
+    .upsert(rows, { onConflict: "date_label,name", ignoreDuplicates: true })
+    .select("id");
+  return { labels: labels.length, written: (data ?? []).length };
+}
+
 async function saveByCategory(category: string, rows: any[], opts?: any) {
   // 同一份名單裡不該有重複的名字。名字等於識別碼，重複代表前端畫面疊到了
   // （名單管理連開好幾次，三份回應疊在同一個清單上），存進來的話
@@ -194,6 +247,10 @@ async function saveByCategory(category: string, rows: any[], opts?: any) {
         message: `目前有 ${had} 人，這次只剩 ${incoming} 人` };
     }
   }
+  // 整份刪掉之前先記下本來有誰，才分得出這次哪幾個是新加的
+  const { data: wasThere } = await db.from("roster_members").select("name").eq("category", category);
+  const hadNames = new Set((wasThere ?? []).map((r: any) => String(r.name)));
+
   await chk(db.from("roster_members").delete().eq("category", category).select("id"));
   // squad 只有主名單會送上來；外援／試訓送空字串，存成 null（check 約束只收那三種值）
   const clean = (rows ?? []).filter((r) => r && r.name)
@@ -203,7 +260,26 @@ async function saveByCategory(category: string, rows: any[], opts?: any) {
       sort_order: i,
     }));
   if (clean.length > 0) await chk(db.from("roster_members").insert(clean).select("id"));
-  return { success: true, count: clean.length };
+
+  /* 新加進來的人，加入前的場次補 X。只有主名單要做：
+     出勤率只算主名單，外援補了也沒有用到。 */
+  let preJoin: { labels: number; written: number; names: string[] } | null = null;
+  if (category === "member") {
+    const added = clean.filter((r) => !hadNames.has(String(r.name)))
+      .map((r) => ({ name: String(r.name), job: String(r.job ?? "") }));
+    if (added.length > 0) {
+      const res = await markPreJoinAbsent_(added);
+      preJoin = { ...res, names: added.map((a) => a.name) };
+      if (res.written > 0) {
+        const who = opts?.actorRoleName || opts?.actorEmail || "有人";
+        const shown = added.slice(0, 5).map((a) => a.name).join("、") +
+          (added.length > 5 ? ` …等 ${added.length} 人` : "");
+        await appendActivityLog(opts?.actorEmail ?? "", opts?.actorRoleName ?? "",
+          `${who} 把 ${shown} 加進主名單；加入前已經打完的 ${res.labels} 場自動記為 X（寫入 ${res.written} 筆，本來就有紀錄的沒有動）`);
+      }
+    }
+  }
+  return { success: true, count: clean.length, preJoin };
 }
 
 async function getAttendanceCandidates() {
