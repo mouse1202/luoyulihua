@@ -173,25 +173,50 @@ async function listByCategory(category: string) {
    date_labels.created_at 是場次被建立的時間，實際上都落在比賽日前後一個月內，
    所以拿它來決定那個 MMDD 是哪一年：差超過半年就往前或往後挪一年。
    名字開頭不是 MMDD 的場次一律跳過 —— 看不懂的寧可不動。 */
+/* 台北的「現在」。幫會在台北，所有「哪一天」的判斷都以台北為準。
+   做法是把 UTC 時間往前撥 8 小時，再一律用 getUTC* 去讀 —— 這樣不管
+   伺服器自己在哪個時區，算出來的日期都一樣。 */
+function taipeiNow_(): Date {
+  return new Date(Date.now() + 8 * 3600 * 1000);
+}
+
+/* 場次名稱開頭是 MMDD，沒有年份。用 date_labels.created_at 當基準推：
+   跟基準差超過半年就往前／往後挪一年，跨年的 1228 跟 0103 才不會差一整年。
+
+   回傳的是「那一天」當成 UTC 午夜的毫秒數 —— 它是個日期編號，不是真的時刻。
+   要換成台北那天真正的 00:00，自己減 8 小時（見 videoCutoffMs_）。
+   看不懂的場次名稱回 null。 */
+function labelDayUtcMs_(label: string, createdAt: any, fallback: Date): number | null {
+  const m = String(label ?? "").match(/^(\d{2})(\d{2})/);
+  if (!m) return null;
+  const mo = parseInt(m[1], 10), day = parseInt(m[2], 10);
+  if (mo < 1 || mo > 12 || day < 1 || day > 31) return null;
+  const base = createdAt ? new Date(createdAt) : fallback;
+  const HALF_YEAR = 180 * 24 * 3600 * 1000;
+  const year = base.getUTCFullYear();
+  let when = Date.UTC(year, mo - 1, day);
+  if (when - base.getTime() > HALF_YEAR) when = Date.UTC(year - 1, mo - 1, day);
+  else if (base.getTime() - when > HALF_YEAR) when = Date.UTC(year + 1, mo - 1, day);
+  return when;
+}
+
+/* 影片分的截止時刻：比賽當天不算，之後給整整兩天，第二天結束就截止。
+   例：1104 打約戰 → 1105、1106 兩天可以交 → 1107 00:00（台北）截止。
+   算式就是「比賽日 + 3 天的台北午夜」。回傳真正的 UTC 毫秒，
+   可以直接拿去跟 uploaded_at 比。 */
+function videoCutoffMs_(dayUtcMs: number): number {
+  return dayUtcMs + 3 * 24 * 3600 * 1000 - 8 * 3600 * 1000;
+}
+
 async function pastLabels_(): Promise<string[]> {
   const { data } = await db.from("date_labels").select("label,created_at");
-  // 幫會在台北，用台北的「今天」來算。比「今天」早的才算打完了，
-  // 今天這場不算（新加的人還可以自己登記）。
-  const taipeiNow = new Date(Date.now() + 8 * 3600 * 1000);
-  const todayUtcMs = Date.UTC(taipeiNow.getUTCFullYear(), taipeiNow.getUTCMonth(), taipeiNow.getUTCDate());
-  const HALF_YEAR = 180 * 24 * 3600 * 1000;
+  // 比「今天」早的才算打完了，今天這場不算（新加的人還可以自己登記）。
+  const now = taipeiNow_();
+  const todayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const out: string[] = [];
   (data ?? []).forEach((r: any) => {
-    const m = String(r.label ?? "").match(/^(\d{2})(\d{2})/);
-    if (!m) return;
-    const mo = parseInt(m[1], 10), day = parseInt(m[2], 10);
-    if (mo < 1 || mo > 12 || day < 1 || day > 31) return;
-    const base = r.created_at ? new Date(r.created_at) : taipeiNow;
-    let year = base.getUTCFullYear();
-    let when = Date.UTC(year, mo - 1, day);
-    if (when - base.getTime() > HALF_YEAR) when = Date.UTC(year - 1, mo - 1, day);
-    else if (base.getTime() - when > HALF_YEAR) when = Date.UTC(year + 1, mo - 1, day);
-    if (when < todayUtcMs) out.push(String(r.label));
+    const when = labelDayUtcMs_(String(r.label ?? ""), r.created_at, now);
+    if (when !== null && when < todayUtcMs) out.push(String(r.label));
   });
   return out;
 }
@@ -337,19 +362,53 @@ async function getCommandersByDate(date: string, session: string) {
      X  X（沒說一聲就沒出現）
      ?  其他看不懂的狀態（有就是資料有問題，前端會標出來）
    出勤率 = 出勤 /（出勤＋請假＋臨時請假＋黃牌＋藍牌），X 不算在分母裡。
-   黃牌與藍牌都算分母不算出勤：一個是處分，一個是沒把那一場打完。 */
+   黃牌與藍牌都算分母不算出勤：一個是處分，一個是沒把那一場打完。
+
+   另外回一份 vids，格式一樣是一場一個字元：
+     1  那一場有交影片，而且在截止前交的
+     0  沒交，或是交了但已經逾時
+   截止時間在這裡算（見 videoCutoffMs_），不交給前端 —— 使用者的電腦
+   時鐘可能是歪的，截止這種事不能讓它說了算。
+   兩部影片只要有一部準時就算 1：使用者明確要求「第一部準時、第二部逾時
+   也算一分」。 */
 const STATS_MARK: Record<string, string> = {
   "出勤": "O", "請假": "L", "臨時請假": "T", "黃牌": "Y", "藍牌": "B", "X": "X",
 };
 
 async function getAttendanceStats() {
   const labelRows = await fetchAll((a, b) =>
-    db.from("date_labels").select("label,event_type").order("label").range(a, b));
+    db.from("date_labels").select("label,event_type,created_at").order("label").range(a, b));
   const labels = labelRows.map((r: any) => String(r.label ?? "")).filter((l: string) => l);
   const typeOf: Record<string, string> = {};
-  labelRows.forEach((r: any) => { typeOf[String(r.label ?? "")] = String(r.event_type ?? ""); });
+  const cutoffOf: Record<string, number | null> = {};
+  const now = taipeiNow_();
+  labelRows.forEach((r: any) => {
+    const l = String(r.label ?? "");
+    typeOf[l] = String(r.event_type ?? "");
+    const day = labelDayUtcMs_(l, r.created_at, now);
+    cutoffOf[l] = day === null ? null : videoCutoffMs_(day);
+  });
 
   const past = new Set(await pastLabels_());
+
+  /* 影片：每人每場最多兩部，各自有自己的上傳時間。
+     只要有一部在截止前交到，那一場就算有交。
+     名稱看不懂（算不出截止時間）的場次一律不給分 —— 寧可少給，
+     也不要因為日期推錯就平白送出分數。 */
+  const vidRows = await fetchAll((a, b) =>
+    db.from("video_uploads").select("date_label,name,url1,url2,uploaded_at1,uploaded_at2")
+      .order("id").range(a, b));
+  const vidOk: Record<string, Record<string, boolean>> = {};
+  vidRows.forEach((r: any) => {
+    const l = String(r.date_label ?? "");
+    const cut = cutoffOf[l];
+    if (!l || cut === null || cut === undefined) return;
+    const inTime = (url: any, at: any) =>
+      !!String(url ?? "").trim() && !!at && new Date(at).getTime() < cut;
+    if (inTime(r.url1, r.uploaded_at1) || inTime(r.url2, r.uploaded_at2)) {
+      (vidOk[l] = vidOk[l] || {})[String(r.name ?? "")] = true;
+    }
+  });
 
   const members = await fetchAll((a, b) =>
     db.from("roster_members").select("name,job,job2,squad")
@@ -366,12 +425,16 @@ async function getAttendanceStats() {
 
   const rows = members.map((m: any) => {
     const name = String(m.name ?? "");
-    let marks = "";
+    let marks = "", vids = "";
     for (const l of labels) {
       const st = byLabel[l] ? byLabel[l][name] : undefined;
       marks += st === undefined ? "-" : (STATS_MARK[st] || "?");
+      vids += (vidOk[l] && vidOk[l][name]) ? "1" : "0";
     }
-    return { name, job: String(m.job ?? ""), job2: String(m.job2 ?? ""), squad: String(m.squad ?? ""), marks };
+    return {
+      name, job: String(m.job ?? ""), job2: String(m.job2 ?? ""),
+      squad: String(m.squad ?? ""), marks, vids,
+    };
   });
 
   return {
@@ -382,6 +445,13 @@ async function getAttendanceStats() {
       past: past.has(l),
       // 有幾個人被登記過（空白不算）。0 筆的通常是還沒開始登記
       recorded: Object.keys(byLabel[l] || {}).length,
+      // 影片截止時刻，寫成台北時間「MM/DD HH:mm」給畫面上顯示用。
+      // 名稱看不出日期的場次是空字串。
+      videoCutoff: cutoffOf[l] == null ? "" :
+        new Date((cutoffOf[l] as number) + 8 * 3600 * 1000).toISOString()
+          .slice(5, 16).replace("T", " ").replace("-", "/"),
+      // 那一場有幾個人準時交了影片
+      videoOnTime: Object.keys(vidOk[l] || {}).length,
     })),
     members: rows,
   };

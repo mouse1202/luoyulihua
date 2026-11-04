@@ -2424,7 +2424,7 @@
 
     .st-row {
       display: grid;
-      grid-template-columns: 1.5fr .75fr .6fr .5fr .7fr .5fr .62fr .5fr .5fr .5fr .62fr .72fr .62fr;
+      grid-template-columns: 1.5fr .75fr .6fr .5fr .7fr .5fr .62fr .5fr .5fr .5fr .62fr .72fr .62fr .62fr;
       gap: 6px; align-items: center; padding: 7px 10px;
       border: 1px solid #2a0a12; border-radius: 6px; margin-bottom: 4px;
       color: #FFFFEF; font-size: 12.5px; text-align: center;
@@ -6928,7 +6928,16 @@
        出勤分是另一套算法，跟出勤率各看各的：出勤 +1、黃牌 -1，其餘（請假、
        臨時請假、X、藍牌）都是 0。出勤率看的是「該出席的場次到了幾成」，
        出勤分看的是「總共累積了多少」—— 請假不扣分但也不加分，場次少的人
-       分數自然低，這是分數本來就該有的樣子，不是 bug。 */
+       分數自然低，這是分數本來就該有的樣子，不是 bug。
+
+       影片分：那一場有交影片、而且是在截止前交的，就 +1。截止時間是後端
+       算好的（比賽日 +3 天的台北午夜），前端只看 vids 那一串 0 和 1 ——
+       截止這種事不能讓使用者的電腦時鐘說了算。
+
+       「不計入」類型的場次（例如只為了上傳影片而開的那一場）是個例外：
+       它會出現在場次清單裡、也勾得到，但只進影片分，出勤那一欄完全跳過。
+       所以才有 statsSelectedIdx_（出勤用）跟 statsSelectedVideoIdx_（影片用）
+       兩份 index。 */
     var STATS_EVENT_TYPES = ['幫戰', '龍虎決戰', '幫會約戰', '俱樂部約戰', '俱樂部賽事', '不計入'];
     var STATS_UNCLASSIFIED = '未分類';
 
@@ -6984,9 +6993,11 @@
       });
     }
 
+    // 「不計入」的場次：出勤完全跳過，但影片分照算（那一場本來就是為了交影片開的）
+    function statsNoAttendance_(L) { return statsTypeOf_(L) === '不計入'; }
+
     function statsMatchesFilters_(L) {
       var t = statsTypeOf_(L);
-      if (t === '不計入') return false;
       if (statsSel.types.length && statsSel.types.indexOf(t) < 0) return false;
       if (statsSel.months.length && statsSel.months.indexOf(statsMonthOf_(L.label)) < 0) return false;
       return true;
@@ -7025,15 +7036,31 @@
     }
     function toggleStatsTypes() { statsTypesOpen = !statsTypesOpen; renderStats(); }
 
-    // 選中的場次在 marks 字串裡是第幾個字元
+    /* 選中的場次在 marks／vids 字串裡是第幾個字元。
+       出勤那一份要把「不計入」拿掉：那種場次的出勤紀錄不該進出勤率。
+       影片那一份全收 —— 「不計入」就是為了交影片才開的。 */
     function statsSelectedIdx_() {
+      var out = [];
+      statsData.labels.forEach(function (L, i) {
+        if (statsSel.labels[L.label] && !statsNoAttendance_(L)) out.push(i);
+      });
+      return out;
+    }
+
+    function statsSelectedVideoIdx_() {
       var out = [];
       statsData.labels.forEach(function (L, i) { if (statsSel.labels[L.label]) out.push(i); });
       return out;
     }
 
-    function statsCount_(marks, idx) {
-      var c = { present: 0, unreg: 0, leave: 0, temp: 0, yellow: 0, blue: 0, x: 0, other: 0, score: 0 };
+    /* m 是一整個成員（要 marks 也要 vids）。
+       idx ＝出勤要算的場次，vidx ＝影片要算的場次，兩份不一樣（見上面）。
+       vidx 不給就當成跟 idx 一樣。 */
+    function statsCount_(m, idx, vidx) {
+      var marks = (m && m.marks) || '';
+      var vids = (m && m.vids) || '';
+      var c = { present: 0, unreg: 0, leave: 0, temp: 0, yellow: 0, blue: 0, x: 0, other: 0, score: 0, video: 0 };
+      (vidx || idx).forEach(function (i) { if (vids.charAt(i) === '1') c.video++; });
       idx.forEach(function (i) {
         var ch = marks.charAt(i);
         if (ch === '-') { c.present++; c.unreg++; }
@@ -7053,21 +7080,21 @@
     }
 
     function statsAddCounts_(into, from) {
-      ['present', 'unreg', 'leave', 'temp', 'yellow', 'blue', 'x', 'other', 'due', 'score'].forEach(function (k) {
+      ['present', 'unreg', 'leave', 'temp', 'yellow', 'blue', 'x', 'other', 'due', 'score', 'video'].forEach(function (k) {
         into[k] += from[k];
       });
       into.rate = into.due ? into.present / into.due : null;
       return into;
     }
 
-    function statsRows_(idx) {
+    function statsRows_(idx, vidx) {
       var out = [];
       statsData.members.forEach(function (m) {
         var squad = m.squad || SQUAD_DEFAULT;
         if (statsSel.squads.length && statsSel.squads.indexOf(squad) < 0) return;
         if (statsSel.jobs.length &&
             statsSel.jobs.indexOf(m.job) < 0 && statsSel.jobs.indexOf(m.job2) < 0) return;
-        out.push({ m: m, squad: squad, c: statsCount_(m.marks, idx) });
+        out.push({ m: m, squad: squad, c: statsCount_(m, idx, vidx) });
       });
       var key = statsSel.sortKey, dir = statsSel.sortDir;
       out.sort(function (a, b) {
@@ -7131,21 +7158,22 @@
       if (!box || !statsData) return;
 
       var idx = statsSelectedIdx_();
-      var rows = statsRows_(idx);
-      var total = statsCount_('', []);
+      var vidx = statsSelectedVideoIdx_();
+      var rows = statsRows_(idx, vidx);
+      var total = statsCount_(null, []);
       rows.forEach(function (r) { statsAddCounts_(total, r.c); });
 
       box.innerHTML =
-        statsWarnHtml_(idx) +
+        statsWarnHtml_(idx, vidx) +
         statsTypesHtml_() +
         statsCardsHtml_(rows, total) +
         '<div class="st-main">' +
-          '<div class="st-side">' + statsFiltersHtml_(idx) + '</div>' +
-          '<div class="st-right">' + statsTableHtml_(rows) + statsEventsHtml_(idx) + '</div>' +
+          '<div class="st-side">' + statsFiltersHtml_(vidx) + '</div>' +
+          '<div class="st-right">' + statsTableHtml_(rows) + statsEventsHtml_(vidx) + '</div>' +
         '</div>';
     }
 
-    function statsWarnHtml_(idx) {
+    function statsWarnHtml_(idx, vidx) {
       var out = [];
       var unclassified = statsData.labels.filter(function (L) { return !L.type; });
       if (unclassified.length) {
@@ -7161,8 +7189,21 @@
           '）。那些場次還沒有人登記，空白一律算出勤，出勤率會被拉高。');
       }
       var weird = 0;
-      statsData.members.forEach(function (m) { weird += statsCount_(m.marks, idx).other; });
+      statsData.members.forEach(function (m) { weird += statsCount_(m, idx).other; });
       if (weird) out.push('有 ' + weird + ' 格的狀態不在五種之內，沒有算進任何一欄。資料可能有問題。');
+      /* 「不計入」的場次只進影片分。有勾到就講一聲，不然會以為它
+         被算進出勤率了（或是以為它根本沒被算到）。 */
+      var noAtt = statsData.labels.filter(function (L) {
+        return statsSel.labels[L.label] && statsNoAttendance_(L);
+      });
+      if (noAtt.length) {
+        out.push('你勾的場次裡有 ' + noAtt.length + ' 場是「不計入」（' +
+          escapeBattleHtml(noAtt.map(function (L) { return L.label; }).join('、')) +
+          '）。那些場次只算影片分，出勤的每一欄都跳過。');
+      }
+      if (vidx && !idx.length && vidx.length) {
+        out.push('現在勾的場次全部都是「不計入」，所以出勤那幾欄都是 0 —— 只有影片分有數字。');
+      }
       if (!out.length) return '';
       return out.map(function (t) { return '<div class="st-warn">' + t + '</div>'; }).join('');
     }
@@ -7252,12 +7293,12 @@
         (visible.length ? visible.map(function (i) {
           var L = statsData.labels[i];
           var on = !!statsSel.labels[L.label];
+          var tag = statsNoAttendance_(L) ? '只算影片'
+                  : (L.past ? (L.recorded ? L.recorded + ' 筆' : '沒人登記') : '還沒打');
           return '<label class="' + (L.past ? '' : 'st-future') + '">' +
             '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="statsPickLabel(' + i + ')">' +
             '<span>' + escapeBattleHtml(L.label) + '</span>' +
-            '<span class="st-ses-tag">' +
-              (L.past ? (L.recorded ? L.recorded + ' 筆' : '沒人登記') : '還沒打') +
-            '</span>' +
+            '<span class="st-ses-tag">' + tag + '</span>' +
           '</label>';
         }).join('') : '<div class="st-bar-note">這些篩選條件下沒有場次</div>') +
         '</div></div>';
@@ -7271,13 +7312,23 @@
           '<li>黃牌算在分母，但不算出勤 —— 處分要反映在出勤率上。</li>' +
           '<li>藍牌（人有來、打到一半就消失）一樣算在分母、不算出勤 —— ' +
               '那一場他沒打完。</li>' +
-          '<li>「不計入」類型的場次（例如只為了上傳影片而開的）完全跳過。</li>' +
+          '<li>「不計入」類型的場次（例如只為了上傳影片而開的）出勤完全跳過，' +
+              '但影片分照算。</li>' +
         '</ul>' +
         '<b>出勤分 ＝ 出勤 ×(+1) ＋ 黃牌 ×(-1)</b>' +
         '<ul>' +
           '<li>請假、臨時請假、X、藍牌都是 0 分 —— 不加也不扣。</li>' +
           '<li>沒有紀錄的照樣算出勤，所以也是 +1。</li>' +
           '<li>算的是所選場次的累計，左邊勾的場次一改，分數就跟著重算。</li>' +
+        '</ul>' +
+        '<b>影片分 ＝ 準時交了影片的場次數（一場最多 1 分）</b>' +
+        '<ul>' +
+          '<li>比賽當天不算，之後給整整兩天 —— 1104 打的，要在 <b>1107 00:00</b> 前交。' +
+              '每一場的截止時間寫在下面「所選比賽的出勤概況」裡。</li>' +
+          '<li>兩部影片只要有一部準時就算 1 分；第一部準時、第二部逾時，照樣 1 分。</li>' +
+          '<li>逾時交的算 0 分，跟沒交一樣。</li>' +
+          '<li>時間算的是<b>最後一次動那個連結</b>的時間。交完之後又去改連結，' +
+              '時間會重算 —— 已經過期才改的話分數會掉。</li>' +
         '</ul></div></div>';
 
       return html;
@@ -7288,7 +7339,7 @@
         ['name', '姓名'], ['job', '職業'], ['squad', '身分'], ['present', '出勤'],
         ['unreg', '其中未登記'], ['leave', '請假'], ['temp', '臨時請假'],
         ['yellow', '黃牌'], ['blue', '藍牌'], ['x', 'X'],
-        ['due', '應出席'], ['rate', '出勤率'], ['score', '出勤分']
+        ['due', '應出席'], ['rate', '出勤率'], ['score', '出勤分'], ['video', '影片分']
       ];
       var head = '<div class="st-row st-head">' + cols.map(function (c) {
         var mark = statsSel.sortKey === c[0] ? (statsSel.sortDir > 0 ? ' ▲' : ' ▼') : '';
@@ -7313,6 +7364,7 @@
           statsNum_(c.due) +
           '<span class="' + statsRateClass_(c.rate) + '">' + statsPct_(c.rate) + '</span>' +
           statsScore_(c.score) +
+          statsNum_(c.video) +
         '</div>';
       }).join('');
 
@@ -7329,8 +7381,20 @@
       var rows = statsRows_([]);
       var html = idx.map(function (i) {
         var L = statsData.labels[i];
-        var c = statsCount_('', []);
-        rows.forEach(function (r) { statsAddCounts_(c, statsCount_(r.m.marks, [i])); });
+        var c = statsCount_(null, []);
+        rows.forEach(function (r) { statsAddCounts_(c, statsCount_(r.m, [i])); });
+        var vcount = 0;
+        rows.forEach(function (r) { if ((r.m.vids || '').charAt(i) === '1') vcount++; });
+        if (statsNoAttendance_(L)) {
+          return '<div class="st-bar-row">' +
+            '<span>' + escapeBattleHtml(L.label) + '</span>' +
+            '<span class="st-bar"></span>' +
+            '<span class="st-bar-pct">只算影片</span>' +
+          '</div>' +
+          '<div class="st-bar-note" style="margin:-2px 0 6px">影片準時 ' + vcount + ' 人' +
+            (L.videoCutoff ? '（' + escapeBattleHtml(L.videoCutoff) + ' 截止）' : '') +
+            '｜這一場不算出勤</div>';
+        }
         var w = c.rate === null ? 0 : Math.round(c.rate * 100);
         return '<div class="st-bar-row">' +
           '<span>' + escapeBattleHtml(L.label) + '</span>' +
@@ -7340,7 +7404,10 @@
         '<div class="st-bar-note" style="margin:-2px 0 6px">出勤 ' + c.present +
           '（未登記 ' + c.unreg + '）・請假 ' + c.leave + '・臨時 ' + c.temp +
           '・黃牌 ' + c.yellow + '・藍牌 ' + c.blue +
-          '・X ' + c.x + '，應出席 ' + c.due + '</div>';
+          '・X ' + c.x + '，應出席 ' + c.due +
+          '｜影片準時 ' + vcount + ' 人' +
+          (L.videoCutoff ? '（' + escapeBattleHtml(L.videoCutoff) + ' 截止）' : '') +
+          '</div>';
       }).join('');
       return '<div class="st-box"><div class="st-box-title">所選比賽的出勤概況<small>' +
              idx.length + ' 場</small></div>' + html + '</div>';
