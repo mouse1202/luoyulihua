@@ -468,6 +468,19 @@ async function getAttendanceStats() {
     }
   });
 
+  /* 指揮分：排表的指揮欄位有被選到就 1 分。
+     一天最多一分 —— 同一天就算兩場都當指揮、或同一場同時掛團一進攻和
+     防守團指揮二，也只算一次。記的是「那天有沒有扛指揮」，不是扛幾個格子。
+     所以這裡用 date_label 當 key，同一天重複出現直接覆蓋成同一個 true。 */
+  const cmdRows = await fetchAll((a, b) =>
+    db.from("roster_commanders").select("date_label,name").order("id").range(a, b));
+  const cmdOk: Record<string, Record<string, boolean>> = {};
+  cmdRows.forEach((r: any) => {
+    const l = String(r.date_label ?? ""), nm = String(r.name ?? "").trim();
+    if (!l || !nm) return;   // 沒填指揮的那些列（目前資料庫裡大部分都是空的）
+    (cmdOk[l] = cmdOk[l] || {})[nm] = true;
+  });
+
   const members = await fetchAll((a, b) =>
     db.from("roster_members").select("name,job,job2,squad")
       .eq("category", "member").order("sort_order").range(a, b));
@@ -483,16 +496,37 @@ async function getAttendanceStats() {
 
   const rows = members.map((m: any) => {
     const name = String(m.name ?? "");
-    let marks = "", vids = "";
+    let marks = "", vids = "", cmds = "";
     for (const l of labels) {
       const st = byLabel[l] ? byLabel[l][name] : undefined;
       marks += st === undefined ? "-" : (STATS_MARK[st] || "?");
       vids += (vidOk[l] && vidOk[l][name]) ? "1" : "0";
+      cmds += (cmdOk[l] && cmdOk[l][name]) ? "1" : "0";
     }
     return {
       name, job: String(m.job ?? ""), job2: String(m.job2 ?? ""),
-      squad: String(m.squad ?? ""), marks, vids,
+      squad: String(m.squad ?? ""), marks, vids, cmds,
     };
+  });
+
+  /* 指揮不見得是主名單的人（指揮名單本來就獨立）。
+     那些人在上面的 rows 裡沒有自己的一列，指揮分就沒地方顯示，
+     所以另外整理一份，讓畫面補在表格最下面。
+     只有姓名跟指揮，沒有 marks／vids —— 他們不在主名單，
+     出勤那幾欄本來就沒有資料，硬湊一個「沒紀錄＝出勤」反而是假的。 */
+  const inMain: Record<string, boolean> = {};
+  members.forEach((m: any) => { inMain[String(m.name ?? "")] = true; });
+  const outNames: string[] = [];
+  Object.keys(cmdOk).forEach((l) => {
+    Object.keys(cmdOk[l]).forEach((nm) => {
+      if (!inMain[nm] && outNames.indexOf(nm) === -1) outNames.push(nm);
+    });
+  });
+  outNames.sort();
+  const outsiders = outNames.map((name) => {
+    let cmds = "";
+    for (const l of labels) cmds += (cmdOk[l] && cmdOk[l][name]) ? "1" : "0";
+    return { name, cmds };
   });
 
   return {
@@ -512,6 +546,8 @@ async function getAttendanceStats() {
       videoOnTime: Object.keys(vidOk[l] || {}).length,
     })),
     members: rows,
+    // 當過指揮、但不在主名單的人（畫面上補在表格最下面）
+    outsiders,
   };
 }
 
