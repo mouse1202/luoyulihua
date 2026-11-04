@@ -2466,6 +2466,15 @@
     }
     .st-head span { cursor: pointer; }
     .st-head span:hover { color: #f0d060; }
+    .st-export-bar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+    .st-export-btn {
+      font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
+      color: #f0d060; background: rgba(212, 168, 40, 0.1);
+      border: 1px solid #8a6a2a; border-radius: 6px; padding: 7px 16px;
+    }
+    .st-export-btn:hover:not(:disabled) { background: rgba(212, 168, 40, 0.22); }
+    .st-export-btn:disabled { opacity: .5; cursor: default; }
+
     .st-zero { opacity: .3; }
     /* 當過指揮、但不在主名單的人：跟主名單之間畫一條線分開，
        免得被當成名單上的成員 */
@@ -7378,6 +7387,8 @@
         statsWarnHtml_(idx, vidx) +
         statsTypesHtml_() +
         statsCardsHtml_(rows, total) +
+        '<div class="st-export-bar"><button type="button" class="st-export-btn" ' +
+          'id="st-export-btn" onclick="exportStatsExcel()">匯出 Excel</button></div>' +
         '<div class="st-main">' +
           '<div class="st-side">' + statsFiltersHtml_(vidx) + '</div>' +
           '<div class="st-right">' + statsTableHtml_(rows, statsOutsideRows_(idx, vidx)) + statsEventsHtml_(vidx) + '</div>' +
@@ -7659,6 +7670,174 @@
       }).join('');
       return '<div class="st-box"><div class="st-box-title">所選比賽的出勤概況<small>' +
              idx.length + ' 場</small></div>' + html + '</div>';
+    }
+
+    /* ── 匯出 Excel ──
+       匯出的是「中間那些資料」：上面的總覽卡片、名單表格、所選比賽的概況。
+       左邊那排可以點的篩選條件不匯出 —— 那是操作介面，不是資料。
+       但篩選的結果會反映在內容裡：勾哪幾場、篩哪些身分，匯出的就是那些。
+
+       數字一律存成數字、不是字串（出勤分存 -1 不是 "-1"，出勤率存 0.853
+       再套百分比格式），這樣在 Excel 裡才排得了序、加得了總和。 */
+    /* 顏色要寫成 8 位 ARGB、而且 fill 一定要帶 patternType，
+       少了任何一個 xlsx-js-style 就會把整個樣式丟掉（排表匯出那邊也是這樣寫的）。 */
+    function statsXlsxFill_(bg, fg) {
+      return { fill: { patternType: 'solid', fgColor: { rgb: 'FF' + bg } },
+               font: { color: { rgb: 'FF' + fg }, bold: true } };
+    }
+    function statsXlsxHeadStyle_() {
+      var st = statsXlsxFill_('8A6A2A', 'FFFFFF');
+      st.alignment = { horizontal: 'center' };
+      return st;
+    }
+    function statsXlsxTitleStyle_() { return statsXlsxFill_('555555', 'FFFFFF'); }
+
+    // 把 aoa 寫成工作表，順便套欄寬跟指定格子的樣式／數字格式
+    function statsSheet_(aoa, cols, ops) {
+      var ws = XLSX.utils.aoa_to_sheet(aoa);
+      if (cols) ws['!cols'] = cols.map(function (w) { return { wch: w }; });
+      (ops || []).forEach(function (op) {
+        var a = XLSX.utils.encode_cell({ r: op.r, c: op.c });
+        if (!ws[a]) ws[a] = { t: 's', v: '' };
+        if (op.s) ws[a].s = op.s;
+        if (op.z) ws[a].z = op.z;
+      });
+      return ws;
+    }
+
+    function statsExportFileName_() {
+      // 用台北時間，不然晚上匯出會變成前一天
+      var d = new Date(Date.now() + 8 * 3600 * 1000);
+      var p = function (n) { return (n < 10 ? '0' : '') + n; };
+      return '出勤率_' + d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) +
+             '_' + p(d.getUTCHours()) + p(d.getUTCMinutes()) + '.xlsx';
+    }
+
+    function exportStatsExcel() {
+      var btn = document.getElementById('st-export-btn');
+      if (!statsData) { showAlertModal('資料還沒載入完成'); return; }
+
+      var idx = statsSelectedIdx_();
+      var vidx = statsSelectedVideoIdx_();
+      var rows = statsRows_(idx, vidx);
+      var outside = statsOutsideRows_(idx, vidx);
+      /* 一場都沒勾的話，每個人每一欄都會是 0 —— 匯出去只會讓人以為資料壞了，
+         所以寧可擋下來，跟畫面上「左邊還沒勾任何場次」說的是同一件事。 */
+      if (!vidx.length) {
+        showAlertModal('左邊還沒勾任何場次，沒有東西可以匯出');
+        return;
+      }
+      if (!rows.length && !outside.length) {
+        showAlertModal('目前的篩選條件下沒有任何資料可以匯出');
+        return;
+      }
+
+      if (btn) { btn.disabled = true; btn.textContent = '產生中…'; }
+      try {
+        var wb = XLSX.utils.book_new();
+
+        /* 第一張：名單。欄位順序跟畫面上那張表一模一樣。 */
+        var head = ['姓名', '職業', '身分', '出勤', '其中未登記', '請假', '臨時請假',
+                    '黃牌', '藍牌', 'X', '應出席', '出勤率', '出勤分', '影片分', '指揮分', '總分'];
+        var aoa = [head], ops = [];
+        head.forEach(function (_, c) { ops.push({ r: 0, c: c, s: statsXlsxHeadStyle_() }); });
+
+        rows.forEach(function (r) {
+          var c = r.c;
+          ops.push({ r: aoa.length, c: 11, z: '0.0%' });
+          aoa.push([r.m.name, r.m.job || '', r.squad || '',
+                    c.present, c.unreg, c.leave, c.temp, c.yellow, c.blue, c.x, c.due,
+                    c.rate === null ? '' : c.rate,
+                    c.score, c.video, c.cmd, c.total]);
+        });
+
+        /* 不在主名單的指揮：出勤那幾欄留白，不要填 0。
+           0 的意思是「考了零分」，留白才是「沒有這筆資料」。 */
+        if (outside.length) {
+          aoa.push([]);
+          ops.push({ r: aoa.length, c: 0, s: statsXlsxTitleStyle_() });
+          aoa.push(['以下是當過指揮、但不在主名單的人（只算指揮分，出勤欄位留空）']);
+          outside.forEach(function (r) {
+            var c = r.c;
+            aoa.push([r.m.name, '指揮', '', '', '', '', '', '', '', '', '', '',
+                      c.score, c.video, c.cmd, c.total]);
+          });
+        }
+        XLSX.utils.book_append_sheet(wb, statsSheet_(aoa,
+          [14, 8, 10, 6, 10, 6, 9, 6, 6, 6, 8, 9, 8, 8, 8, 8], ops), '名單');
+
+        /* 第二張：所選比賽的概況。畫面上是一條一條的長條圖，
+           這裡攤平成一場一列，數字照樣可以自己再算。 */
+        var ehead = ['場次', '類型', '出勤', '其中未登記', '請假', '臨時請假', '黃牌', '藍牌',
+                     'X', '應出席', '出勤率', '影片準時人數', '影片截止', '備註'];
+        var eaoa = [ehead], eops = [];
+        ehead.forEach(function (_, c) { eops.push({ r: 0, c: c, s: statsXlsxHeadStyle_() }); });
+        // 「哪些人列入計算」用目前的篩選，但不帶場次進去算，跟畫面上那段一致
+        var base = statsRows_([]);
+        vidx.forEach(function (i) {
+          var L = statsData.labels[i];
+          var c = statsCount_(null, []);
+          base.forEach(function (r) { statsAddCounts_(c, statsCount_(r.m, [i])); });
+          var vcount = 0;
+          base.forEach(function (r) { if ((r.m.vids || '').charAt(i) === '1') vcount++; });
+          var noAtt = statsNoAttendance_(L);
+          if (!noAtt) eops.push({ r: eaoa.length, c: 10, z: '0.0%' });
+          eaoa.push([L.label, L.type || '未分類',
+            noAtt ? '' : c.present, noAtt ? '' : c.unreg, noAtt ? '' : c.leave,
+            noAtt ? '' : c.temp, noAtt ? '' : c.yellow, noAtt ? '' : c.blue,
+            noAtt ? '' : c.x, noAtt ? '' : c.due,
+            noAtt ? '' : (c.rate === null ? '' : c.rate),
+            vcount, L.videoCutoff || '',
+            noAtt ? '不計入：這一場不算出勤，只算影片分' : '']);
+        });
+        XLSX.utils.book_append_sheet(wb, statsSheet_(eaoa,
+          [24, 12, 6, 10, 6, 9, 6, 6, 6, 8, 9, 12, 12, 30], eops), '所選比賽');
+
+        /* 第三張：上面那幾張卡片的數字，外加各項分數的合計。 */
+        var total = statsCount_(null, []);
+        rows.forEach(function (r) { statsAddCounts_(total, r.c); });
+        var cmdTotal = 0, cmdCount = 0;
+        outside.forEach(function (r) { cmdTotal += r.c.total; cmdCount += r.c.cmd; });
+        var taoa = [['項目', '數值'],
+          ['列入計算的人', rows.length],
+          ['主名單共', statsData.members.length],
+          ['選了幾場（出勤用）', idx.length],
+          ['選了幾場（影片／指揮用）', vidx.length],
+          ['整體出勤率', total.rate === null ? '' : total.rate],
+          ['出勤人次', total.present],
+          ['其中未登記', total.unreg],
+          ['請假', total.leave],
+          ['臨時請假', total.temp],
+          ['黃牌', total.yellow],
+          ['藍牌', total.blue],
+          ['X（不計入分母）', total.x],
+          ['應出席人次', total.due],
+          ['出勤分合計', total.score],
+          ['影片分合計', total.video],
+          ['指揮分合計（主名單）', total.cmd],
+          ['總分合計（主名單）', total.total],
+          ['不在主名單的指揮人數', outside.length],
+          ['他們的指揮分合計', cmdCount]];
+        var tops = [{ r: 0, c: 0, s: statsXlsxHeadStyle_() }, { r: 0, c: 1, s: statsXlsxHeadStyle_() },
+                    { r: 5, c: 1, z: '0.0%' }];
+        XLSX.utils.book_append_sheet(wb, statsSheet_(taoa, [26, 14], tops), '總覽');
+
+        var out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        var url = URL.createObjectURL(new Blob([out],
+          { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = statsExportFileName_();
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // 馬上 revoke 的話 Chrome 偶爾會來不及下載，等一下再收
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      } catch (e) {
+        showAlertModal('匯出失敗：' + e.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '匯出 Excel'; }
+      }
     }
 
     /* 場次類型：改錯一場，那一類的出勤率就偏掉，所以只有管理改得動，
