@@ -307,6 +307,64 @@ async function saveByCategory(category: string, rows: any[], opts?: any) {
   return { success: true, count: clean.length, preJoin };
 }
 
+/* ── 指揮名單 ──
+   只在排表的「指揮」下拉出現，別的地方都看不到它（見 0027 migration）。
+   只有姓名，沒有職業／身分組 —— 指揮不是被排進格子的人。 */
+async function listCommanderNames() {
+  const { data } = await db.from("commander_names")
+    .select("name").order("sort_order").order("id");
+  return (data ?? []).map((r) => ({ name: String(r.name ?? "") }));
+}
+
+async function saveCommanderNames(rows: any[], opts?: any) {
+  const names = (rows ?? [])
+    .map((r) => (r && r.name ? String(r.name).trim() : ""))
+    .filter(Boolean);
+
+  // 同一份名單不該有重複的名字：下拉會出現兩個一模一樣的選項，誰也分不出來
+  const seen = new Set<string>(), dups = new Set<string>();
+  names.forEach((nm) => { if (seen.has(nm)) dups.add(nm); else seen.add(nm); });
+  if (dups.size > 0) {
+    return { success: false, code: "DUPLICATE_NAMES", duplicates: Array.from(dups),
+      message: `指揮名單裡有重複的名字：${Array.from(dups).slice(0, 10).join("、")}` };
+  }
+
+  /* 整份覆寫，所以跟其他名單一樣要防「畫面沒載入成功就按儲存」把名單清空。
+     門檻比主名單寬鬆：指揮名單本來就只有幾個人，照「少掉一半就擋」的規則
+     會連正常的「四個刪成一個」都擋掉。這裡只擋「本來有人、送上來是空的」。 */
+  const { count: existing } = await db.from("commander_names")
+    .select("id", { count: "exact", head: true });
+  const had = existing ?? 0;
+  if (!opts?.force && names.length === 0 && had > 0) {
+    return { success: false, code: "WOULD_EMPTY", existing: had, incoming: 0,
+      message: `目前指揮名單有 ${had} 人，這次送出的是空的` };
+  }
+
+  const { data: wasThere } = await db.from("commander_names").select("name");
+  const before = (wasThere ?? []).map((r: any) => String(r.name));
+
+  await chk(db.from("commander_names").delete().gte("id", 0).select("id"));
+  if (names.length > 0) {
+    const now = new Date().toISOString();
+    await chk(db.from("commander_names")
+      .insert(names.map((name, i) => ({ name, sort_order: i, updated_at: now })))
+      .select("id"));
+  }
+
+  // 只有真的有變才寫記錄，不然每按一次儲存就多一筆沒用的
+  const added = names.filter((n) => before.indexOf(n) === -1);
+  const removed = before.filter((n) => names.indexOf(n) === -1);
+  if (added.length || removed.length) {
+    const who = opts?.actorRoleName || opts?.actorEmail || "有人";
+    const parts: string[] = [];
+    if (added.length) parts.push(`加入 ${added.join("、")}`);
+    if (removed.length) parts.push(`移除 ${removed.join("、")}`);
+    await appendActivityLog(opts?.actorEmail ?? "", opts?.actorRoleName ?? "",
+      `${who} 改了指揮名單：${parts.join("；")}（現在 ${names.length} 人）`);
+  }
+  return { success: true, count: names.length };
+}
+
 async function getAttendanceCandidates() {
   const { data } = await db.from("roster_members").select("name,job,job2,category,squad").order("category").order("sort_order");
   return (data ?? []).map((r) => ({
@@ -585,6 +643,7 @@ const EVENT_TYPES = ["", "幫戰", "龍虎決戰", "幫會約戰", "俱樂部約
 const NEED_LEVEL: Record<string, "admin" | "export"> = {
   // 名單覆寫是「先刪光再寫入」，一次呼叫就能把整份名單清掉，最危險
   saveMemberList: "admin", saveGuestList: "admin", saveTrialList: "admin", saveClubList: "admin",
+  saveCommanderList: "admin",
   saveRoster: "admin",
   deleteAllRecordsForDate: "admin", renameDateLabel: "admin",
   saveAttendanceDeadlineTime: "admin", clearAttendanceDeadlineTime: "admin",
@@ -621,6 +680,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   saveTrialList: (rows: any[], opts?: any) => saveByCategory("trial", rows, opts),
   getClubList: () => listByCategory("club"),
   saveClubList: (rows: any[], opts?: any) => saveByCategory("club", rows, opts),
+  getCommanderList: () => listCommanderNames(),
+  saveCommanderList: (rows: any[], opts?: any) => saveCommanderNames(rows, opts),
   getAttendanceCandidates: () => getAttendanceCandidates(),
 
   checkAccessStatus: async (nameIn: string) => {

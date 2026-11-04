@@ -949,6 +949,9 @@
       font-weight: 700;
     }
 
+    /* 指揮名單只有姓名一欄，讓它別拉成整列那麼寬 */
+    #commander-list .attendance-name { max-width: 240px; }
+
     /* 名單管理的身分組下拉，寬度跟職業欄一致，不然三欄會對不齊 */
     .attendance-squad {
       flex: 1 1 0;
@@ -2873,7 +2876,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceStats','setDateLabelType','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','getRosterActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias','markPlayerLeft','getPlayerLeftPreview','nameInUse','submitRenameRequest','getMyRenameRequest','cancelRenameRequest','listRenameRequests','approveRenameRequest','rejectRenameRequest'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getCommanderList','saveCommanderList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceStats','setDateLabelType','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','getRosterActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias','markPlayerLeft','getPlayerLeftPreview','nameInUse','submitRenameRequest','getMyRenameRequest','cancelRenameRequest','listRenameRequests','approveRenameRequest','rejectRenameRequest'];
 
   // 排表匯出的職業底色。存的是不含 # 的六碼，argb() 會補上 FF。
   // 都是淺色系，配預設的黑字才看得清楚。
@@ -3521,6 +3524,15 @@
           </div>
           <div class="attendance-list" id="trial-list"></div>
           <button type="button" class="attendance-add-btn" onclick="addTrialRow()">＋ 新增一列</button>
+
+          <div class="member-section-title">指揮名單</div>
+          <p class="password-hint">這份名單只會出現在排表工具「指揮」的下拉選單裡。不會進出勤系統，也不會出現在排表的候補／外援／試訓窗格。只填姓名。</p>
+          <div class="attendance-header-row">
+            <span class="attendance-col-name">姓名</span>
+            <span class="attendance-col-spacer"></span>
+          </div>
+          <div class="attendance-list" id="commander-list"></div>
+          <button type="button" class="attendance-add-btn" onclick="addCommanderRow()">＋ 新增一列</button>
 
         </div>
         <div class="roster-footer">
@@ -4482,21 +4494,54 @@
       };
     }
 
-    /* 指揮的選單：當天出勤的人全列，不照職業篩、也不排除已經排進格子的人 ——
-       指揮本來就會同時是某一格的隊員。勾了「連請假／X 的人也列出來」就跟著列。 */
+    /* 指揮的選單只列「指揮名單」裡的人（名單管理那邊設的）。
+       不是當天出勤的那一百多人 —— 指揮就那幾個，清單短才挑得動。
+       也因為這樣，指揮名單跟出勤完全無關：名單裡的人就算那天請假、
+       甚至根本不在主名單上，照樣選得到。 */
+    var rosterCommanderNames = null;   // null＝還沒讀過
+    var rosterCommanderSeq = 0;
+
+    function loadCommanderNames_(cb) {
+      if (rosterCommanderNames) { if (cb) cb(); return; }
+      if (!(window.google && google.script && google.script.run)) {
+        rosterCommanderNames = [];
+        if (cb) cb();
+        return;
+      }
+      var seq = ++rosterCommanderSeq;
+      google.script.run.withSuccessHandler(function (list) {
+        if (seq !== rosterCommanderSeq) return;
+        rosterCommanderNames = (list || []).map(function (c) { return String(c.name || ''); })
+          .filter(function (n) { return n; });
+        if (cb) cb();
+      }).withFailureHandler(function () {
+        if (seq !== rosterCommanderSeq) return;
+        // 讀不到就先當空的。已經存過的指揮名字照樣留得住
+        // （見 addCommanderMissingOption_），不會被自動儲存洗掉。
+        rosterCommanderNames = [];
+        if (cb) cb();
+      }).getCommanderList();
+    }
+
     function buildCommanderNameOptionsHtml() {
       var html = '<option value=""></option>';
-      currentRosterAttendees.forEach(function (m) {
-        html += '<option value="' + escapeBattleHtml(m.name) + '">' +
-          escapeBattleHtml(rosterDisplayName_(m)) + '</option>';
+      (rosterCommanderNames || []).forEach(function (n) {
+        html += '<option value="' + escapeBattleHtml(n) + '">' + escapeBattleHtml(n) + '</option>';
       });
-      if (rosterShowAllNames_()) {
-        currentRosterExcluded.forEach(function (m) {
-          html += '<option value="' + escapeBattleHtml(m.name) + '" class="roster-name-gone">' +
-            escapeBattleHtml(m.name + '（' + (rosterDateStatus[m.name] || '未出勤') + '）') + '</option>';
-        });
-      }
       return html;
+    }
+
+    /* 已經存過、但現在不在指揮名單裡的人（名單被改過、或是加這份名單之前就存的）。
+       名字一定要留著 —— 排表是自動儲存的，清成空白之後隨便改別格就會把
+       空白寫回資料庫，那一場的指揮就沒了。 */
+    function addCommanderMissingOption_(sel, name) {
+      var has = Array.prototype.slice.call(sel.options).some(function (o) { return o.value === name; });
+      if (has) return;
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name + '（不在指揮名單）';
+      opt.className = 'roster-name-gone';
+      sel.appendChild(opt);
     }
 
     /* 重建每個指揮欄位的選項。原本選的人要留著 —— 他可能已經退幫或那天請假，
@@ -4509,7 +4554,7 @@
           var cur = sel.value;
           sel.innerHTML = buildCommanderNameOptionsHtml();
           if (cur) {
-            addGoneRosterOption_(sel, cur);
+            addCommanderMissingOption_(sel, cur);
             sel.value = cur;
           }
           syncRosterNameCustomUI(box);
@@ -4634,6 +4679,8 @@
     // 切換日期或初次載入時，重新整理所有姓名下拉選單的選項；
     // 已選的姓名如果那天不再出勤（或職業對不上），會被清空。
     function refreshAllRosterNameOptions() {
+      // 指揮名單跟當天出勤無關，整個排表畫面只要讀一次
+      if (!rosterCommanderNames) { loadCommanderNames_(refreshAllRosterNameOptions); }
       var rows = Array.prototype.slice.call(document.querySelectorAll('#roster-list .roster-person-row'));
       var allSelectedNames = getAllRosterNameValues(); // 只查一次整個表單，下面每一格都重複使用
       rows.forEach(function (row) {
@@ -4899,8 +4946,8 @@
              補成一個（已退）選項好保住名字，那個人跟這一天沒關係，
              留著的話清單裡會多出一個可以點、但不該點的名字。 */
           sel.innerHTML = buildCommanderNameOptionsHtml();
-          // 這一天存到的人可能已經退幫或那天沒出勤 —— 名字要留著，不能清成空白
-          if (nm) addGoneRosterOption_(sel, nm);
+          // 這一天存到的人可能已經被移出指揮名單 —— 名字要留著，不能清成空白
+          if (nm) addCommanderMissingOption_(sel, nm);
           sel.value = nm;
           syncRosterNameCustomUI(sel.parentElement);
         });
@@ -8445,6 +8492,29 @@
       updateMemberJobCounts();
     }
 
+    /* 指揮名單只有姓名。不共用 createMemberRow：那個一定會畫出職業／二職，
+       而指揮不是被排進格子的人，給他選職業只會讓人以為填了有用。 */
+    function addCommanderRow(name) {
+      var row = document.createElement('div');
+      row.className = 'attendance-row';
+
+      var nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'attendance-name';
+      nameInput.placeholder = '姓名';
+      nameInput.value = name || '';
+
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'attendance-del-btn';
+      delBtn.textContent = '×';
+      delBtn.onclick = function () { row.remove(); };
+
+      row.appendChild(nameInput);
+      row.appendChild(delBtn);
+      document.getElementById('commander-list').appendChild(row);
+    }
+
     function addGuestRow(name, job, job2) {
       var list = document.getElementById('guest-list');
       list.appendChild(createMemberRow(name, job, job2));
@@ -8521,7 +8591,7 @@
 
     // 四份名單各自載入成功沒有、載入時各有幾人。
     // 任何一份沒載入成功就不准存 —— 畫面上那份是空白預設列，存下去就是清空。
-    var memberLoadState = { member: null, guest: null, trial: null, club: null };
+    var memberLoadState = { member: null, guest: null, trial: null, club: null, commander: null };
 
     // 第幾次載入名單。每按一次「名單管理」就 +1，回應回來時對不上就丟掉 ——
     // 連開兩三次的話，舊的那幾份回應不能再寫進畫面。
@@ -8530,7 +8600,7 @@
     function loadMemberListIntoForm() {
       var seq = ++memberLoadSeq;
       var stale = function () { return seq !== memberLoadSeq; };
-      memberLoadState = { member: null, guest: null, trial: null };
+      memberLoadState = { member: null, guest: null, trial: null, commander: null };
       setMemberSaveEnabled_();
       var memberList = document.getElementById('member-list');
       var guestList = document.getElementById('guest-list');
@@ -8538,6 +8608,7 @@
       memberList.innerHTML = '';
       guestList.innerHTML = '';
       trialList.innerHTML = '';
+      document.getElementById('commander-list').innerHTML = '';
 
       function renderMembers(members, failed) {
         if (stale()) return;                       // 舊的一次載入回來了，丟掉
@@ -8578,7 +8649,24 @@
         }
       }
 
+      function renderCommanders(list, failed) {
+        if (stale()) return;                       // 舊的一次載入回來了，丟掉
+        document.getElementById('commander-list').innerHTML = ''; // 先清掉自己，不然會疊上去
+        memberLoadState.commander = failed ? 'failed' : (list || []).length;
+        setMemberSaveEnabled_();
+        if (!list || list.length === 0) {
+          for (var i = 0; i < 3; i++) addCommanderRow();
+        } else {
+          list.forEach(function (c) { addCommanderRow(c.name); });
+        }
+      }
+
       if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(renderCommanders).withFailureHandler(function (err) {
+          showAlertModal('讀取指揮名單失敗：' + err.message + '\n\n這時候不能儲存名單，請重新整理頁面再進來。');
+          renderCommanders([], true);
+        }).getCommanderList();
+
         google.script.run.withSuccessHandler(renderMembers).withFailureHandler(function (err) {
           showAlertModal('讀取主名單失敗：' + err.message + '\n\n這時候不能儲存名單，請重新整理頁面再進來。');
           renderMembers([], true);
@@ -8599,6 +8687,7 @@
         renderMembers([]);
         renderGuests([]);
         renderTrials([]);
+        renderCommanders([]);
       }
     }
 
@@ -9098,15 +9187,22 @@
 
     function memberListsReady_() {
       var st = memberLoadState;
-      return ['member', 'guest', 'trial'].every(function (k) {
+      return ['member', 'guest', 'trial', 'commander'].every(function (k) {
         return typeof st[k] === 'number';
       });
+    }
+
+    // 指揮名單只有姓名，collectListRows_ 會去抓 .attendance-job 抓不到
+    function collectCommanderRows_() {
+      return Array.prototype.slice.call(document.querySelectorAll('#commander-list .attendance-row'))
+        .map(function (row) { return { name: row.querySelector('.attendance-name').value.trim() }; })
+        .filter(function (r) { return r.name; });
     }
 
     function setMemberSaveEnabled_() {
       var btn = document.getElementById('member-save-btn');
       if (!btn) return;
-      var failed = ['member', 'guest', 'trial', 'club'].some(function (k) { return memberLoadState[k] === 'failed'; });
+      var failed = ['member', 'guest', 'trial', 'club', 'commander'].some(function (k) { return memberLoadState[k] === 'failed'; });
       var ready = memberListsReady_();
       btn.disabled = !ready;
       btn.textContent = failed ? '名單沒載入成功，請重新整理' : (ready ? '儲存名單' : '名單載入中…');
@@ -9121,12 +9217,14 @@
       var memberData = collectListRows_('member-list');
       var guestData = collectListRows_('guest-list');
       var trialData = collectListRows_('trial-list');
+      var commanderData = collectCommanderRows_();
 
       // 同一份名單裡有重複的名字就不准存。名字在這套系統裡等於識別碼，
       // 一份名單本來就不該有兩個一樣的 —— 出現重複代表畫面疊到了，
       // 存下去出勤系統就會看到同一個人好幾行。這個不給 force 略過。
       var dupFound = [
-        ['主要成員', memberData], ['外援', guestData], ['試訓', trialData]
+        ['主要成員', memberData], ['外援', guestData], ['試訓', trialData],
+        ['指揮名單', commanderData]
       ].map(function (x) {
         var seen = {}, dups = [];
         x[1].forEach(function (r) {
@@ -9153,6 +9251,10 @@
           var had = x[1], now = x[2];
           return (had > 0 && now === 0) || (had >= 10 && now < had * 0.5);
         });
+        // 指揮名單人少，只擋「本來有人、這次清空」
+        if (memberLoadState.commander > 0 && commanderData.length === 0) {
+          warn.push(['指揮名單', memberLoadState.commander, 0]);
+        }
         if (warn.length) {
           showConfirmModal('名單人數大幅減少',
             '這次儲存會讓下面這幾份名單的人數大幅減少：\n\n' +
@@ -9171,7 +9273,7 @@
       saveBtn.disabled = true;
       saveBtn.textContent = '儲存中...';
 
-      var pending = 3;   // 主要成員／外援／試訓（俱樂部已經併進主要成員）
+      var pending = 4;   // 主要成員／外援／試訓／指揮名單（俱樂部已經併進主要成員）
       var hadError = false;
       // 後端替新加的人補了幾場 X，存完一起講出來 —— 不講的話，
       // 人家只會看到出勤系統突然多了一排 X，不知道是哪來的
@@ -9185,7 +9287,9 @@
         if (!hadError) {
           // 存成功之後，下次比對的基準改成這次存進去的人數
           memberLoadState = { member: memberData.length, guest: guestData.length,
-                              trial: trialData.length };
+                              trial: trialData.length, commander: commanderData.length };
+          // 排表那邊快取了一份指揮名單，存完要作廢，不然要重新整理才看得到
+          rosterCommanderNames = null;
           showAlertModal('已儲存名單' + preJoinNote);
         }
       }
@@ -9219,10 +9323,12 @@
         google.script.run.withSuccessHandler(ok('主要成員名單')).withFailureHandler(onFailure('主要成員名單')).saveMemberList(memberData, opts);
         google.script.run.withSuccessHandler(ok('外援名單')).withFailureHandler(onFailure('外援名單')).saveGuestList(guestData, opts);
         google.script.run.withSuccessHandler(ok('試訓名單')).withFailureHandler(onFailure('試訓名單')).saveTrialList(trialData, opts);
+        google.script.run.withSuccessHandler(ok('指揮名單')).withFailureHandler(onFailure('指揮名單')).saveCommanderList(commanderData, opts);
       } else {
         console.log('member list data (local preview, no GAS backend):', memberData);
         console.log('guest list data (local preview, no GAS backend):', guestData);
         console.log('trial list data (local preview, no GAS backend):', trialData);
+        console.log('commander list data (local preview, no GAS backend):', commanderData);
         showAlertModal('本機預覽模式，未連接 Google Apps Script，資料未送出。\n(可按 F12 開主控台查看資料)');
         saveBtn.disabled = false;
         saveBtn.textContent = '儲存名單';
