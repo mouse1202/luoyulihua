@@ -759,30 +759,57 @@
       border-bottom: 1px solid rgba(212, 168, 40, 0.35);
     }
 
+    /* 一團可能有不只一個指揮（防守團有兩個），所以整組包起來一起靠右，
+       margin-left:auto 掛在這個盒子上，不是掛在每個標籤上。 */
+    .roster-commander-box {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
     .roster-commander-label {
       font-size: 13px;
       font-weight: 400;
       color: #FFFFEF;
       letter-spacing: 1px;
-      margin-left: auto;
-      margin-right: 6px;
       white-space: nowrap;
     }
 
-    .roster-commander-input {
-      background: #0A0A0A;
-      border: 1px solid #6B1023;
-      color: #FFFFEF;
-      border-radius: 6px;
-      padding: 4px 8px;
-      font-size: 13px;
-      font-family: inherit;
+    /* 指揮也用格子那一套 combo（隱藏 select 當資料來源 + 可打字的輸入框 +
+       自訂清單），所以要 position:relative 讓清單掛得上去。 */
+    .roster-commander-combo {
+      position: relative;
       width: 110px;
+      flex: none;
     }
 
-    .roster-commander-input:focus {
-      outline: none;
+    .roster-cmd-name {
+      display: none; /* 跟 .roster-name 一樣，藏起來當資料來源 */
+    }
+
+    /* 蓋掉 .roster-name-input 的尺寸：團名那一行比格子窄，32px 太高 */
+    .roster-commander-combo .roster-name-input {
+      height: 28px;
+      padding: 4px 8px;
+    }
+
+    .roster-commander-combo .roster-name-input:focus {
       border-color: #f0d060;
+    }
+
+    .roster-commander-combo .roster-name-input.is-gone {
+      color: #c8a45a;
+      border-color: #8a6a2a;
+    }
+
+    /* 欄位只有 110px，但名字後面可能帶「（臨時請假）」，清單要能往左長出去 */
+    .roster-commander-combo .roster-name-popup {
+      left: auto;
+      right: 0;
+      min-width: 170px;
     }
 
     .roster-team-row {
@@ -2910,10 +2937,12 @@
       function st(r,c,s){ styleOps.push({ r:r, c:c, s:s }); }
       groups.forEach(function (group) {
         var totalCols = Math.max(1, group.teams.length * 2);
-        var cmd = cmdMap[group.name] || '';
+        // 一團可能有不只一個指揮（防守團有兩個，第二個存成「團名指揮二」）
+        var cmds = [ cmdMap[group.name], cmdMap[group.name + '指揮二'] ]
+          .filter(function (v) { return v; });
         var bc = GROUP_BANNER[group.name] || DEF_BANNER;
         var br = aoa.length;
-        var b0 = [ group.name + (cmd ? ('（指揮：' + cmd + '）') : '') ];
+        var b0 = [ group.name + (cmds.length ? ('（指揮：' + cmds.join('、') + '）') : '') ];
         while (b0.length < totalCols) b0.push('');
         aoa.push(b0);
         if (totalCols > 1) merges.push({ s:{ r:br, c:0 }, e:{ r:br, c:totalCols-1 } });
@@ -3757,8 +3786,20 @@
     var ROSTER_GROUPS = [
       { name: '團一進攻', teams: ['一隊', '二隊', '三隊'], columnsPerRow: 3 },
       { name: '團二進攻', teams: ['一隊', '二隊', '三隊'], columnsPerRow: 3 },
-      { name: '防守團', teams: ['一隊', '二隊', '三隊', '四隊'], columnsPerRow: 2 }
+      // commanders：這一團有幾個指揮欄位，沒寫就是 1。
+      // 第一個的 key 就是團名（舊資料都是這樣存的，不能改），
+      // 第二個是「團名＋指揮二」—— roster_commanders 的唯一鍵是
+      // (date_label, session, grp)，換個 grp 就是另一筆，資料庫完全不用動。
+      { name: '防守團', teams: ['一隊', '二隊', '三隊', '四隊'], columnsPerRow: 2, commanders: 2 }
     ];
+
+    // 一團的指揮欄位：[{ key, label }, …]
+    function rosterCommanderSlots_(group) {
+      var n = group.commanders || 1;
+      var out = [{ key: group.name, label: n > 1 ? '指揮一：' : '指揮：' }];
+      if (n > 1) out.push({ key: group.name + '指揮二', label: '指揮二：' });
+      return out;
+    }
     var TEAM_ROW_GAP = 12; // px, 對應 .roster-team-row 的 gap
     var TEAM_SIZE = 6;
     // 密碼不在這裡了。
@@ -4327,12 +4368,19 @@
       syncRosterNameCustomUI(row);
     }
 
+    /* 格子裡的姓名下拉是 .roster-name，指揮的是 .roster-cmd-name。
+       兩種共用同一套「可打字搜尋的下拉」，但 class 一定要分開：
+       「共 N 格」跟「一個人不能排兩格」那些規則只能算格子，
+       指揮同時也會被排進某一格，混在一起的話他就從別格的選單裡消失了。 */
+    var ROSTER_COMBO_SELECT = '.roster-name, .roster-cmd-name';
+    function rosterComboSelect_(box) { return box.querySelector(ROSTER_COMBO_SELECT); }
+
     // 姓名下拉改成自己實作的小型清單（原生 select 的彈出清單沒辦法用 CSS 控制高度），
     // 固定最高 160px，人一多就用滑鼠滾輪捲動，而且輸入框本身可以直接打字搜尋。
     // 隱藏的 <select class="roster-name"> 還是唯一的資料來源，這裡只是依它目前的
     // 選項/值畫出對應的畫面，所以其他讀寫 .roster-name 的地方（存檔、匯出…）完全不用改。
     function syncRosterNameCustomUI(row) {
-      var nameSelect = row.querySelector('.roster-name');
+      var nameSelect = rosterComboSelect_(row);
       var input = row.querySelector('.roster-name-input');
       if (!nameSelect || !input) return;
 
@@ -4350,7 +4398,7 @@
     // 選項本身（哪些人可以選）還是由 .roster-name 的 <option> 決定（已經套用職業／排除規則），
     // 這裡只是在那之上再做一層文字搜尋的篩選。
     function renderRosterNamePopupOptions(row, searchText) {
-      var nameSelect = row.querySelector('.roster-name');
+      var nameSelect = rosterComboSelect_(row);
       var popup = row.querySelector('.roster-name-popup');
       if (!nameSelect || !popup) return;
 
@@ -4391,6 +4439,114 @@
       });
     }
 
+    /* 輸入框的互動：聚焦開清單、打字篩選、Enter 挑第一個、Esc 關、
+       離開時還原成實際選到的人。格子跟指揮完全一樣，所以抽出來共用。
+       select 的 onchange 各自掛各自的（格子要防重複、要帶出職業），不在這裡。 */
+    function wireRosterNameCombo_(box) {
+      var sel = rosterComboSelect_(box);
+      var input = box.querySelector('.roster-name-input');
+      var popup = box.querySelector('.roster-name-popup');
+      input.autocomplete = 'off';
+      input.onclick = function (e) { e.stopPropagation(); };
+      input.onfocus = function () {
+        closeAllRosterNamePopups();
+        popup.classList.remove('hidden');
+        renderRosterNamePopupOptions(box, '');
+        input.select();
+      };
+      input.oninput = function () {
+        popup.classList.remove('hidden');
+        renderRosterNamePopupOptions(box, input.value);
+      };
+      input.onkeydown = function (e) {
+        if (e.key === 'Escape') {
+          closeAllRosterNamePopups();
+          input.blur();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          var first = popup.querySelector('.roster-name-option[data-value]');
+          if (first) {
+            sel.value = first.dataset.value;
+            sel.dispatchEvent(new Event('change'));
+            closeAllRosterNamePopups();
+            input.blur();
+          }
+        }
+      };
+      input.onblur = function () {
+        // 打了字但沒有從清單裡點選就離開：還原成目前實際選到的姓名，避免資料跟畫面不一致
+        setTimeout(function () {
+          syncRosterNameCustomUI(box);
+          popup.classList.add('hidden');
+        }, 150);
+      };
+    }
+
+    /* 指揮的選單：當天出勤的人全列，不照職業篩、也不排除已經排進格子的人 ——
+       指揮本來就會同時是某一格的隊員。勾了「連請假／X 的人也列出來」就跟著列。 */
+    function buildCommanderNameOptionsHtml() {
+      var html = '<option value=""></option>';
+      currentRosterAttendees.forEach(function (m) {
+        html += '<option value="' + escapeBattleHtml(m.name) + '">' +
+          escapeBattleHtml(rosterDisplayName_(m)) + '</option>';
+      });
+      if (rosterShowAllNames_()) {
+        currentRosterExcluded.forEach(function (m) {
+          html += '<option value="' + escapeBattleHtml(m.name) + '" class="roster-name-gone">' +
+            escapeBattleHtml(m.name + '（' + (rosterDateStatus[m.name] || '未出勤') + '）') + '</option>';
+        });
+      }
+      return html;
+    }
+
+    /* 重建每個指揮欄位的選項。原本選的人要留著 —— 他可能已經退幫或那天請假，
+       名字一被清掉，自動儲存下一次就會把空白寫回資料庫，歷史指揮就沒了。 */
+    function refreshCommanderNameOptions_() {
+      Array.prototype.slice.call(document.querySelectorAll('.roster-commander-combo'))
+        .forEach(function (box) {
+          var sel = box.querySelector('.roster-cmd-name');
+          if (!sel) return;
+          var cur = sel.value;
+          sel.innerHTML = buildCommanderNameOptionsHtml();
+          if (cur) {
+            addGoneRosterOption_(sel, cur);
+            sel.value = cur;
+          }
+          syncRosterNameCustomUI(box);
+        });
+    }
+
+    // 建一個指揮欄位（標籤 + 可打字搜尋的下拉）
+    function createCommanderCombo(key, labelText) {
+      var label = document.createElement('span');
+      label.className = 'roster-commander-label';
+      label.textContent = labelText;
+
+      var box = document.createElement('div');
+      box.className = 'roster-commander-combo';
+
+      var sel = document.createElement('select');
+      sel.className = 'roster-cmd-name';
+      sel.dataset.group = key;
+      sel.innerHTML = buildCommanderNameOptionsHtml();
+      sel.onchange = function () { scheduleRosterAutoSave(); };
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'roster-name-input roster-commander-input';
+      input.placeholder = '選擇姓名';
+
+      var popup = document.createElement('div');
+      popup.className = 'roster-name-popup hidden';
+
+      box.appendChild(sel);
+      box.appendChild(input);
+      box.appendChild(popup);
+      wireRosterNameCombo_(box);
+      syncRosterNameCustomUI(box);
+      return { label: label, box: box };
+    }
+
     document.addEventListener('click', closeAllRosterNamePopups);
 
     function createPersonRow(groupName, teamName, slotIndex) {
@@ -4414,42 +4570,6 @@
       var nameInput = document.createElement('input');
       nameInput.type = 'text';
       nameInput.className = 'roster-name-input';
-      nameInput.autocomplete = 'off';
-      nameInput.onclick = function (e) {
-        e.stopPropagation();
-      };
-      nameInput.onfocus = function () {
-        closeAllRosterNamePopups();
-        namePopup.classList.remove('hidden');
-        renderRosterNamePopupOptions(row, '');
-        nameInput.select();
-      };
-      nameInput.oninput = function () {
-        namePopup.classList.remove('hidden');
-        renderRosterNamePopupOptions(row, nameInput.value);
-      };
-      nameInput.onkeydown = function (e) {
-        if (e.key === 'Escape') {
-          closeAllRosterNamePopups();
-          nameInput.blur();
-        } else if (e.key === 'Enter') {
-          e.preventDefault();
-          var firstOption = namePopup.querySelector('.roster-name-option[data-value]');
-          if (firstOption) {
-            nameSelect.value = firstOption.dataset.value;
-            nameSelect.dispatchEvent(new Event('change'));
-            closeAllRosterNamePopups();
-            nameInput.blur();
-          }
-        }
-      };
-      nameInput.onblur = function () {
-        // 打了字但沒有從清單裡點選就離開輸入框：還原成目前實際選到的姓名，避免資料跟畫面不一致
-        setTimeout(function () {
-          syncRosterNameCustomUI(row);
-          namePopup.classList.add('hidden');
-        }, 150);
-      };
 
       var namePopup = document.createElement('div');
       namePopup.className = 'roster-name-popup hidden';
@@ -4457,6 +4577,7 @@
       nameCombo.appendChild(nameSelect);
       nameCombo.appendChild(nameInput);
       nameCombo.appendChild(namePopup);
+      wireRosterNameCombo_(nameCombo);
 
       var jobSelect = document.createElement('select');
       jobSelect.className = 'roster-job';
@@ -4518,6 +4639,7 @@
       rows.forEach(function (row) {
         refreshRosterNameOptionsForRow(row, allSelectedNames);
       });
+      refreshCommanderNameOptions_();
       updateRosterSubstitutesPanel(allSelectedNames);
     }
 
@@ -4769,10 +4891,19 @@
 
       var byGroup = {};
       commanders.forEach(function (c) { byGroup[c.group] = c.name; });
-      var commanderInputs = Array.prototype.slice.call(document.querySelectorAll('.roster-commander-input'));
-      commanderInputs.forEach(function (input) {
-        input.value = byGroup[input.dataset.group] || '';
-      });
+      Array.prototype.slice.call(document.querySelectorAll('.roster-cmd-name'))
+        .forEach(function (sel) {
+          var nm = byGroup[sel.dataset.group] || '';
+          /* 整份重建，不要沿用上一個日期留下來的選項：
+             切日期時 refreshCommanderNameOptions_ 會先把「上一個日期的指揮」
+             補成一個（已退）選項好保住名字，那個人跟這一天沒關係，
+             留著的話清單裡會多出一個可以點、但不該點的名字。 */
+          sel.innerHTML = buildCommanderNameOptionsHtml();
+          // 這一天存到的人可能已經退幫或那天沒出勤 —— 名字要留著，不能清成空白
+          if (nm) addGoneRosterOption_(sel, nm);
+          sel.value = nm;
+          syncRosterNameCustomUI(sel.parentElement);
+        });
 
       // 存檔要能只送「改過的格子」，就得知道載進來的原始狀態長什麼樣。
       // persisted 為 false 代表畫面上這份還沒存進這個日期／場次（自動帶入或複製過來的），
@@ -5005,20 +5136,14 @@
         groupNameSpan.textContent = group.name;
         groupTitle.appendChild(groupNameSpan);
 
-        var commanderLabel = document.createElement('span');
-        commanderLabel.className = 'roster-commander-label';
-        commanderLabel.textContent = '指揮：';
-        groupTitle.appendChild(commanderLabel);
-
-        var commanderInput = document.createElement('input');
-        commanderInput.type = 'text';
-        commanderInput.className = 'roster-commander-input';
-        commanderInput.placeholder = '輸入姓名';
-        commanderInput.dataset.group = group.name;
-        commanderInput.onchange = function () {
-          scheduleRosterAutoSave();
-        };
-        groupTitle.appendChild(commanderInput);
+        var cmdBox = document.createElement('div');
+        cmdBox.className = 'roster-commander-box';
+        rosterCommanderSlots_(group).forEach(function (c) {
+          var combo = createCommanderCombo(c.key, c.label);
+          cmdBox.appendChild(combo.label);
+          cmdBox.appendChild(combo.box);
+        });
+        groupTitle.appendChild(cmdBox);
 
         groupDiv.appendChild(groupTitle);
 
@@ -5328,9 +5453,11 @@
     }
 
     function collectCommanders() {
-      var inputs = Array.prototype.slice.call(document.querySelectorAll('.roster-commander-input'));
-      return inputs.map(function (input) {
-        return { group: input.dataset.group, name: input.value.trim() };
+      // 讀隱藏的 select，不是讀輸入框 —— 輸入框裡可能是還沒選完的搜尋字，
+      // 而且顯示的是「某某（請假）」那種帶標註的文字，不是純姓名。
+      var sels = Array.prototype.slice.call(document.querySelectorAll('.roster-cmd-name'));
+      return sels.map(function (sel) {
+        return { group: sel.dataset.group, name: String(sel.value || '').trim() };
       });
     }
 
