@@ -2424,7 +2424,7 @@
 
     .st-row {
       display: grid;
-      grid-template-columns: 1.5fr .75fr .6fr .5fr .7fr .5fr .62fr .5fr .5fr .5fr .62fr .72fr;
+      grid-template-columns: 1.5fr .75fr .6fr .5fr .7fr .5fr .62fr .5fr .5fr .5fr .62fr .72fr .62fr;
       gap: 6px; align-items: center; padding: 7px 10px;
       border: 1px solid #2a0a12; border-radius: 6px; margin-bottom: 4px;
       color: #FFFFEF; font-size: 12.5px; text-align: center;
@@ -2437,6 +2437,7 @@
     .st-head span { cursor: pointer; }
     .st-head span:hover { color: #f0d060; }
     .st-zero { opacity: .3; }
+    .st-minus { color: #e07070; font-weight: 700; }
     .st-unreg { color: #9a9288; }
     .st-rate-bad { color: #ff8a80; font-weight: 700; }
     .st-rate-mid { color: #ffca28; }
@@ -6922,7 +6923,12 @@
        看得出某個人的出勤是真的有人按過，還是系統推定的。
 
        分母是 出勤＋請假＋臨時請假＋黃牌＋藍牌。X 不算 —— 「沒說一聲就沒出現」
-       跟「加入名單之前的場次」都是 X，把它放進分母會把人的出勤率打到地上。 */
+       跟「加入名單之前的場次」都是 X，把它放進分母會把人的出勤率打到地上。
+
+       出勤分是另一套算法，跟出勤率各看各的：出勤 +1、黃牌 -1，其餘（請假、
+       臨時請假、X、藍牌）都是 0。出勤率看的是「該出席的場次到了幾成」，
+       出勤分看的是「總共累積了多少」—— 請假不扣分但也不加分，場次少的人
+       分數自然低，這是分數本來就該有的樣子，不是 bug。 */
     var STATS_EVENT_TYPES = ['幫戰', '龍虎決戰', '幫會約戰', '俱樂部約戰', '俱樂部賽事', '不計入'];
     var STATS_UNCLASSIFIED = '未分類';
 
@@ -7027,7 +7033,7 @@
     }
 
     function statsCount_(marks, idx) {
-      var c = { present: 0, unreg: 0, leave: 0, temp: 0, yellow: 0, blue: 0, x: 0, other: 0 };
+      var c = { present: 0, unreg: 0, leave: 0, temp: 0, yellow: 0, blue: 0, x: 0, other: 0, score: 0 };
       idx.forEach(function (i) {
         var ch = marks.charAt(i);
         if (ch === '-') { c.present++; c.unreg++; }
@@ -7041,11 +7047,13 @@
       });
       c.due = c.present + c.leave + c.temp + c.yellow + c.blue;
       c.rate = c.due ? c.present / c.due : null;
+      // 出勤分：出勤 +1、黃牌 -1，請假／臨時請假／X／藍牌都是 0
+      c.score = c.present - c.yellow;
       return c;
     }
 
     function statsAddCounts_(into, from) {
-      ['present', 'unreg', 'leave', 'temp', 'yellow', 'blue', 'x', 'other', 'due'].forEach(function (k) {
+      ['present', 'unreg', 'leave', 'temp', 'yellow', 'blue', 'x', 'other', 'due', 'score'].forEach(function (k) {
         into[k] += from[k];
       });
       into.rate = into.due ? into.present / into.due : null;
@@ -7094,6 +7102,12 @@
     }
     function statsNum_(n, cls) {
       return '<span class="' + (n ? (cls || '') : 'st-zero') + '">' + n + '</span>';
+    }
+
+    // 出勤分：0 分跟其他欄位一樣變灰，負分標紅 —— 扣到負的要一眼看得到
+    function statsScore_(n) {
+      var cls = n < 0 ? 'st-minus' : (n ? '' : 'st-zero');
+      return '<span class="' + cls + '">' + (n > 0 ? '+' + n : n) + '</span>';
     }
 
     /* 要塞進 onclick="…" 裡面的字串參數。
@@ -7258,6 +7272,12 @@
           '<li>藍牌（人有來、打到一半就消失）一樣算在分母、不算出勤 —— ' +
               '那一場他沒打完。</li>' +
           '<li>「不計入」類型的場次（例如只為了上傳影片而開的）完全跳過。</li>' +
+        '</ul>' +
+        '<b>出勤分 ＝ 出勤 ×(+1) ＋ 黃牌 ×(-1)</b>' +
+        '<ul>' +
+          '<li>請假、臨時請假、X、藍牌都是 0 分 —— 不加也不扣。</li>' +
+          '<li>沒有紀錄的照樣算出勤，所以也是 +1。</li>' +
+          '<li>算的是所選場次的累計，左邊勾的場次一改，分數就跟著重算。</li>' +
         '</ul></div></div>';
 
       return html;
@@ -7268,7 +7288,7 @@
         ['name', '姓名'], ['job', '職業'], ['squad', '身分'], ['present', '出勤'],
         ['unreg', '其中未登記'], ['leave', '請假'], ['temp', '臨時請假'],
         ['yellow', '黃牌'], ['blue', '藍牌'], ['x', 'X'],
-        ['due', '應出席'], ['rate', '出勤率']
+        ['due', '應出席'], ['rate', '出勤率'], ['score', '出勤分']
       ];
       var head = '<div class="st-row st-head">' + cols.map(function (c) {
         var mark = statsSel.sortKey === c[0] ? (statsSel.sortDir > 0 ? ' ▲' : ' ▼') : '';
@@ -7292,6 +7312,7 @@
           statsNum_(c.blue) + statsNum_(c.x) +
           statsNum_(c.due) +
           '<span class="' + statsRateClass_(c.rate) + '">' + statsPct_(c.rate) + '</span>' +
+          statsScore_(c.score) +
         '</div>';
       }).join('');
 
