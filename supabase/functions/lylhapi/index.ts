@@ -333,11 +333,13 @@ async function getCommandersByDate(date: string, session: string) {
    一格一個字元：
      -  沒有紀錄（視同出勤 —— 這是幫會的慣例，只有例外才登記）
      O  出勤        L  請假        T  臨時請假
-     Y  黃牌        X  X（沒說一聲就沒出現）
+     Y  黃牌        B  藍牌（人有來，打到一半消失）
+     X  X（沒說一聲就沒出現）
      ?  其他看不懂的狀態（有就是資料有問題，前端會標出來）
-   出勤率 = 出勤 /（出勤＋請假＋臨時請假＋黃牌），X 不算在分母裡。 */
+   出勤率 = 出勤 /（出勤＋請假＋臨時請假＋黃牌＋藍牌），X 不算在分母裡。
+   黃牌與藍牌都算分母不算出勤：一個是處分，一個是沒把那一場打完。 */
 const STATS_MARK: Record<string, string> = {
-  "出勤": "O", "請假": "L", "臨時請假": "T", "黃牌": "Y", "X": "X",
+  "出勤": "O", "請假": "L", "臨時請假": "T", "黃牌": "Y", "藍牌": "B", "X": "X",
 };
 
 async function getAttendanceStats() {
@@ -1248,8 +1250,9 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       statusMap[label + "|" + r.name] = r.status;
     });
     const labels = Object.keys(labelSet).sort();
-    // 五種狀態各給一欄合計。順序跟畫面上的統計框一致（黃牌是 0023 加的）。
-    const STATUSES = ["出勤", "請假", "臨時請假", "X", "黃牌"];
+    // 六種狀態各給一欄合計。順序跟畫面上的統計框一致
+    // （黃牌是 0023 加的，藍牌是 0026）。
+    const STATUSES = ["出勤", "請假", "臨時請假", "X", "黃牌", "藍牌"];
     const header = ["姓名", "職業", "身分組", ...labels, ...STATUSES.map((st) => st + "數")];
     const lines: string[][] = [header];
 
