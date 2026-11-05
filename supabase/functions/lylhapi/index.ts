@@ -21,7 +21,15 @@ const GUILD_NAME = "落雨梨花";
 // 登入直接放行成「管理」，也不會出現在審核申請清單上。
 // 這個名字是保留字 —— 別人拿去註冊不會建立紀錄，
 // 否則會產生一筆管理員在清單上看不到、也刪不掉的冒名資料。
-const OWNER_NAME = "鼠仔丶";
+/* 兩個人都是總管理。兩個都寫死在這裡，access_requests 裡有沒有他們的資料列
+   都不影響 —— 判斷在查資料庫之前就先放行了。
+   （冷語 在 access_requests 裡本來有一列「管理」，變成擁有者之後那一列
+     會從審核清冊上消失、也改不動，但留著不會有任何影響。） */
+const OWNER_NAMES = ["鼠仔丶", "冷語"];
+const OWNER_NAME = OWNER_NAMES[0];   // 訊息裡要提到「擁有者」時用第一個
+function isOwner(n: unknown): boolean {
+  return OWNER_NAMES.indexOf(normName(n)) >= 0;
+}
 
 // 戰鬥類型。要增減直接改這裡，另外記得同步 battles 的 check 約束與前端的下拉。
 const BATTLE_TYPES = ["幫戰", "約戰", "龍虎", "內推"];
@@ -676,6 +684,95 @@ async function verifyToken(tok: string): Promise<{ lvl: string; name: string } |
    要加新類型就兩邊一起改。"" ＝ 還沒分類。 */
 const EVENT_TYPES = ["", "幫戰", "龍虎決戰", "幫會約戰", "俱樂部約戰", "俱樂部賽事", "不計入"];
 
+/* ── 功能權限 ──
+   role_permissions 一個功能一列、四個身分四個布林欄。
+   這裡要把「誰能用」翻成「要哪一級密碼」，因為後端只認得密碼：
+   登入只打名字、沒有個人密碼，所以伺服器收到請求時並不知道對方是誰，
+   只知道他手上那張通行證是用哪個密碼換來的。
+
+     幫眾或俱樂部有勾 → 不用密碼（那就等於對所有人開放）
+     文書有勾         → 匯出密碼
+     只有管理         → 總管理密碼
+
+   由此也可知：幫眾跟俱樂部的差別只能擋在畫面上，後端分不出來。
+   這是現在就已經這樣（戰績、影片上傳都是），不是這次才有的。 */
+type PermRow = {
+  perm_key: string; grp: string; label: string;
+  admin: boolean; clerk: boolean; member: boolean; club: boolean; sort_order: number;
+};
+
+const PERM_TTL_MS = 30 * 1000;
+let permCache: { at: number; rows: PermRow[] } | null = null;
+
+async function loadPerms(fresh = false): Promise<PermRow[] | null> {
+  if (!fresh && permCache && Date.now() - permCache.at < PERM_TTL_MS) return permCache.rows;
+  const { data, error } = await db.from("role_permissions")
+    .select("perm_key,grp,label,admin,clerk,member,club,sort_order").order("sort_order");
+  // 讀不到就回 null，讓呼叫的人退回寫死的 NEED_LEVEL —— 寧可照舊，也不要整個開放
+  if (error || !data) return null;
+  const rows = data as PermRow[];
+  permCache = { at: Date.now(), rows };
+  return rows;
+}
+
+/* 哪個 API 歸哪一項權限管。一項權限可以管好幾個 API
+   （例如「刪除申請／清除已拒絕」同時管 deleteAccessRequest 跟 purgeRejected）。 */
+const PERM_FNS: Record<string, string[]> = {
+  att_deadline: ["saveAttendanceDeadlineTime", "clearAttendanceDeadlineTime"],
+  att_temp_unlock: ["setAttendanceTempUnlock"],
+  att_rename_label: ["renameDateLabel"],
+  att_delete_label: ["deleteAllRecordsForDate"],
+  att_event_type: ["setDateLabelType"],
+  att_export: ["exportAttendanceAll"],
+  att_announce: ["saveAnnouncement"],
+  mem_member: ["saveMemberList"],
+  mem_guest: ["saveGuestList"],
+  mem_trial: ["saveTrialList"],
+  mem_club: ["saveClubList"],
+  mem_commander: ["saveCommanderList"],
+  roster_save: ["saveRoster"],
+  roster_log: ["getRosterActivityLog"],
+  acc_list: ["getAllAccessRequests"],
+  acc_status: ["setAccessRequestStatus"],
+  acc_category: ["setAccessRequestCategory"],
+  acc_add: ["addAccessMember"],
+  acc_delete: ["deleteAccessRequest", "purgeRejected"],
+  acc_rename_req: ["listRenameRequests", "approveRenameRequest", "rejectRenameRequest"],
+  vid_roster: ["getVideoRoster"],
+  vid_log: ["getVideoActivityLog"],
+  bat_upload: ["saveBattle"],
+  bat_edit: ["updateBattle", "deleteBattle"],
+  name_view: ["getUnmatchedNames", "getPlayerAliases"],
+  name_rename: ["renamePlayer"],
+  name_left: ["markPlayerLeft", "getPlayerLeftPreview"],
+  name_alias_del: ["deletePlayerAlias"],
+  log_view: ["getActivityLog"],
+  nav_stats: ["getAttendanceStats"],
+};
+
+/* 畫面上有、但沒有對應 API 的那幾項（黃牌藍牌、鎖表後還能改、俱樂部批次調整、
+   影片上傳、看戰績、五個導覽入口）只擋在前端 —— 它們走的 API 本來就對所有人開放
+   （saveAttendanceRecord、saveVideoReport、listBattles…），
+   收起來會害一般幫眾不能登記自己的出勤。 */
+const FN_PERM: Record<string, string> = {};
+Object.keys(PERM_FNS).forEach((k) => { PERM_FNS[k].forEach((fn) => { FN_PERM[fn] = k; }); });
+
+async function needLevelFor(fn: string): Promise<"admin" | "export" | null> {
+  const key = FN_PERM[fn];
+  if (!key) return NEED_LEVEL[fn] ?? null;
+  const rows = await loadPerms();
+  if (!rows) return NEED_LEVEL[fn] ?? null;      // 權限表讀不到 → 照原本寫死的規則
+  const r = rows.find((x) => x.perm_key === key);
+  if (!r) return "admin";                        // 表裡沒這一列 → 從嚴
+  if (r.member || r.club) return null;
+  if (r.clerk) return "export";
+  return "admin";
+}
+
+/* 這幾項的「管理」欄不准取消：勾掉就沒人進得去審核申請那一頁，
+   只剩總管理救得回來。 */
+const PERM_ADMIN_LOCKED = ["nav_access", "acc_list"];
+
 const NEED_LEVEL: Record<string, "admin" | "export"> = {
   // 名單覆寫是「先刪光再寫入」，一次呼叫就能把整份名單清掉，最危險
   saveMemberList: "admin", saveGuestList: "admin", saveTrialList: "admin", saveClubList: "admin",
@@ -697,6 +794,8 @@ const NEED_LEVEL: Record<string, "admin" | "export"> = {
   getAttendanceStats: "export",
   // 類型改錯會讓整類的出勤率偏掉，留給管理
   setDateLabelType: "admin",
+  // 權限分配：除了總管理密碼，還要是擁有者才過得去（在 gate 裡另外檢查）
+  savePermissions: "admin",
 };
 
 function parseMonthFromLabel(label: string): number | null {
@@ -720,11 +819,72 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   saveCommanderList: (rows: any[], opts?: any) => saveCommanderNames(rows, opts),
   getAttendanceCandidates: () => getAttendanceCandidates(),
 
+  /* 權限表。讀是開放的 —— 它只說明「哪種身分看得到哪顆按鈕」，
+     前端一登入就要拿它來決定畫面，藏起來的話每個人都得先解鎖才看得到自己的首頁。 */
+  getPermissions: async () => {
+    const rows = await loadPerms();
+    return {
+      rows: rows ?? [],
+      ok: !!rows,
+      locked: PERM_ADMIN_LOCKED,
+      owners: OWNER_NAMES,
+    };
+  },
+
+  savePermissions: async (rowsIn: any[], opts?: any) => {
+    const rows = await loadPerms(true);
+    if (!rows) return { success: false, message: "讀不到權限表，請重試" };
+    const byKey: Record<string, PermRow> = {};
+    rows.forEach((r) => { byKey[r.perm_key] = r; });
+
+    const now = new Date().toISOString();
+    const changes: string[] = [];
+    const updates: any[] = [];
+
+    (rowsIn ?? []).forEach((inRow: any) => {
+      const key = String(inRow?.perm_key ?? "");
+      const cur = byKey[key];
+      if (!cur) return;   // 不認得的 key 直接忽略，不要憑空長出一列
+      const want = {
+        admin: !!inRow.admin, clerk: !!inRow.clerk,
+        member: !!inRow.member, club: !!inRow.club,
+      };
+      // 鎖住的那幾項，管理欄一律維持打勾
+      if (PERM_ADMIN_LOCKED.indexOf(key) >= 0) want.admin = true;
+
+      const diff: string[] = [];
+      ([["admin", "管理"], ["clerk", "文書"], ["member", "幫眾"], ["club", "俱樂部"]] as const)
+        .forEach(([f, zh]) => {
+          if ((cur as any)[f] !== (want as any)[f]) {
+            diff.push(zh + ((want as any)[f] ? "：開" : "：關"));
+          }
+        });
+      if (!diff.length) return;   // 沒變就不寫，不然每按一次儲存就多一筆沒用的記錄
+      changes.push("「" + cur.label + "」" + diff.join("、"));
+      updates.push({
+        perm_key: key, grp: cur.grp, label: cur.label, sort_order: cur.sort_order,
+        admin: want.admin, clerk: want.clerk, member: want.member, club: want.club,
+        updated_at: now,
+      });
+    });
+
+    if (!updates.length) return { success: true, changed: 0 };
+
+    await chk(db.from("role_permissions").upsert(updates, { onConflict: "perm_key" }).select("perm_key"));
+    permCache = null;   // 下一次呼叫就重讀，不用等 30 秒
+
+    const who = opts?.actorRoleName || opts?.actorEmail || "有人";
+    await appendActivityLog(opts?.actorEmail || "", opts?.actorRoleName || "",
+      who + " 改了功能權限：" + changes.join("；"));
+
+    return { success: true, changed: updates.length };
+  },
+
   checkAccessStatus: async (nameIn: string) => {
     const name = normName(nameIn);
     if (!name) return { name, status: "none", message: "請輸入角色名稱" };
     // 擁有者不查資料庫、也不寫資料庫，直接放行
-    if (name === OWNER_NAME) return { name: OWNER_NAME, status: "已核准", category: "管理", isOwner: true };
+    if (isOwner(name)) return { name, status: "已核准", category: "管理", isOwner: true };
     const { data } = await db.from("access_requests").select("*").eq("name", name).maybeSingle();
     if (!data) return { name, status: "none" };
     return { name: data.name, status: data.status, category: data.category || "幫眾", isOwner: false };
@@ -733,7 +893,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const name = normName(nameIn);
     if (!name) return { success: false, message: "請輸入角色名稱" };
     // 擁有者的名字是保留字，不建立申請紀錄
-    if (name === OWNER_NAME) return { success: true, status: "已核准" };
+    if (isOwner(name)) return { success: true, status: "已核准" };
     const now = new Date().toISOString();
     const { data } = await db.from("access_requests").select("status").eq("name", name).maybeSingle();
     if (!data) {
@@ -750,7 +910,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const name = normName(nameIn);
     if (!name) return { success: false, message: "請輸入角色名稱" };
     // 擁有者本來就是最高權限，不需要、也不該被加進清冊
-    if (name === OWNER_NAME) return { success: false, message: "這個名字是擁有者，本來就有最高權限" };
+    if (isOwner(name)) return { success: false, message: "這個名字是擁有者，本來就有最高權限" };
     const category = ACCESS_CATEGORIES.includes(categoryIn) ? categoryIn : "幫眾";
     const now = new Date().toISOString();
     await chk(db.from("access_requests").upsert({ name, requested_at: now, status: "已核准", category }, { onConflict: "name" }).select("name"));
@@ -759,14 +919,14 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   getAllAccessRequests: async () => {
     const { data } = await db.from("access_requests").select("*").order("requested_at", { ascending: true });
     // 擁有者不列在清冊上。理論上不會有這筆，過濾是為了舊資料。
-    return (data ?? []).filter((r) => r.name !== OWNER_NAME).map((r) => ({
+    return (data ?? []).filter((r) => !isOwner(r.name)).map((r) => ({
       name: r.name, time: r.requested_at ? String(r.requested_at).slice(0, 16).replace("T", " ") : "",
       status: r.status, category: r.category || "幫眾",
     }));
   },
   setAccessRequestStatus: async (nameIn: string, status: string) => {
     const name = normName(nameIn);
-    if (name === OWNER_NAME) return { success: false, message: "擁有者不在審核清冊裡，不用也不能改" };
+    if (isOwner(name)) return { success: false, message: "擁有者不在審核清冊裡，不用也不能改" };
     const { data } = await db.from("access_requests").select("name").eq("name", name).maybeSingle();
     if (!data) return { success: false, message: "找不到這個申請紀錄" };
     await chk(db.from("access_requests").update({ status }).eq("name", name).select("name"));
@@ -774,7 +934,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   },
   setAccessRequestCategory: async (nameIn: string, categoryIn: string) => {
     const name = normName(nameIn);
-    if (name === OWNER_NAME) return { success: false, message: "不能修改擁有者的類別" };
+    if (isOwner(name)) return { success: false, message: "不能修改擁有者的類別" };
     const category = ACCESS_CATEGORIES.includes(categoryIn) ? categoryIn : "幫眾";
     const { data } = await db.from("access_requests").select("name").eq("name", name).maybeSingle();
     if (!data) return { success: false, message: "找不到這個申請紀錄" };
@@ -783,7 +943,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   },
   deleteAccessRequest: async (nameIn: string) => {
     const name = normName(nameIn);
-    if (name === OWNER_NAME) return { success: false, message: "不能刪除擁有者" };
+    if (isOwner(name)) return { success: false, message: "不能刪除擁有者" };
     await chk(db.from("access_requests").delete().eq("name", name).select("name"));
     return { success: true };
   },
@@ -920,8 +1080,8 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   renamePlayer: async (oldName: string, newName: string, actorName?: string, merge?: boolean) => {
     const oldN = normName(oldName), newN = normName(newName);
     if (!oldN || !newN) return { success: false, message: "名字不能是空白" };
-    if (oldN === OWNER_NAME) {
-      return { success: false, message: "擁有者的名字寫死在程式裡，要改得改 OWNER_NAME 再重新部署" };
+    if (isOwner(oldN)) {
+      return { success: false, message: "擁有者的名字寫死在程式裡，要改得改 OWNER_NAMES 再重新部署" };
     }
     const { data, error } = await db.rpc("rename_player", {
       p_old: oldN, p_new: newN, p_actor: actorName ?? "", p_merge: !!merge,
@@ -967,7 +1127,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     const oldName = normName(oldNameIn), newName = normName(newNameIn);
     if (!oldName || !newName) return { success: false, message: "名字不能是空白" };
     if (oldName === newName) return { success: false, message: "新舊名字一樣" };
-    if (oldName === OWNER_NAME) {
+    if (isOwner(oldName)) {
       return { success: false, message: "擁有者的名字寫死在程式裡，不能用申請的方式改" };
     }
 
@@ -1114,7 +1274,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   markPlayerLeft: async (nameIn: string, actorName?: string) => {
     const name = normName(nameIn);
     if (!name) return { success: false, message: "缺少名字" };
-    if (name === OWNER_NAME) return { success: false, message: "不能把擁有者標成已退出" };
+    if (isOwner(name)) return { success: false, message: "不能把擁有者標成已退出" };
 
     // 還在名單上的人不該走這條路：先從名單移除，才算真的退出
     const { data: still } = await db.from("roster_members").select("name").eq("name", name).maybeSingle();
@@ -2023,7 +2183,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // 需要權限的 API 一律在這裡擋掉。前端的身分組判斷只是畫面，
   // 真正的關卡在這裡 —— 直接打 API 也過不去。
-  const need = NEED_LEVEL[fn];
+  /* 權限分配只有總管理改得動。
+     判斷用的是通行證上的名字 —— 那是解鎖的時候前端自己報的，
+     所以這道關卡擋得住一般人，但擋不住「知道總管理密碼、又會自己發 HTTP 請求」
+     的管理。要真的擋死，得另外給總管理一組只有他知道的密碼。 */
+  if (fn === "savePermissions") {
+    const t = await verifyToken(payload.token ?? "");
+    if (!t || t.lvl !== "admin" || !isOwner(t.name)) {
+      return json({ ok: false, error: "NEED_OWNER", message: "只有總管理能改功能權限" }, 403);
+    }
+  }
+
+  const need = await needLevelFor(fn);
   if (need) {
     const t = await verifyToken(payload.token ?? "");
     if (!t) {
