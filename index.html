@@ -3928,7 +3928,18 @@
        以前這裡是三組寫死的 class（.admin-only-btn / .clerk-admin-btn /
        .export-allowed-btn / .not-club-btn），要把某一項開放給文書就得改程式。 */
     var permRows = null;        // 從後端讀到的權限表（讀不到就是 null）
-    var permLocked = ['nav_access', 'acc_list'];
+    /* 不准取消的格子：key → 哪幾欄強制打開。後端 PERM_FORCED 要一致
+       （讀得到後端時會被 getPermissions 回傳的那份蓋掉）。 */
+    var permForced = {
+      nav_access: ['admin'],
+      acc_list: ['admin'],
+      att_st_present: ['member']
+    };
+    var PERM_FORCED_WHY = {
+      nav_access: '這一項的「管理」不能取消，不然沒人進得去審核申請',
+      acc_list: '這一項的「管理」不能取消，不然沒人進得去審核申請',
+      att_st_present: '這一項的「幫眾」不能取消，不然全幫都不能自己點出勤'
+    };
     var permOwners = ['鼠仔丶', '冷語', '淚雨寒'];
 
     var PERM_CAT_LETTER = { '管理': 'a', '文書': 'c', '幫眾': 'm', '俱樂部': 'k', '指揮': 'd' };
@@ -3941,9 +3952,11 @@
        跟 0028 migration 的預設值一字不差，也就是 2026-11-05 當下的行為。
        寧可退回「照舊」，也不要整個鎖死或整個開放。
        a=管理 c=文書 m=幫眾 k=俱樂部 d=指揮
-       （指揮是後來才加的身分，預設一項都沒有，所以下面不會出現 d） */
+       （0028 那批的指揮欄都是空的，所以只有出勤類別那六項才有 d） */
     var PERM_FALLBACK = {
-      att_card: 'ac', att_after_deadline: 'ac', att_deadline: 'a', att_temp_unlock: 'a',
+      att_st_present: 'acmd', att_st_leave: 'acmd',
+      att_st_temp: 'acd', att_st_x: 'acd', att_st_blue: 'acd', att_st_yellow: 'acd',
+      att_after_deadline: 'ac', att_deadline: 'a', att_temp_unlock: 'a',
       att_rename_label: 'a', att_delete_label: 'a', att_event_type: 'a',
       att_club_bulk: 'ac', att_export: 'ac', att_announce: 'ac',
       mem_member: 'a', mem_guest: 'a', mem_trial: 'a', mem_club: 'a', mem_commander: 'a',
@@ -4011,7 +4024,7 @@
       google.script.run.withSuccessHandler(function (res) {
         if (res && res.ok && res.rows && res.rows.length) {
           permRows = res.rows;
-          if (res.locked && res.locked.length) permLocked = res.locked;
+          if (res.locked && typeof res.locked === 'object') permForced = res.locked;
           if (res.owners && res.owners.length) permOwners = res.owners;
         }
         cb && cb();
@@ -4117,24 +4130,43 @@
       return (m && m.squad) || SQUAD_DEFAULT;
     }
 
-    /* 黃牌（第五種）、藍牌（第六種）跟前面四種不一樣：那四種是「本人有沒有來」
-       的事實，由本人自己登記；這兩種是管理／文書事後記上去的 ——
-       黃牌是處分，藍牌是「人有來，打到一半就消失不見」。所以多兩條規則：
-         1. 只有管理／文書選得動；一般幫眾看得到但是灰色的 —— 看得到才知道自己被記了，
-            而且下拉要顯示得出目前的狀態，整個拿掉選項那一列會變空白。
-         2. 「全員調整」的下拉兩種都不放。這是對個人的紀錄，不該一次蓋一整組人。
+    /* 六種類別誰能設哪一種，由權限表「出勤類別」那一組決定。
+       預設（0030 migration）：出勤、請假開放給幫眾，臨時請假／X／藍牌／黃牌
+       只有管理／文書／指揮，俱樂部一種都沒有。
+
+       選不動的選項一律 disabled、不要整個拿掉：看得到才知道自己現在是什麼狀態，
+       而且拿掉選項會害本來就是那個狀態的人在重畫時對不到值，下拉變空白。
+
+       沒開放給幫眾或俱樂部的類別要先過密碼 —— 後端只認通行證，不認身分，
+       所以「只有管理能設」在後端就是「要管理或匯出密碼換來的那張證」。
+
+       黃牌、藍牌另外有一條跟權限無關的規則：「全員調整」的下拉兩種都不放
+       （BULK_EXCLUDE_STATUSES）。那是對個人的紀錄，不該一次蓋一整組人。
+
        排表那邊不用特別處理：後端 getRosterAttendeesForDate 只收「出勤」，
-       兩種都不會被排進格子 —— 中途消失是比賽當下才知道的事，本來就不是
+       黃牌藍牌都不會被排進格子 —— 中途消失是比賽當下才知道的事，本來就不是
        預先排表要考慮的，所以排表側邊欄也不另外開一個藍牌窗格。已經排進
        格子的人後來被記藍牌，名字會自己變成「某某（藍牌）」（goneRosterLabel_）。 */
     var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', '臨時請假', 'X', '黃牌', '藍牌'];
 
-    // 只有管理／文書能設的狀態
-    var PRIVILEGED_ONLY_STATUSES = ['黃牌', '藍牌'];
+    /* 出勤狀態 → 權限表的 key。後端有一份一模一樣的（ATT_STATUS_PERM），
+       權限表裡也要有這六個 key，三邊要一起改。 */
+    var ATT_STATUS_PERM = {
+      '出勤': 'att_st_present',
+      '請假': 'att_st_leave',
+      '臨時請假': 'att_st_temp',
+      'X': 'att_st_x',
+      '藍牌': 'att_st_blue',
+      '黃牌': 'att_st_yellow'
+    };
+
+    // 「全員調整」的下拉不放這兩種（跟權限無關，見上面）
+    var BULK_EXCLUDE_STATUSES = ['黃牌', '藍牌'];
 
     function canSetStatus_(status) {
-      if (PRIVILEGED_ONLY_STATUSES.indexOf(status) === -1) return true;
-      return hasPerm_('att_card');
+      var key = ATT_STATUS_PERM[status];
+      if (!key) return true;      // 認不出來的狀態（例如空白）交給後面的流程處理
+      return hasPerm_(key);
     }
 
     // 所有可切換的畫面，以及各畫面是否要用「一頁寬」樣式
@@ -5963,12 +5995,30 @@
         var newVal = statusSelect.value;
         var prev = statusSelect.dataset.prev || '出勤';
 
-        // 黃牌、藍牌只有管理／文書能設。選項那邊已經 disabled 了，
-        // 這裡是第二道 —— 選項是畫面上的狀態，值有別的路徑能被設進來。
+        /* 這個身分能不能設這一種類別。選項那邊已經 disabled 了，
+           這裡是第二道 —— 選項是畫面上的狀態，值有別的路徑能被設進來。 */
         if (!canSetStatus_(newVal)) {
           statusSelect.value = prev;
           updateAttendanceSummary();
-          showAlertModal('「' + newVal + '」只有管理／文書可以設定。');
+          showAlertModal('你的身分（' + (currentAccessCategory || '未登入') + '）不能設「' +
+            newVal + '」，要設請找總管理調整功能權限。');
+          return;
+        }
+
+        /* 沒開放給幫眾／俱樂部的類別要先換通行證，不然後端存不進去。
+           過關之後把值設回去、再觸發一次這個 onchange —— 那時候已經在免密期裡，
+           會直接往下走，後面的流程（鎖表、改到別人名字的確認框）完全不變。
+           免密期：管理 30 分鐘，文書與指揮 10 分鐘。 */
+        var stKey = ATT_STATUS_PERM[newVal] || '';
+        var stLevel = stKey ? permLevel_(stKey) : null;
+        if (stLevel && !PASSWORD_GATE_DISABLED && !graceOk_(stLevel)) {
+          statusSelect.value = prev;
+          updateAttendanceSummary();
+          openPasswordGate(function () {
+            showView('attendance-view', !!VIEW_WIDE['attendance-view']);
+            statusSelect.value = newVal;
+            statusSelect.onchange();
+          }, 'attendance-view', !!VIEW_WIDE['attendance-view'], stLevel, stKey);
           return;
         }
 
@@ -6634,7 +6684,7 @@
     }
 
     /* 哪些選項選得動。兩條規則疊在一起：
-         ① 黃牌、藍牌只有管理／文書能設（PRIVILEGED_ONLY_STATUSES）
+         ① 這個身分能設哪幾種類別（權限表「出勤類別」那一組，canSetStatus_）
          ② 鎖表後的文書只能設 CLERK_LOCKED_ALLOWED 裡的那幾種
        一律用 disabled，不要整個拿掉選項：要的是「看得到、選不到」，
        而且拿掉選項會害本來就是那個狀態的人在重畫時對不到值，下拉變空白。
@@ -6672,7 +6722,7 @@
       var disable = (!known || locked) && !hasPerm_('att_after_deadline');
       var selects = Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-status'));
       selects.forEach(function (select) { select.disabled = disable; });
-      // 黃牌、藍牌只有管理／文書選得動；文書被放行之後可選的狀態再收成
+      // 沒權限的類別選不動；文書被放行之後可選的狀態再收成
       // CLERK_LOCKED_ALLOWED 那幾種
       applyStatusOptionPermissions_();
 
@@ -7140,7 +7190,7 @@
       // 黃牌、藍牌不放進來：這是對個人的紀錄，一次蓋一整組人沒有道理，
       // 放進來只會變成誤點的風險。要記就一列一列記。
       sel.innerHTML = ATTENDANCE_STATUS_OPTIONS
-        .filter(function (st) { return PRIVILEGED_ONLY_STATUSES.indexOf(st) === -1; })
+        .filter(function (st) { return BULK_EXCLUDE_STATUSES.indexOf(st) === -1; })
         .map(function (st) { return '<option value="' + st + '">' + st + '</option>'; })
         .join('');
     }
@@ -9231,7 +9281,7 @@
           return;
         }
         permRows = res.rows;
-        if (res.locked && res.locked.length) permLocked = res.locked;
+        if (res.locked && typeof res.locked === 'object') permForced = res.locked;
         if (res.owners && res.owners.length) permOwners = res.owners;
         permDraft = res.rows.map(function (r) {
           return { perm_key: r.perm_key, grp: r.grp, label: r.label,
@@ -9296,10 +9346,12 @@
           html += '<div class="perm-row' + (permRowChanged_(d) ? ' changed' : '') + '">' +
             '<span>' + escapeBattleHtml(d.label) + '</span>' +
             PERM_CATS.map(function (c) {
-              // 鎖住的那幾項，管理欄不准取消：勾掉就沒人進得去審核申請那一頁
-              var lockedCell = c[0] === 'admin' && permLocked.indexOf(d.perm_key) >= 0;
+              // 鎖住的那幾格不准取消（見 permForced）：勾掉會把人自己鎖在門外
+              var lockedCell = (permForced[d.perm_key] || []).indexOf(c[0]) >= 0;
               var dis = (!editable || lockedCell) ? ' disabled' : '';
-              var ttl = lockedCell ? ' title="這一項的「管理」不能取消，不然沒人進得去審核申請"' : '';
+              var ttl = lockedCell
+                ? ' title="' + escapeBattleHtml(PERM_FORCED_WHY[d.perm_key] || '這一格不能取消') + '"'
+                : '';
               return '<label' + ttl + '><input type="checkbox" data-permkey="' + d.perm_key +
                 '" data-permcat="' + c[0] + '"' + (d[c[0]] ? ' checked' : '') + dis + '></label>';
             }).join('') +
@@ -9317,6 +9369,7 @@
         '文書輸匯出密碼、指揮輸指揮密碼、管理輸總管理密碼（管理密碼通吃）。<br>' +
         '勾給文書就等於勾給「所有知道匯出密碼的人」，指揮同理。<br>' +
         '幫眾跟俱樂部的差別只擋在畫面上 —— 他們沒有密碼，後端分不出這兩種身分。<br>' +
+        '「出勤類別」那一組管的是「能不能設這一種狀態」，前後端都擋得住。<br>' +
         '總管理不受這張表影響，所以你自己看到的畫面不會跟著變。';
     }
 

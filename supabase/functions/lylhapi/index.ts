@@ -754,10 +754,13 @@ const PERM_FNS: Record<string, string[]> = {
   nav_stats: ["getAttendanceStats"],
 };
 
-/* 畫面上有、但沒有對應 API 的那幾項（黃牌藍牌、鎖表後還能改、俱樂部批次調整、
-   影片上傳、看戰績、五個導覽入口）只擋在前端 —— 它們走的 API 本來就對所有人開放
-   （saveAttendanceRecord、saveVideoReport、listBattles…），
-   收起來會害一般幫眾不能登記自己的出勤。 */
+/* 畫面上有、但沒有對應 API 的那幾項（鎖表後還能改、俱樂部批次調整、影片上傳、
+   看戰績、五個導覽入口）只擋在前端 —— 它們走的 API 本來就對所有人開放
+   （saveVideoReport、listBattles…），收起來會害一般幫眾不能用自己該能用的功能。
+
+   出勤的六種類別是例外：它們不是「整支 API 開或關」，而是同一支
+   saveAttendanceRecord 裡「這一次要存的值」能不能存，所以不在這張表裡，
+   由 allowedLevelsForStatus 另外擋，前後端都擋得住。 */
 const FN_PERM: Record<string, string> = {};
 Object.keys(PERM_FNS).forEach((k) => { PERM_FNS[k].forEach((fn) => { FN_PERM[fn] = k; }); });
 
@@ -785,7 +788,44 @@ async function allowedLevelsFor(fn: string): Promise<string[] | null> {
 
 /* 這幾項的「管理」欄不准取消：勾掉就沒人進得去審核申請那一頁，
    只剩總管理救得回來。 */
-const PERM_ADMIN_LOCKED = ["nav_access", "acc_list"];
+/* 出勤的六種類別各自一項權限。出勤狀態的字串 → 權限表的 key。
+   要增減狀態的話，這裡、前端的 ATT_STATUS_PERM、權限表三邊要一起改。 */
+const ATT_STATUS_PERM: Record<string, string> = {
+  "出勤": "att_st_present",
+  "請假": "att_st_leave",
+  "臨時請假": "att_st_temp",
+  "X": "att_st_x",
+  "藍牌": "att_st_blue",
+  "黃牌": "att_st_yellow",
+};
+
+/* 存這一種出勤類別要收哪幾種通行證。null ＝ 不用（有開放給幫眾或俱樂部）。
+   權限表讀不到時退回 0030 migration 的預設值：出勤、請假不用通行證，
+   其他四種要管理或匯出密碼 —— 寧可照舊，也不要整個開放。 */
+async function allowedLevelsForStatus(status: string): Promise<string[] | null> {
+  const key = ATT_STATUS_PERM[status];
+  if (!key) return ["admin"];                  // 認不出來的狀態 → 從嚴
+  const rows = await loadPerms();
+  const r = rows ? rows.find((x) => x.perm_key === key) : null;
+  if (!r) return (status === "出勤" || status === "請假") ? null : ["admin", "export"];
+  if (r.member || r.club) return null;
+  const out = ["admin"];
+  if (r.clerk) out.push("export");
+  if (r.commander) out.push("commander");
+  return out;
+}
+
+/* 不准取消的格子：key → 哪幾欄強制打開。勾掉會把人自己鎖在門外的那幾格。
+     nav_access / acc_list 的「管理」→ 勾掉就沒人進得去審核申請那一頁，
+       連要改回來的那張表都打不開。
+     att_st_present 的「幫眾」→ 勾掉全幫就不能自己點出勤，
+       只有知道密碼的人登記得了。
+   前端的 permForced 要一致（前端是拿 getPermissions 回傳的這份去畫灰格子）。 */
+const PERM_FORCED: Record<string, string[]> = {
+  nav_access: ["admin"],
+  acc_list: ["admin"],
+  att_st_present: ["member"],
+};
 
 const NEED_LEVEL: Record<string, "admin" | "export"> = {
   // 名單覆寫是「先刪光再寫入」，一次呼叫就能把整份名單清掉，最危險
@@ -840,7 +880,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     return {
       rows: rows ?? [],
       ok: !!rows,
-      locked: PERM_ADMIN_LOCKED,
+      locked: PERM_FORCED,
       owners: OWNER_NAMES,
     };
   },
@@ -864,7 +904,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
         member: !!inRow.member, club: !!inRow.club, commander: !!inRow.commander,
       };
       // 鎖住的那幾項，管理欄一律維持打勾
-      if (PERM_ADMIN_LOCKED.indexOf(key) >= 0) want.admin = true;
+      (PERM_FORCED[key] ?? []).forEach((f) => { (want as any)[f] = true; });
 
       const diff: string[] = [];
       ([["admin", "管理"], ["clerk", "文書"], ["member", "幫眾"], ["club", "俱樂部"],
@@ -2209,6 +2249,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const t = await verifyToken(payload.token ?? "");
     if (!t || t.lvl !== "admin" || !isOwner(t.name)) {
       return json({ ok: false, error: "NEED_OWNER", message: "只有總管理能改功能權限" }, 403);
+    }
+  }
+
+  /* 出勤類別是「值」層級的權限：同一支 API 能存六種狀態，所以不能靠
+     allowedLevelsFor(fn)（那是整支 API 一個規則），要看這一次送上來的是哪一種。
+     前端也會擋（選項灰掉、改了跳提示），這裡是第二道 —— 直接打 API 也過不去。 */
+  if (fn === "saveAttendanceRecord") {
+    const st = String((args[0] ?? {}).status ?? "");
+    const needSt = await allowedLevelsForStatus(st);
+    if (needSt) {
+      const t = await verifyToken(payload.token ?? "");
+      if (!t) {
+        return json({ ok: false, error: "NEED_UNLOCK", message: `設「${st}」要先輸入密碼` }, 401);
+      }
+      if (needSt.indexOf(t.lvl) < 0) {
+        return json({ ok: false, error: "NEED_ADMIN", message: `你輸入的密碼沒有設「${st}」的權限` }, 403);
+      }
     }
   }
 
