@@ -21,11 +21,11 @@ const GUILD_NAME = "落雨梨花";
 // 登入直接放行成「管理」，也不會出現在審核申請清單上。
 // 這個名字是保留字 —— 別人拿去註冊不會建立紀錄，
 // 否則會產生一筆管理員在清單上看不到、也刪不掉的冒名資料。
-/* 兩個人都是總管理。兩個都寫死在這裡，access_requests 裡有沒有他們的資料列
+/* 這幾個人都是總管理。全部寫死在這裡，access_requests 裡有沒有他們的資料列
    都不影響 —— 判斷在查資料庫之前就先放行了。
-   （冷語 在 access_requests 裡本來有一列「管理」，變成擁有者之後那一列
-     會從審核清冊上消失、也改不動，但留著不會有任何影響。） */
-const OWNER_NAMES = ["鼠仔丶", "冷語"];
+   （冷語、淚雨寒 在 access_requests 裡本來各有一列「管理」，變成擁有者之後
+     那兩列會從審核清冊上消失、也改不動，但留著不會有任何影響。） */
+const OWNER_NAMES = ["鼠仔丶", "冷語", "淚雨寒"];
 const OWNER_NAME = OWNER_NAMES[0];   // 訊息裡要提到「擁有者」時用第一個
 function isOwner(n: unknown): boolean {
   return OWNER_NAMES.indexOf(normName(n)) >= 0;
