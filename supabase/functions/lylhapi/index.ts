@@ -34,10 +34,12 @@ function isOwner(n: unknown): boolean {
 // 戰鬥類型。要增減直接改這裡，另外記得同步 battles 的 check 約束與前端的下拉。
 const BATTLE_TYPES = ["幫戰", "約戰", "龍虎", "內推"];
 
-// 權限身分組。「俱樂部」跟「幫眾」一樣，只能改自己的出勤，
-// 分開是為了在清冊上看得出誰是俱樂部的人。
-// 這裡與 access_requests 的 check 約束、前端的下拉要一起改。
-const ACCESS_CATEGORIES = ["管理", "文書", "幫眾", "俱樂部"];
+/* 權限身分組。各自能用什麼由 role_permissions 決定，這裡只是「有哪幾種身分」。
+   「俱樂部」跟「幫眾」在後端看起來一樣（都沒有密碼），分開是為了在清冊上
+   看得出誰是俱樂部的人。
+   「指揮」是登入身分，跟排表下拉用的那份指揮名單（commander_names）無關。
+   這裡與 access_requests 的 check 約束、前端的下拉要一起改。 */
+const ACCESS_CATEGORIES = ["管理", "文書", "幫眾", "俱樂部", "指揮"];
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -649,8 +651,8 @@ async function secrets(): Promise<Record<string, string>> {
   return map;
 }
 
-// 免密期沿用原本的：管理 30 分鐘、匯出 10 分鐘
-const TOKEN_MINUTES: Record<string, number> = { admin: 30, export: 10 };
+// 免密期沿用原本的：管理 30 分鐘，匯出與指揮 10 分鐘
+const TOKEN_MINUTES: Record<string, number> = { admin: 30, export: 10, commander: 10 };
 
 async function issueToken(lvl: string, name: string): Promise<string> {
   const sec = await secrets();
@@ -686,19 +688,21 @@ const EVENT_TYPES = ["", "幫戰", "龍虎決戰", "幫會約戰", "俱樂部約
 
 /* ── 功能權限 ──
    role_permissions 一個功能一列、四個身分四個布林欄。
-   這裡要把「誰能用」翻成「要哪一級密碼」，因為後端只認得密碼：
+   這裡要把「誰能用」翻成「收哪幾種通行證」，因為後端只認得密碼：
    登入只打名字、沒有個人密碼，所以伺服器收到請求時並不知道對方是誰，
    只知道他手上那張通行證是用哪個密碼換來的。
 
-     幫眾或俱樂部有勾 → 不用密碼（那就等於對所有人開放）
-     文書有勾         → 匯出密碼
-     只有管理         → 總管理密碼
+     幫眾或俱樂部有勾 → 不用通行證（那就等於對所有人開放）
+     文書有勾         → 收匯出密碼換來的那張
+     指揮有勾         → 收指揮密碼換來的那張
+     管理             → 永遠收（管理密碼本來就通吃）
 
    由此也可知：幫眾跟俱樂部的差別只能擋在畫面上，後端分不出來。
    這是現在就已經這樣（戰績、影片上傳都是），不是這次才有的。 */
 type PermRow = {
   perm_key: string; grp: string; label: string;
-  admin: boolean; clerk: boolean; member: boolean; club: boolean; sort_order: number;
+  admin: boolean; clerk: boolean; member: boolean; club: boolean; commander: boolean;
+  sort_order: number;
 };
 
 const PERM_TTL_MS = 30 * 1000;
@@ -707,7 +711,7 @@ let permCache: { at: number; rows: PermRow[] } | null = null;
 async function loadPerms(fresh = false): Promise<PermRow[] | null> {
   if (!fresh && permCache && Date.now() - permCache.at < PERM_TTL_MS) return permCache.rows;
   const { data, error } = await db.from("role_permissions")
-    .select("perm_key,grp,label,admin,clerk,member,club,sort_order").order("sort_order");
+    .select("perm_key,grp,label,admin,clerk,member,club,commander,sort_order").order("sort_order");
   // 讀不到就回 null，讓呼叫的人退回寫死的 NEED_LEVEL —— 寧可照舊，也不要整個開放
   if (error || !data) return null;
   const rows = data as PermRow[];
@@ -757,16 +761,26 @@ const PERM_FNS: Record<string, string[]> = {
 const FN_PERM: Record<string, string> = {};
 Object.keys(PERM_FNS).forEach((k) => { PERM_FNS[k].forEach((fn) => { FN_PERM[fn] = k; }); });
 
-async function needLevelFor(fn: string): Promise<"admin" | "export" | null> {
+/* 回傳「這個 API 收哪幾種通行證」。null ＝ 不用通行證。
+   權限表讀不到時退回寫死的 NEED_LEVEL —— 寧可照舊，也不要整個開放。 */
+function fallbackLevels(fn: string): string[] | null {
+  const n = NEED_LEVEL[fn];
+  if (!n) return null;
+  return n === "export" ? ["admin", "export"] : ["admin"];
+}
+
+async function allowedLevelsFor(fn: string): Promise<string[] | null> {
   const key = FN_PERM[fn];
-  if (!key) return NEED_LEVEL[fn] ?? null;
+  if (!key) return fallbackLevels(fn);
   const rows = await loadPerms();
-  if (!rows) return NEED_LEVEL[fn] ?? null;      // 權限表讀不到 → 照原本寫死的規則
+  if (!rows) return fallbackLevels(fn);
   const r = rows.find((x) => x.perm_key === key);
-  if (!r) return "admin";                        // 表裡沒這一列 → 從嚴
+  if (!r) return ["admin"];                      // 表裡沒這一列 → 從嚴
   if (r.member || r.club) return null;
-  if (r.clerk) return "export";
-  return "admin";
+  const out = ["admin"];
+  if (r.clerk) out.push("export");
+  if (r.commander) out.push("commander");
+  return out;
 }
 
 /* 這幾項的「管理」欄不准取消：勾掉就沒人進得去審核申請那一頁，
@@ -847,13 +861,14 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       if (!cur) return;   // 不認得的 key 直接忽略，不要憑空長出一列
       const want = {
         admin: !!inRow.admin, clerk: !!inRow.clerk,
-        member: !!inRow.member, club: !!inRow.club,
+        member: !!inRow.member, club: !!inRow.club, commander: !!inRow.commander,
       };
       // 鎖住的那幾項，管理欄一律維持打勾
       if (PERM_ADMIN_LOCKED.indexOf(key) >= 0) want.admin = true;
 
       const diff: string[] = [];
-      ([["admin", "管理"], ["clerk", "文書"], ["member", "幫眾"], ["club", "俱樂部"]] as const)
+      ([["admin", "管理"], ["clerk", "文書"], ["member", "幫眾"], ["club", "俱樂部"],
+        ["commander", "指揮"]] as const)
         .forEach(([f, zh]) => {
           if ((cur as any)[f] !== (want as any)[f]) {
             diff.push(zh + ((want as any)[f] ? "：開" : "：關"));
@@ -864,7 +879,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       updates.push({
         perm_key: key, grp: cur.grp, label: cur.label, sort_order: cur.sort_order,
         admin: want.admin, clerk: want.clerk, member: want.member, club: want.club,
-        updated_at: now,
+        commander: want.commander, updated_at: now,
       });
     });
 
@@ -2126,7 +2141,7 @@ async function doUnlock(req: Request, levelIn: unknown, passwordIn: unknown, nam
   const level = String(levelIn ?? "").trim();
   const password = String(passwordIn ?? "");
   const name = normName(nameIn);
-  if (level !== "admin" && level !== "export") {
+  if (level !== "admin" && level !== "export" && level !== "commander") {
     return { ok: false, error: "BAD_LEVEL", message: "解鎖層級不正確" };
   }
 
@@ -2141,12 +2156,15 @@ async function doUnlock(req: Request, levelIn: unknown, passwordIn: unknown, nam
   }
 
   const sec = await secrets();
-  const want = level === "admin" ? sec.pw_admin : sec.pw_export;
+  const want = level === "admin" ? sec.pw_admin
+             : level === "commander" ? sec.pw_commander
+             : sec.pw_export;
   const got = await sha256Hex((sec.pw_salt ?? "") + password);
 
-  // 管理密碼同時能解匯出：跟原本前端的行為一致
-  const adminOk = sec.pw_admin ? (await sha256Hex((sec.pw_salt ?? "") + password)) === sec.pw_admin : false;
-  const pass = got === want || (level === "export" && adminOk);
+  /* 管理密碼通吃：不管來解哪一級，打對管理密碼就發管理的通行證。
+     跟原本前端的行為一致，也省得管理還要記另外兩組。 */
+  const adminOk = sec.pw_admin ? got === sec.pw_admin : false;
+  const pass = (!!want && got === want) || adminOk;
 
   if (!pass) {
     await db.rpc("note_login_fail", { p_bucket: bucket });
@@ -2194,14 +2212,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
   }
 
-  const need = await needLevelFor(fn);
+  const need = await allowedLevelsFor(fn);
   if (need) {
     const t = await verifyToken(payload.token ?? "");
     if (!t) {
       return json({ ok: false, error: "NEED_UNLOCK", message: "請重新輸入密碼" }, 401);
     }
-    if (need === "admin" && t.lvl !== "admin") {
-      return json({ ok: false, error: "NEED_ADMIN", message: "這個功能只有管理能用" }, 403);
+    if (need.indexOf(t.lvl) < 0) {
+      return json({ ok: false, error: "NEED_ADMIN", message: "你輸入的密碼沒有這個功能的權限" }, 403);
     }
   }
 

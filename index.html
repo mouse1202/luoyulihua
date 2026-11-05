@@ -2893,7 +2893,7 @@
 
     /* 名稱一欄吃剩下的寬度，四個身分各佔 42px 的固定欄 */
     .perm-head, .perm-row {
-      display: grid; grid-template-columns: 1fr repeat(4, 42px); gap: 4px; align-items: center;
+      display: grid; grid-template-columns: 1fr repeat(5, 36px); gap: 3px; align-items: center;
     }
     .perm-head {
       font-size: 11.5px; color: #c8a45a; padding: 0 4px 6px;
@@ -3639,7 +3639,7 @@
           <button type="button" class="roster-back-btn" onclick="closeAccessAdminView()">返回出勤系統</button>
         </div>
         <div class="roster-body">
-          <p class="password-hint">這裡是完整的人員清冊：核准後對方才能使用網頁功能；已核准的人也能隨時點「剔除」立刻收回權限。「管理」才能輸入總管理密碼使用排表工具/名單管理/審核申請等所有功能；「文書」比幫眾多一項：可輸入匯出密碼匯出出勤紀錄；「幫眾」登入後只能開出勤系統改自己的出勤狀態。</p>
+          <p class="password-hint">這裡是完整的人員清冊：核准後對方才能使用網頁功能；已核准的人也能隨時點「剔除」立刻收回權限。每種身分能用什麼，由右邊的「功能權限」決定 —— 這裡只決定某個人算哪一種身分。「管理」輸總管理密碼，「文書」輸匯出密碼，「指揮」輸指揮密碼；「幫眾」「俱樂部」沒有密碼，只能用開放給所有人的功能。（這個「指揮」是登入身分，跟排表工具下拉用的那份指揮名單沒有關聯。）</p>
 
           <!-- 改名申請：幫眾自己送的，管理在這裡按同意／退回。
                同意就直接執行改名（名單、出勤、排表、指揮、影片、登入身分一起改，
@@ -3658,6 +3658,7 @@
               <select id="access-admin-new-category" class="modal-input">
                 <option value="幫眾">幫眾</option>
                 <option value="俱樂部">俱樂部</option>
+                <option value="指揮">指揮</option>
                 <option value="文書">文書</option>
                 <option value="管理">管理</option>
               </select>
@@ -3930,13 +3931,17 @@
     var permLocked = ['nav_access', 'acc_list'];
     var permOwners = ['鼠仔丶', '冷語'];
 
-    var PERM_CAT_LETTER = { '管理': 'a', '文書': 'c', '幫眾': 'm', '俱樂部': 'k' };
-    var PERM_LETTER_FIELD = { a: 'admin', c: 'clerk', m: 'member', k: 'club' };
+    var PERM_CAT_LETTER = { '管理': 'a', '文書': 'c', '幫眾': 'm', '俱樂部': 'k', '指揮': 'd' };
+    var PERM_LETTER_FIELD = { a: 'admin', c: 'clerk', m: 'member', k: 'club', d: 'commander' };
+    /* 各身分輸哪一組密碼。幫眾、俱樂部不在這裡 —— 勾給他們就等於對所有人開放，
+       後端也分不出他們跟其他人，要密碼也沒有意義。 */
+    var PERM_CAT_LEVEL = { '管理': 'admin', '文書': 'export', '指揮': 'commander' };
 
     /* 權限表讀不到時的退路（網路不通、後端還沒部署）：
        跟 0028 migration 的預設值一字不差，也就是 2026-11-05 當下的行為。
        寧可退回「照舊」，也不要整個鎖死或整個開放。
-       a=管理 c=文書 m=幫眾 k=俱樂部 */
+       a=管理 c=文書 m=幫眾 k=俱樂部 d=指揮
+       （指揮是後來才加的身分，預設一項都沒有，所以下面不會出現 d） */
     var PERM_FALLBACK = {
       att_card: 'ac', att_after_deadline: 'ac', att_deadline: 'a', att_temp_unlock: 'a',
       att_rename_label: 'a', att_delete_label: 'a', att_event_type: 'a',
@@ -3984,22 +3989,21 @@
       return fb.indexOf(letter) >= 0;
     }
 
-    /* 這一項要哪一級密碼。規則跟後端 needLevelFor 一模一樣 ——
-       兩邊算出不同答案的話，畫面會放人過去、後端再把他擋下來。
-         幫眾或俱樂部有勾 → 不用密碼（null）
-         文書有勾         → 匯出密碼
-         只有管理         → 總管理密碼 */
+    /* 這一項「我」要輸哪一組密碼。
+       跟後端 allowedLevelsFor 是同一套規則的兩面：那邊算「收哪幾種通行證」，
+       這邊算「我該掏哪一張」。
+         幫眾或俱樂部有勾 → 誰都不用輸（那就等於對所有人開放，後端也不會擋）
+         其餘看自己的身分 → 管理：總管理密碼／文書：匯出密碼／指揮：指揮密碼
+
+       管理是特例：管理密碼通吃，所以照這一項「最低的要求」問就好 ——
+       匯出出勤問的還是匯出密碼，跟以前一樣，不會突然改問總管理密碼。 */
     function permLevel_(key) {
-      var r = permRow_(key);
-      if (!r) {
-        var fb = PERM_FALLBACK[key];
-        if (fb === undefined) return 'admin';
-        if (fb.indexOf('m') >= 0 || fb.indexOf('k') >= 0) return null;
-        return fb.indexOf('c') >= 0 ? 'export' : 'admin';
-      }
-      if (r.member || r.club) return null;
-      if (r.clerk) return 'export';
-      return 'admin';
+      var r = permRow_(key), fb = PERM_FALLBACK[key] || '';
+      var has = function (letter, field) { return r ? !!r[field] : fb.indexOf(letter) >= 0; };
+      if (has('m', 'member') || has('k', 'club')) return null;
+      var mine = PERM_CAT_LEVEL[currentAccessCategory];
+      if (mine === 'admin') return has('c', 'clerk') ? 'export' : 'admin';
+      return mine || null;
     }
 
     function loadPermissions_(cb) {
@@ -4219,16 +4223,30 @@
     // 免密期跟後端發的通行證效期一致（後端 TOKEN_MINUTES）
     var FULL_GRACE_MS = 30 * 60 * 1000;    // 總管理：30 分鐘
     var EXPORT_GRACE_MS = 10 * 60 * 1000;  // 匯出：10 分鐘
+    var CMDR_GRACE_MS = 10 * 60 * 1000;    // 指揮：10 分鐘
     var FULL_VERIFIED_KEY = 'lylh_password_verified_until';
     var EXPORT_VERIFIED_KEY = 'lylh_export_verified_until';
+    var CMDR_VERIFIED_KEY = 'lylh_commander_verified_until';
     var fullVerifiedUntil = 0;
     var exportVerifiedUntil = 0;
+    var commanderVerifiedUntil = 0;
     try {
       var sf = parseInt(window.localStorage.getItem(FULL_VERIFIED_KEY) || '0', 10);
       if (sf > Date.now()) fullVerifiedUntil = sf;
       var se = parseInt(window.localStorage.getItem(EXPORT_VERIFIED_KEY) || '0', 10);
       if (se > Date.now()) exportVerifiedUntil = se;
+      var sc = parseInt(window.localStorage.getItem(CMDR_VERIFIED_KEY) || '0', 10);
+      if (sc > Date.now()) commanderVerifiedUntil = sc;
     } catch (e) { /* 無痕模式等情況忽略 */ }
+
+    /* 現在還在免密期裡嗎。總管理通吃，其餘各認各的。 */
+    function graceOk_(level) {
+      var now = Date.now();
+      if (now < fullVerifiedUntil) return true;
+      if (level === 'export' && now < exportVerifiedUntil) return true;
+      if (level === 'commander' && now < commanderVerifiedUntil) return true;
+      return false;
+    }
 
     function openPasswordGate(onSuccessFn, cancelView, wide, level, permKey) {
       level = level || 'admin';
@@ -4259,15 +4277,18 @@
         }
       }
 
-      // 免密期：總管理通過任何級別；匯出只通過 export 級別。
-      var nowTs = Date.now();
-      if (nowTs < fullVerifiedUntil) { onSuccessFn(); return; }
-      if (level === 'export' && nowTs < exportVerifiedUntil) { onSuccessFn(); return; }
+      if (graceOk_(level)) { onSuccessFn(); return; }
 
       passwordContext.onSuccess = onSuccessFn;
       passwordContext.cancelView = cancelView;
       passwordContext.cancelWide = !!VIEW_WIDE[cancelView];
       passwordContext.level = level;
+      var pwHint = document.querySelector('#password-view .password-hint');
+      if (pwHint) {
+        pwHint.textContent = level === 'export' ? '請輸入匯出密碼（文書）'
+                           : level === 'commander' ? '請輸入指揮密碼'
+                           : '請輸入總管理密碼';
+      }
       showView('password-view', !!wide);
       document.getElementById('password-error').classList.add('hidden');
       var input = document.getElementById('password-input');
@@ -4287,9 +4308,7 @@
       var level = permLevel_(key);
       if (!level) return true;                 // 已開放給幫眾／俱樂部，不用密碼
       if (PASSWORD_GATE_DISABLED) return true;
-      var now = Date.now();
-      if (now < fullVerifiedUntil) return true;
-      if (level === 'export' && now < exportVerifiedUntil) return true;
+      if (graceOk_(level)) return true;
       openPasswordGate(function () {
         showView(backView, !!VIEW_WIDE[backView]);
         retry();
@@ -4299,9 +4318,7 @@
 
     function needUnlockThen_(level, backView, retry) {
       if (PASSWORD_GATE_DISABLED) return true;
-      var now = Date.now();
-      if (now < fullVerifiedUntil) return true;
-      if (level === 'export' && now < exportVerifiedUntil) return true;
+      if (graceOk_(level)) return true;
       openPasswordGate(function () {
         showView(backView, !!VIEW_WIDE[backView]);
         retry();
@@ -4340,10 +4357,13 @@
         }
         window.__lylhSetToken(j.result.token);
 
-        // 免密期跟著後端發的層級走：管理 30 分鐘、匯出 10 分鐘
+        // 免密期跟著後端發的層級走：管理 30 分鐘，匯出與指揮 10 分鐘
         if (j.result.level === 'admin') {
           fullVerifiedUntil = Date.now() + FULL_GRACE_MS;
           try { window.localStorage.setItem(FULL_VERIFIED_KEY, String(fullVerifiedUntil)); } catch (e) { /* 忽略 */ }
+        } else if (j.result.level === 'commander') {
+          commanderVerifiedUntil = Date.now() + CMDR_GRACE_MS;
+          try { window.localStorage.setItem(CMDR_VERIFIED_KEY, String(commanderVerifiedUntil)); } catch (e) { /* 忽略 */ }
         } else {
           exportVerifiedUntil = Date.now() + EXPORT_GRACE_MS;
           try { window.localStorage.setItem(EXPORT_VERIFIED_KEY, String(exportVerifiedUntil)); } catch (e) { /* 忽略 */ }
@@ -4360,9 +4380,11 @@
     window.__lylhOnAuthLost = function () {
       fullVerifiedUntil = 0;
       exportVerifiedUntil = 0;
+      commanderVerifiedUntil = 0;
       try {
         window.localStorage.removeItem(FULL_VERIFIED_KEY);
         window.localStorage.removeItem(EXPORT_VERIFIED_KEY);
+        window.localStorage.removeItem(CMDR_VERIFIED_KEY);
       } catch (e) { /* 忽略 */ }
     };
 
@@ -9187,7 +9209,8 @@
        但那道關卡是看通行證上的名字 —— 名字是解鎖時前端自己報的，
        所以擋得住一般人，擋不住「知道總管理密碼、又會自己發 HTTP 請求」的管理。
        要真的擋死，得另外給總管理一組只有他知道的密碼。 */
-    var PERM_CATS = [['admin', '管理'], ['clerk', '文書'], ['member', '幫眾'], ['club', '俱樂部']];
+    var PERM_CATS = [['admin', '管理'], ['clerk', '文書'], ['member', '幫眾'], ['club', '俱樂部'],
+                     ['commander', '指揮']];
     var permDraft = null;        // 畫面上還沒存的版本
     var permOpen = { '出勤系統': true };   // 哪幾組是展開的（預設只開第一組）
 
@@ -9212,7 +9235,8 @@
         if (res.owners && res.owners.length) permOwners = res.owners;
         permDraft = res.rows.map(function (r) {
           return { perm_key: r.perm_key, grp: r.grp, label: r.label,
-                   admin: !!r.admin, clerk: !!r.clerk, member: !!r.member, club: !!r.club };
+                   admin: !!r.admin, clerk: !!r.clerk, member: !!r.member,
+                   club: !!r.club, commander: !!r.commander };
         });
         renderPermissionGrid();
       }).withFailureHandler(function (err) {
@@ -9290,8 +9314,9 @@
       var saveBtn = document.getElementById('perm-save-btn');
       if (saveBtn) saveBtn.textContent = n ? '存權限（改了 ' + n + ' 項）' : '存權限';
       note.innerHTML =
-        '幫眾跟俱樂部的差別只擋在畫面上 —— 後端只看密碼，分不出這兩種身分。<br>' +
-        '勾給文書就等於勾給「所有知道匯出密碼的人」。<br>' +
+        '文書輸匯出密碼、指揮輸指揮密碼、管理輸總管理密碼（管理密碼通吃）。<br>' +
+        '勾給文書就等於勾給「所有知道匯出密碼的人」，指揮同理。<br>' +
+        '幫眾跟俱樂部的差別只擋在畫面上 —— 他們沒有密碼，後端分不出這兩種身分。<br>' +
         '總管理不受這張表影響，所以你自己看到的畫面不會跟著變。';
     }
 
@@ -9328,6 +9353,7 @@
           d.clerk = fb.indexOf('c') >= 0;
           d.member = fb.indexOf('m') >= 0;
           d.club = fb.indexOf('k') >= 0;
+          d.commander = fb.indexOf('d') >= 0;
         });
         renderPermissionGrid();
       });
@@ -9624,6 +9650,7 @@
             '<option value="文書"' + (r.category === '文書' ? ' selected' : '') + '>文書</option>' +
             '<option value="管理"' + (r.category === '管理' ? ' selected' : '') + '>管理</option>' +
             '<option value="俱樂部"' + (r.category === '俱樂部' ? ' selected' : '') + '>俱樂部</option>' +
+            '<option value="指揮"' + (r.category === '指揮' ? ' selected' : '') + '>指揮</option>' +
             '</select>';
 
           return '<div class="access-admin-row">' +
@@ -9636,7 +9663,7 @@
         }
 
         // 依類別分組顯示：管理 → 文書 → 幫眾，各組加一個標題（含人數），方便區分
-        var groupKeys = ['管理', '文書', '幫眾', '俱樂部'];
+        var groupKeys = ['管理', '文書', '指揮', '幫眾', '俱樂部'];
         var html = '';
         groupKeys.forEach(function (key) {
           var list = requests.filter(function (r) { return (r.category || '幫眾') === key; });
@@ -12270,6 +12297,7 @@
           // 下一個用這台裝置的人一登入就直接是已解鎖狀態。
           window.localStorage.removeItem(FULL_VERIFIED_KEY);
           window.localStorage.removeItem(EXPORT_VERIFIED_KEY);
+          window.localStorage.removeItem(CMDR_VERIFIED_KEY);
           window.localStorage.removeItem('lylh_unlock_token');
         } catch (e) { /* 無痕模式等情況忽略 */ }
 
