@@ -748,7 +748,7 @@ const PERM_FNS: Record<string, string[]> = {
   bat_edit: ["updateBattle", "deleteBattle"],
   name_view: ["getUnmatchedNames", "getPlayerAliases"],
   name_rename: ["renamePlayer"],
-  name_left: ["markPlayerLeft", "getPlayerLeftPreview"],
+  name_left: ["markPlayerLeft", "unmarkPlayerLeft", "getPlayerLeftPreview"],
   name_alias_del: ["deletePlayerAlias"],
   log_view: ["getActivityLog"],
   nav_stats: ["getAttendanceStats"],
@@ -839,7 +839,8 @@ const NEED_LEVEL: Record<string, "admin" | "export"> = {
   setAccessRequestCategory: "admin", deleteAccessRequest: "admin", purgeRejected: "admin",
   getActivityLog: "admin", getRosterActivityLog: "admin",
   saveBattle: "admin", deleteBattle: "admin", updateBattle: "admin",
-  renamePlayer: "admin", markPlayerLeft: "admin", getPlayerLeftPreview: "admin",
+  renamePlayer: "admin", markPlayerLeft: "admin", unmarkPlayerLeft: "admin",
+  getPlayerLeftPreview: "admin",
   listRenameRequests: "admin", approveRenameRequest: "admin", rejectRenameRequest: "admin",
   deletePlayerAlias: "admin", getUnmatchedNames: "admin", getPlayerAliases: "admin",
   // 文書也能做的
@@ -1317,15 +1318,17 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     return { success: true };
   },
 
-  // 「已退出」：這個人離開了，不是改名。
-  //
-  // 只清「現在式」的紀錄：出勤與影片。
-  //
-  // 排表、指揮、戰績都是已經發生過的歷史，刻意留著 —— 他當時確實排在
-  // 那一格、確實在場上，刪掉會讓那幾場的人數與統計對不起來。排表工具
-  // 遇到已經不在名單上的名字會標成「（已退）」繼續顯示，不會變成空白。
-  //
-  // 刪除不可逆，所以回傳每一項刪了幾筆、留了幾筆，前端要先給人看過再送出。
+  /* 「已退出」：這個人離開了，不是改名。
+
+     什麼都不刪，只在 left_players 記一筆「他退了、已經處理過」。
+     出勤、影片、排表、指揮、戰績全部留著 —— 都是已經發生過的事，
+     刪掉會讓那幾場的人數與統計對不起來。排表工具遇到已經不在名單上的
+     名字會標成「（已退）」繼續顯示，不會變成空白。
+
+     以前這裡是把出勤與影片刪掉，因為「還剩幾筆」就是判斷「處理完了沒」
+     的依據。現在那個依據換成這張表，所以不必再刪資料（見 0031 migration）。
+
+     回傳各項留了幾筆，讓前端把數字寫在確認訊息裡。 */
   markPlayerLeft: async (nameIn: string, actorName?: string) => {
     const name = normName(nameIn);
     if (!name) return { success: false, message: "缺少名字" };
@@ -1337,29 +1340,42 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       return { success: false, message: "「" + name + "」還在名單上。請先在「管理名單」把他移除，再標成已退出。" };
     }
 
-    const a = await db.from("attendance_records").delete().eq("name", name).select("id");
-    const v = await db.from("video_uploads").delete().eq("name", name).select("id");
-
-    const na = a.data?.length ?? 0, nv = v.data?.length ?? 0;
     const kept = async (table: string, extra?: (q: any) => any) => {
       let q = db.from(table).select("id", { count: "exact", head: true }).eq("name", name);
       if (extra) q = extra(q);
       const { count } = await q;
       return count ?? 0;
     };
+    const na = await kept("attendance_records");
+    const nv = await kept("video_uploads");
     const nr = await kept("roster_slots");
     const nc = await kept("roster_commanders");
     const battles = await kept("battle_players", (q) => q.eq("side", "my"));
 
+    await chk(db.from("left_players").upsert(
+      { name, left_at: new Date().toISOString(), left_by: actorName ?? "" },
+      { onConflict: "name" }).select("name"));
+
     await appendActivityLog(actorName || "", actorName || "",
-      `${actorName || "有人"} 把「${name}」標成已退出（清掉出勤 ${na} 筆、影片 ${nv} 筆；` +
-      `排表 ${nr} 筆、指揮 ${nc} 筆、戰績 ${battles} 筆保留）`);
+      `${actorName || "有人"} 把「${name}」標成已退出（沒有刪任何資料：出勤 ${na} 筆、` +
+      `影片 ${nv} 筆、排表 ${nr} 筆、指揮 ${nc} 筆、戰績 ${battles} 筆全部保留）`);
 
     return {
       success: true,
       attendance: na, videos: nv,
       slotsKept: nr, commandersKept: nc, battlesKept: battles,
     };
+  },
+
+  // 按錯了：把「已退出」收回來，那個人就回到「要處理」清單上
+  unmarkPlayerLeft: async (nameIn: string, actorName?: string) => {
+    const name = normName(nameIn);
+    if (!name) return { success: false, message: "缺少名字" };
+    const { data } = await db.from("left_players").delete().eq("name", name).select("name");
+    if (!data || !data.length) return { success: false, message: "「" + name + "」本來就沒有標成已退出" };
+    await appendActivityLog(actorName || "", actorName || "",
+      `${actorName || "有人"} 取消了「${name}」的已退出標記`);
+    return { success: true };
   },
 
   // 「已退出」之前先問清楚要刪掉哪些東西，數字給人看過再動手
@@ -1375,6 +1391,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
     return {
       name,
       inRoster: !!(await db.from("roster_members").select("name").eq("name", name).maybeSingle()).data,
+      alreadyLeft: !!(await db.from("left_players").select("name").eq("name", name).maybeSingle()).data,
       attendance: await one("attendance_records"),
       slots: await one("roster_slots"),
       commanders: await one("roster_commanders"),
@@ -1419,6 +1436,15 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   getUnmatchedNames: async () => {
     const { data: roster } = await db.from("roster_members").select("name");
     const known = new Set((roster ?? []).map((r) => r.name));
+
+    // 已經標成退出的人：資料還在，但不用再處理了
+    const { data: leftRows } = await db.from("left_players").select("name,left_at,left_by");
+    const leftAt: Record<string, string> = {};
+    const leftBy: Record<string, string> = {};
+    (leftRows ?? []).forEach((r) => {
+      leftAt[r.name] = r.left_at ? String(r.left_at).slice(0, 16).replace("T", " ") : "";
+      leftBy[r.name] = r.left_by || "";
+    });
 
     // 已經登記過曾用名的就不算「對不上」了 —— 它讀取時會被換算成現在的名字
     const alias = await getAliasMap();
@@ -1486,13 +1512,17 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
 
     const rows = Object.values(acc).map((r) => {
       const nonBattle = r.attendance + r.slots + r.commanders + r.videos;
-      // 要不要處理只看「現在式」的紀錄：出勤與影片。
-      // 排表、指揮、戰績都是歷史，標成已退出之後會刻意留著，
-      // 把它們算進來的話那個人會永遠停在「要處理」，已退出等於沒有用。
-      const needClear = r.attendance + r.videos;
+      /* 「處理完了沒」看的是 left_players 有沒有這個人，不是「還剩幾筆」。
+         以前是看出勤＋影片歸零沒有，所以標成已退出就得真的把資料刪掉；
+         現在什麼都不刪，退出與否直接記在表裡（見 0031 migration）。 */
+      const hasLeft = Object.prototype.hasOwnProperty.call(leftAt, r.name);
+      const needClear = hasLeft ? 0 : r.attendance + r.videos;
       const suspect = byStripped[strip(r.name)] ?? "";
       return {
         name: r.name,
+        left: hasLeft,
+        leftAt: leftAt[r.name] ?? "",
+        leftBy: leftBy[r.name] ?? "",
         job: Array.from(r.jobs).join("／"),
         attendance: r.attendance, slots: r.slots, commanders: r.commanders,
         videos: r.videos, battles: r.battles,
@@ -1500,7 +1530,7 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
         nonBattle,
         needClear,
         suspect,                       // 疑似就是名單上的這個人（只差裝飾字元）
-        likelyMember: !!suspect || needClear > 0,
+        likelyMember: !hasLeft && (!!suspect || needClear > 0),
         dates: Array.from(r.dates).sort(),
       };
     }).sort((a, b) => {

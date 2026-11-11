@@ -2943,7 +2943,7 @@
 <script>
 (function () {
   var API = 'https://ggjdradkqlsncilqkovd.supabase.co/functions/v1/lylhapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getCommanderList','saveCommanderList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceStats','setDateLabelType','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','getRosterActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias','markPlayerLeft','getPlayerLeftPreview','nameInUse','submitRenameRequest','getMyRenameRequest','cancelRenameRequest','listRenameRequests','approveRenameRequest','rejectRenameRequest','getPermissions','savePermissions'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getClubList','saveClubList','getCommanderList','saveCommanderList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceStats','setDateLabelType','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','getRosterActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog','saveBattle','listBattles','getBattle','deleteBattle','getBattleAggregate','updateBattle','getBattleHistory','getPlayerTrend','getUnmatchedNames','renamePlayer','getPlayerAliases','deletePlayerAlias','markPlayerLeft','unmarkPlayerLeft','getPlayerLeftPreview','nameInUse','submitRenameRequest','getMyRenameRequest','cancelRenameRequest','listRenameRequests','approveRenameRequest','rejectRenameRequest','getPermissions','savePermissions'];
 
   // 排表匯出的職業底色。存的是不含 # 的六碼，argb() 會補上 FF。
   // 都是淺色系，配預設的黑字才看得清楚。
@@ -8277,11 +8277,12 @@
     }
 
     /* 「已退出」：這個人離開了，不是改名。
-       把戰績以外的紀錄清掉（出勤／排表／指揮／影片），清完他就只剩戰績，
-       自動落到「只有戰績紀錄」那一組，不會再每次檢查都跳出來。
-       戰績刻意留著 —— 那是打完的歷史，刪掉會讓那幾場的人數與統計對不起來。
 
-       這是不可逆的刪除，所以先把每一項的筆數抓回來給人看過再送出。 */
+       什麼都不刪，只是記下「他退了、已經處理過」，之後他會從「要處理」
+       移到「已退出」那一組，不會再每次檢查都跳出來。出勤、影片、排表、
+       指揮、戰績全部原封不動留著 —— 都是已經發生過的事。
+
+       筆數照樣先抓回來給人看，但現在是給他看「留著多少」，不是「要刪多少」。 */
     function startMarkPlayerLeft(name) {
       google.script.run.withSuccessHandler(function (pv) {
         pv = pv || {};
@@ -8290,31 +8291,29 @@
             '請先到「管理名單」把他移除，再回來標成已退出。');
           return;
         }
-        var items = [
-          ['出勤紀錄', pv.attendance],
-          ['影片', pv.videos]
-        ].filter(function (x) { return x[1] > 0; });
+        if (pv.alreadyLeft) {
+          showAlertModal('「' + name + '」已經標成退出了。');
+          loadUnmatchedNames();
+          return;
+        }
 
         var keeps = [
+          ['出勤紀錄', pv.attendance],
+          ['影片', pv.videos],
           ['排表格子', pv.slots],
           ['指揮紀錄', pv.commanders],
           ['戰績', pv.battlesKept]
         ].filter(function (x) { return x[1] > 0; });
 
-        if (!items.length) {
-          showAlertModal('「' + name + '」已經沒有出勤與影片紀錄了，不用再清。');
-          return;
-        }
-
         showConfirmModal('標成已退出',
           '確定「' + name + '」已經退出了嗎？\n\n' +
-          '會刪掉（救不回來）：\n' +
-          items.map(function (x) { return '・' + x[0] + '　' + x[1] + ' 筆'; }).join('\n') +
+          '不會刪掉任何資料，只是記下他退了，之後不用每次檢查都再看到他。\n' +
           (keeps.length
-            ? '\n\n會留著（已經發生過的歷史）：\n' +
+            ? '\n原封不動留著：\n' +
               keeps.map(function (x) { return '・' + x[0] + '　' + x[1] + ' 筆'; }).join('\n') +
-              '\n排表裡他的名字會標成「（已退）」繼續顯示。'
-            : ''),
+              '\n排表裡他的名字會標成「（已退）」繼續顯示。\n'
+            : '') +
+          '\n按錯的話在清單上可以「取消已退出」。',
           function () {
             google.script.run.withSuccessHandler(function (res) {
               if (!res || !res.success) {
@@ -8322,9 +8321,9 @@
                 return;
               }
               showAlertModal('已把「' + name + '」標成退出\n\n' +
-                '清掉：出勤 ' + res.attendance + ' 筆、影片 ' + res.videos + ' 筆\n' +
-                '留著：排表 ' + res.slotsKept + ' 筆、指揮 ' + res.commandersKept +
-                ' 筆、戰績 ' + res.battlesKept + ' 筆');
+                '一筆資料都沒刪：出勤 ' + res.attendance + ' 筆、影片 ' + res.videos +
+                ' 筆、排表 ' + res.slotsKept + ' 筆、指揮 ' + res.commandersKept +
+                ' 筆、戰績 ' + res.battlesKept + ' 筆全部留著');
               loadUnmatchedNames();
             }).withFailureHandler(function (err) {
               showAlertModal('失敗：' + err.message);
@@ -8333,6 +8332,28 @@
       }).withFailureHandler(function (err) {
         showAlertModal('讀取失敗：' + err.message);
       }).getPlayerLeftPreview(name);
+    }
+
+    // 按錯了：收回「已退出」，那個人回到「要處理」
+    function startUnmarkPlayerLeft(name) {
+      if (!hasPerm_('name_left')) {
+        showAlertModal('你的身分沒有標記已退出的權限');
+        return;
+      }
+      showConfirmModal('取消已退出',
+        '把「' + name + '」的已退出標記收回來嗎？\n\n' +
+        '他會回到「要處理」那一組。資料本來就沒刪過，不受影響。',
+        function () {
+          google.script.run.withSuccessHandler(function (res) {
+            if (!res || !res.success) {
+              showAlertModal('失敗：' + ((res && res.message) || '未知錯誤'));
+              return;
+            }
+            loadUnmatchedNames();
+          }).withFailureHandler(function (err) {
+            showAlertModal('失敗：' + err.message);
+          }).unmarkPlayerLeft(name, currentAccessRoleName);
+        });
     }
 
     function removePlayerAlias(alias) {
@@ -8350,15 +8371,17 @@
       res = res || {};
       aliases = aliases || [];
       var rows = res.rows || [];
-      var need = rows.filter(function (r) { return r.likelyMember; });
-      var maybe = rows.filter(function (r) { return !r.likelyMember; });
+      // 已經標成退出的獨立一組：資料都還在，只是不用再處理了
+      var leftRows = rows.filter(function (r) { return r.left; });
+      var need = rows.filter(function (r) { return !r.left && r.likelyMember; });
+      var maybe = rows.filter(function (r) { return !r.left && !r.likelyMember; });
 
       var note = '<div class="nc-note">' +
         '名單上有 <b>' + (res.rosterCount || 0) + '</b> 個人。下面是<b>有紀錄、但名單上找不到</b>的名字。' +
         '<br>這些紀錄沒有消失，只是對不上人：出勤看不到他過去的請假、戰績會被當成兩個人、' +
         '排表已排好的格子會變空白。' +
         '<br><b>改名</b>＝他換了名字，紀錄整批接到新名字上。' +
-        '<b>已退出</b>＝他離開了，清掉出勤與影片；排表、指揮、戰績留著當歷史。' +
+        '<b>已退出</b>＝他離開了，<b>一筆資料都不會刪</b>，只是記下來，之後不用再處理他。' +
         '</div>';
 
       if (!rows.length) {
@@ -8381,6 +8404,10 @@
             tips.push('<span class="nc-suspect">⚠ 疑似就是名單上的「' +
               escapeBattleHtml(r.suspect) + '」，只差裝飾字元</span>');
           }
+          if (r.left) {
+            tips.push('已退出' + (r.leftAt ? '（' + escapeBattleHtml(r.leftAt) +
+              (r.leftBy ? '　' + escapeBattleHtml(r.leftBy) : '') + '）' : ''));
+          }
           if ((r.dates || []).length) {
             tips.push('出現在：' + r.dates.map(escapeBattleHtml).join('、'));
           }
@@ -8391,10 +8418,13 @@
               '<span class="nc-acts">' +
                 '<button type="button" class="nc-btn" data-rename="' + escapeBattleHtml(r.name) +
                   '" data-suggest="' + escapeBattleHtml(r.suspect || '') + '">改名</button>' +
-                (r.needClear > 0
-                  ? '<button type="button" class="nc-btn nc-btn-left" data-left="' +
-                      escapeBattleHtml(r.name) + '">已退出</button>'
-                  : '') +
+                (r.left
+                  ? '<button type="button" class="nc-btn" data-unleft="' +
+                      escapeBattleHtml(r.name) + '">取消已退出</button>'
+                  : (r.needClear > 0
+                      ? '<button type="button" class="nc-btn nc-btn-left" data-left="' +
+                          escapeBattleHtml(r.name) + '">已退出</button>'
+                      : '')) +
               '</span>' +
             '</div>' +
             (tips.length ? '<div class="nc-dates">' + tips.join('　') + '</div>' : '');
@@ -8408,6 +8438,15 @@
       html += need.length
         ? head + renderGroup(need)
         : '<div class="access-admin-empty">沒有需要處理的。</div>';
+
+      // 已經標成退出的：資料全留著，只是處理過了
+      if (leftRows.length) {
+        html += '<div class="nc-sec">已退出（' + leftRows.length + '）</div>' +
+          '<div class="nc-note" style="margin-top:0">' +
+          '這些人已經標成退出了，<b>紀錄一筆都沒刪</b>，只是不用再處理。' +
+          '標錯的話按「取消已退出」就會回到上面那一組。</div>';
+        html += head + renderGroup(leftRows);
+      }
 
       // 只有戰績紀錄的多半是打過我方的外援，不是自己人改名
       html += '<div class="nc-sec">只有戰績紀錄（' + maybe.length + '）</div>' +
@@ -10849,6 +10888,8 @@
       if (rn) { startRenamePlayer(rn.dataset.rename, rn.dataset.suggest); return; }
       var lf = e.target.closest('[data-left]');
       if (lf) { startMarkPlayerLeft(lf.dataset.left); return; }
+      var ul = e.target.closest('[data-unleft]');
+      if (ul) { startUnmarkPlayerLeft(ul.dataset.unleft); return; }
       var ua = e.target.closest('[data-unalias]');
       if (ua) { removePlayerAlias(ua.dataset.unalias); return; }
 
