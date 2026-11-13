@@ -246,7 +246,8 @@ async function markPreJoinAbsent_(members: { name: string; job: string }[]) {
   const rows: any[] = [];
   labels.forEach((label) => {
     members.forEach((m) => {
-      rows.push({ date_label: label, name: m.name, job: m.job, status: "X" });
+      // auto_x：這筆是系統猜的，不是人點的。改名救回來時要認得出來（0032）
+      rows.push({ date_label: label, name: m.name, job: m.job, status: "X", auto_x: true });
     });
   });
   // (date_label, name) 有 UNIQUE 約束，ignoreDuplicates 就是「已經有的就跳過」
@@ -1133,17 +1134,43 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
   // merge = true 代表使用者看過衝突清單、確認那些是重複登記之後才按的合併。
   // 資料庫函式自己會再檢查一次：只要有一筆兩邊內容不一樣就還是不做；
   // 兩個名字同時出現在同一場戰鬥裡的話更是直接拒絕，那必然是兩個人。
-  renamePlayer: async (oldName: string, newName: string, actorName?: string, merge?: boolean) => {
+  renamePlayer: async (oldName: string, newName: string, actorName?: string, merge?: boolean,
+                       clearAutoX?: boolean) => {
     const oldN = normName(oldName), newN = normName(newName);
     if (!oldN || !newN) return { success: false, message: "名字不能是空白" };
     if (isOwner(oldN)) {
       return { success: false, message: "擁有者的名字寫死在程式裡，要改得改 OWNER_NAMES 再重新部署" };
     }
+
+    /* 新名字如果是「改名卻用加名單的方式處理」產生的，他那一整排 X 是系統
+       猜的、不是真的缺席（0032 的 auto_x）。不先清掉的話，這些假 X 會跟舊
+       名字的真紀錄撞在一起，改名會被當成衝突整個擋下來。
+       只有呼叫端明講 clearAutoX 才清 —— 畫面上一定先問過人。 */
+    let autoXCleared = 0;
+    if (clearAutoX) {
+      const { data: gone } = await db.from("attendance_records")
+        .delete().eq("name", newN).eq("auto_x", true).select("id");
+      autoXCleared = (gone ?? []).length;
+      if (autoXCleared > 0) {
+        await appendActivityLog(actorName ?? "", actorName ?? "",
+          `${actorName || "有人"} 清掉「${newN}」被當成新人時自動補的 ${autoXCleared} 筆 X` +
+          `（準備把「${oldN}」的歷史接過來）`);
+      }
+    }
+
     const { data, error } = await db.rpc("rename_player", {
       p_old: oldN, p_new: newN, p_actor: actorName ?? "", p_merge: !!merge,
     });
     if (error) throw new Error(error.message);
     const res = data as any;
+    if (res) res.autoXCleared = autoXCleared;
+    /* 沒成功的話，順便告訴畫面「新名字有幾筆是系統自己補的」。
+       有的話畫面就能問一句「要清掉再改嗎」，不用叫人自己去一格一格改。 */
+    if (res && !res.success) {
+      const { count } = await db.from("attendance_records")
+        .select("id", { count: "exact", head: true }).eq("name", newN).eq("auto_x", true);
+      res.autoX = count ?? 0;
+    }
     if (res && res.success) {
       const who = actorName || "有人";
       const mergedNote = res.merged
@@ -1539,10 +1566,25 @@ const handlers: Record<string, (...a: any[]) => Promise<any> | any> = {
       return b.total - a.total || (a.name < b.name ? -1 : 1);
     });
 
+    /* 名單上、出勤有系統自動補的 X 的人。這些多半就是「改名卻用加名單
+       的方式處理」的那一個 —— 把他列出來，人才知道要去跟哪個舊名字配對。 */
+    const rosterNames = new Set((roster ?? []).map((r) => String(r.name)));
+    const autoRows = await fetchAll((a, b) =>
+      db.from("attendance_records").select("name").eq("auto_x", true).order("id").range(a, b));
+    const autoCount: Record<string, number> = {};
+    autoRows.forEach((r: any) => {
+      const n = String(r.name ?? "");
+      if (rosterNames.has(n)) autoCount[n] = (autoCount[n] ?? 0) + 1;
+    });
+    const autoXMembers = Object.keys(autoCount)
+      .map((n) => ({ name: n, count: autoCount[n] }))
+      .sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : 1));
+
     return {
       rosterCount: known.size,
       rows,
       needAction: rows.filter((r) => r.likelyMember).length,
+      autoXMembers,
     };
   },
 

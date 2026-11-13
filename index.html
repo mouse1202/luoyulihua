@@ -6513,7 +6513,7 @@
     // （confirm() 沒跳出來，直接被當成「使用者按取消」，後面真正執行的程式碼
     // 完全沒被呼叫到，畫面上看起來就像「按了但沒有用」）。
     // 用法：showConfirmModal('標題', '訊息文字', function () { 按下確定後要做的事 });
-    function showConfirmModal(title, message, onConfirm) {
+    function showConfirmModal(title, message, onConfirm, onCancel) {
       var overlay = document.getElementById('confirm-modal-overlay');
       var titleEl = document.getElementById('confirm-modal-title');
       var messageEl = document.getElementById('confirm-modal-message');
@@ -6532,8 +6532,12 @@
       overlay.classList.remove('hidden');
 
       okBtn.onclick = function () { cleanup(); onConfirm(); };
-      cancelBtn.onclick = cleanup;
-      overlay.onclick = function (e) { if (e.target === overlay) cleanup(); }; // 點背景等同取消
+      // onCancel 是後來加的：有些問題是三選一（是改名／是新人／先不要存），
+      // 用兩個確認框串起來問，所以要知道人按了取消。沒帶就跟以前一樣什麼都不做。
+      cancelBtn.onclick = function () { cleanup(); if (onCancel) onCancel(); };
+      overlay.onclick = function (e) {                                        // 點背景等同取消
+        if (e.target === overlay) { cleanup(); if (onCancel) onCancel(); }
+      };
     }
 
     // 通用通知對話框，取代原生 window.showAlertModal()：同樣是因為有些嵌入式瀏覽器會
@@ -8224,7 +8228,7 @@
 
     /* merge = true 只會在使用者看過衝突清單、確認全部都是重複登記之後才送。
        後端自己會再檢查一次，只要有一筆兩邊內容不一樣就還是不做。 */
-    function doRenamePlayer_(oldName, newName, merge) {
+    function doRenamePlayer_(oldName, newName, merge, clearAutoX) {
       google.script.run.withSuccessHandler(function (res) {
         if (!res || !res.success) {
           // 同一場戰鬥裡兩個名字都在場 —— 那是兩個人，怎麼樣都不能改
@@ -8233,6 +8237,23 @@
               res.sameBattle.map(function (b) { return '・' + b; }).join('\n') +
               '\n\n同一場戰鬥裡兩個人都在場，不可能是同一個人改名。' +
               '如果「' + oldName + '」只是被移出名單，請到「管理名單」把他加回去。');
+            return;
+          }
+
+          /* 新名字那一整排 X 是系統自己補的 —— 他被當成新人加進名單，所以
+             加入前的每一場都先記了 X，不是真的缺席（見 0032）。先問一次，
+             清掉之後舊名字的真紀錄才接得過去，不用人一格一格去改。 */
+          if (res && res.autoX > 0 && !clearAutoX) {
+            showConfirmModal('他其實是改名？',
+              '「' + newName + '」現在有 ' + res.autoX + ' 筆 X 是系統自動補的 —— ' +
+              '他被當成新入幫的人加進名單，所以加入前的每一場都先記了 X，' +
+              '那不是真的缺席。\n\n' +
+              '按「確定」會：\n' +
+              '1. 清掉那 ' + res.autoX + ' 筆系統自動補的 X\n' +
+              '2. 把「' + oldName + '」的出勤、排表、影片整批接到「' + newName + '」名下\n' +
+              '3. 「' + oldName + '」這個名字消失，只留曾用名對照\n\n' +
+              '人工點過的 X 不會被動到，只清系統自己補的那些。',
+              function () { doRenamePlayer_(oldName, newName, merge, true); });
             return;
           }
 
@@ -8246,7 +8267,7 @@
               '\n\n兩邊內容完全一樣，是同一件事登記了兩次。\n' +
               '按「確定」會刪掉「' + oldName + '」那一份重複的，再把其餘紀錄改到「' +
               newName + '」名下。\n刪掉之後救不回來。',
-              function () { doRenamePlayer_(oldName, newName, true); });
+              function () { doRenamePlayer_(oldName, newName, true, clearAutoX); });
             return;
           }
 
@@ -8265,6 +8286,9 @@
         }
 
         showAlertModal('已把「' + oldName + '」改成「' + newName + '」\n\n' +
+          (res.autoXCleared
+            ? '先清掉了 ' + res.autoXCleared + ' 筆系統自動補的 X（他本來被當成新人）\n'
+            : '') +
           '名單 ' + res.roster + ' 筆、出勤 ' + res.attendance + ' 筆、排表 ' + res.slots +
           ' 筆、指揮 ' + res.commanders + ' 筆、影片 ' + res.videos + ' 筆、登入身分 ' + res.access + ' 筆\n' +
           (res.merged ? '另外刪掉 ' + res.merged + ' 筆重複登記（出勤 ' + res.mergedAttendance +
@@ -8273,7 +8297,7 @@
         loadUnmatchedNames();
       }).withFailureHandler(function (err) {
         showAlertModal('改名失敗：' + err.message);
-      }).renamePlayer(oldName, newName, currentAccessRoleName, !!merge);
+      }).renamePlayer(oldName, newName, currentAccessRoleName, !!merge, !!clearAutoX);
     }
 
     /* 「已退出」：這個人離開了，不是改名。
@@ -8384,8 +8408,24 @@
         '<b>已退出</b>＝他離開了，<b>一筆資料都不會刪</b>，只是記下來，之後不用再處理他。' +
         '</div>';
 
+      /* 名單上誰的 X 是系統自己補的。這種人多半就是「改了名字、卻用加名單
+         的方式處理」的那一個 —— 列出來，才知道要拿哪個舊名字去跟他配對。 */
+      var autoXList = res.autoXMembers || [];
+      var autoXNote = autoXList.length
+        ? '<div class="nc-note"><b>⚠ 這些人在名單上，但出勤裡有系統自動補的 X：</b><br>' +
+          autoXList.map(function (a) {
+            return escapeBattleHtml(a.name) + '（' + a.count + ' 筆）';
+          }).join('、') +
+          '<br>把一個名字加進主名單時，系統會把他加入前已經打完的場次全部記成 X。' +
+          '<br>如果他其實是<b>改名</b>、不是新人：在下面找到他的<b>舊名字</b>按「改名」，' +
+          '填他現在的名字，系統會問你要不要清掉那些自動補的 X —— ' +
+          '按確定就會把舊名字的歷史整批接過去。' +
+          '<br>真的是新入幫的人，不用理它。</div>'
+        : '';
+
       if (!rows.length) {
-        box.innerHTML = note + '<div class="access-admin-empty">很好，沒有對不上的名字。</div>';
+        box.innerHTML = note + autoXNote +
+          '<div class="access-admin-empty">很好，沒有對不上的名字。</div>';
         return;
       }
 
@@ -8431,7 +8471,7 @@
         }).join('');
       };
 
-      var html = note;
+      var html = note + autoXNote;
 
       // 有出勤／排表／指揮／影片紀錄的，或名字跟名單上某人只差裝飾字元的 —— 這些才要處理
       html += '<div class="nc-sec">要處理（' + need.length + '）</div>';
@@ -9164,6 +9204,10 @@
     // 四份名單各自載入成功沒有、載入時各有幾人。
     // 任何一份沒載入成功就不准存 —— 畫面上那份是空白預設列，存下去就是清空。
     var memberLoadState = { member: null, guest: null, trial: null, club: null, commander: null };
+    // 載入時主名單上的名字。存檔時拿來比對「少了誰、多了誰」，用來問是不是改名
+    var memberLoadedNames = [];
+    // 存檔流程中如果順便做了改名，把那段文字接在「已儲存名單」後面一起講
+    var memberRenameNote = '';
 
     // 第幾次載入名單。每按一次「名單管理」就 +1，回應回來時對不上就丟掉 ——
     // 連開兩三次的話，舊的那幾份回應不能再寫進畫面。
@@ -9186,6 +9230,9 @@
         if (stale()) return;                       // 舊的一次載入回來了，丟掉
         document.getElementById('member-list').innerHTML = ''; // 先清掉自己，不然會疊上去
         memberLoadState.member = failed ? 'failed' : (members || []).length;
+        memberLoadedNames = failed ? [] : (members || []).map(function (m) {
+          return String(m.name || '').trim();
+        }).filter(Boolean);
         setMemberSaveEnabled_();
         if (!members || members.length === 0) {
           for (var i = 0; i < 5; i++) addMemberRow();
@@ -10012,7 +10059,28 @@
       return MEMBER_SAVE_JOBS.filter(function (j) { return hasPerm_(j.perm); });
     }
 
-    function saveMemberListData(force) {
+    /* 先改名、改成功了才存名單。
+       順序很重要：rename_player 會把名單那一行的名字一起改掉，所以改完之後
+       後端看到的「這次新加的人」就不含這個名字了，也就不會再補 X。 */
+    function renameThenSave_(oldName, newName, force) {
+      google.script.run.withSuccessHandler(function (res) {
+        if (!res || !res.success) {
+          var msg = (res && res.message) ? res.message : '未知錯誤';
+          showAlertModal('改名沒有成功，名單也還沒存：\n\n' + msg +
+            '\n\n請先到「名字對照」把衝突處理掉，再回來儲存名單。');
+          return;
+        }
+        memberRenameNote = '\n\n已把「' + oldName + '」改名為「' + newName + '」：' +
+          '出勤 ' + res.attendance + ' 筆、排表 ' + res.slots + ' 筆、影片 ' + res.videos +
+          ' 筆接過去了，戰績 ' + res.battles + ' 筆改用曾用名對照。' +
+          '「' + oldName + '」這個名字已經不存在。';
+        saveMemberListData(force, true);
+      }).withFailureHandler(function (err) {
+        showAlertModal('改名失敗，名單也還沒存：' + err.message);
+      }).renamePlayer(oldName, newName, currentAccessRoleName, false, false);
+    }
+
+    function saveMemberListData(force, renameOk) {
       if (!statsMemberSavePerms_().length) {
         showAlertModal('你的身分（' + (currentAccessCategory || '未登入') + '）沒有任何一份名單的儲存權限');
         return;
@@ -10048,6 +10116,56 @@
         return;
       }
 
+      /* 存之前先問「是不是改名」。
+         人家改了遊戲裡的名字，管理最直覺的動作就是來名單把名字換掉 ——
+         但那對系統來說是「走一個人、來一個新人」：新人加入前的場次會被
+         自動補成 X，而他真正的歷史被孤立在舊名字底下。11/12～11/14 連續
+         踩了五次，每次都要人工下 SQL 才救得回來，所以擋在這裡。 */
+      if (!renameOk) {
+        var hadNames = memberLoadedNames || [];
+        var nowNames = memberData.map(function (r) { return String(r.name || '').trim(); })
+                                 .filter(Boolean);
+        var goneNames = hadNames.filter(function (n) { return nowNames.indexOf(n) < 0; });
+        var addNames = nowNames.filter(function (n) { return hadNames.indexOf(n) < 0; });
+
+        if (goneNames.length && addNames.length) {
+          var askIsNew = function () {
+            showConfirmModal('那是新入幫的人嗎？',
+              '確定要把「' + addNames.join('、') + '」當成新入幫的人存進去嗎？\n\n' +
+              '這樣的話，他加入前已經打完的場次會全部自動記成 X。\n\n' +
+              '如果其實是改名，請按取消 —— 到「名字對照」用改名功能，' +
+              '舊名字的出勤、排表、影片、戰績才接得過去。',
+              function () { saveMemberListData(force, true); });
+          };
+
+          // 剛好一換一，而且你有改名權限 —— 直接問要不要幫你改名
+          if (goneNames.length === 1 && addNames.length === 1 && hasPerm_('name_rename')) {
+            showConfirmModal('是改名嗎？',
+              '這次儲存：名單少了「' + goneNames[0] + '」，多了「' + addNames[0] + '」。\n\n' +
+              '如果這是同一個人改了名字，按「確定」——\n' +
+              '我會先把「' + goneNames[0] + '」改名成「' + addNames[0] + '」，' +
+              '出勤、排表、影片、戰績整批繼承過去，舊名字消失，然後才存名單。\n\n' +
+              '如果是走了一個人、又來了一個新人，按「取消」，我再問你一次。',
+              function () { renameThenSave_(goneNames[0], addNames[0], force); },
+              askIsNew);
+            return;
+          }
+
+          var howToRename = hasPerm_('name_rename')
+            ? '請按「取消」，先到「名字對照」一個一個改名，再回來儲存'
+            : '請按「取消」，找總管理用「名字對照」改名（你的身分沒有改名權限），改完再回來儲存';
+          showConfirmModal('名單的名字有異動',
+            '這次儲存：\n' +
+            '　少了：' + goneNames.join('、') + '\n' +
+            '　多了：' + addNames.join('、') + '\n\n' +
+            '如果這裡面有人只是改名，' + howToRename + ' —— 這樣歷史才接得過去。\n\n' +
+            '按「確定」就當成他們都是新入幫／退幫的人照常存（新加的人，' +
+            '加入前的場次會記成 X）。',
+            function () { saveMemberListData(force, true); });
+          return;
+        }
+      }
+
       // 跟載入時的人數比。清空或少掉一大半的，先講清楚再讓人決定
       if (!force) {
         var warn = [
@@ -10068,7 +10186,7 @@
             warn.map(function (x) { return '・' + x[0] + '：' + x[1] + ' 人 → ' + x[2] + ' 人'; }).join('\n') +
             '\n\n如果不是你故意刪的，請按取消，重新整理頁面再進來。\n' +
             '確定要這樣存嗎？',
-            function () { saveMemberListData(true); });
+            function () { saveMemberListData(true, renameOk); });
           return;
         }
       }
@@ -10107,7 +10225,11 @@
           jobs.forEach(function (j) { memberLoadState[j.state] = j.data().length; });
           // 排表那邊快取了一份指揮名單，存完要作廢，不然要重新整理才看得到
           rosterCommanderNames = null;
-          showAlertModal('已儲存名單' + preJoinNote + skippedNote);
+          showAlertModal('已儲存名單' + memberRenameNote + preJoinNote + skippedNote);
+          memberRenameNote = '';
+          // 存完了，下次比對的基準就是這次存進去的名字
+          memberLoadedNames = collectListRows_('member-list')
+            .map(function (r) { return String(r.name || '').trim(); }).filter(Boolean);
         }
       }
 
