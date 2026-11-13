@@ -3395,7 +3395,7 @@
           </div>
         </div>
         <div class="roster-footer">
-          <button type="button" class="roster-export-btn" id="roster-export-btn" onclick="openPasswordGate(exportRosterData, 'roster-view', true)">匯出為 Google 試算表</button>
+          <button type="button" class="roster-export-btn hidden" data-perm="roster_export" id="roster-export-btn" onclick="openPasswordGate(exportRosterData, 'roster-view', true, null, 'roster_export')">匯出為 Google 試算表</button>
         </div>
       </div>
     </div>
@@ -3960,7 +3960,7 @@
       att_rename_label: 'a', att_delete_label: 'a', att_event_type: 'a',
       att_club_bulk: 'ac', att_export: 'ac', att_announce: 'ac',
       mem_member: 'a', mem_guest: 'a', mem_trial: 'a', mem_club: 'a', mem_commander: 'a',
-      roster_save: 'a', roster_log: 'a',
+      roster_save: 'a', roster_export: 'acd', roster_log: 'a',
       acc_list: 'a', acc_status: 'a', acc_category: 'a', acc_add: 'a',
       acc_delete: 'a', acc_rename_req: 'a',
       vid_upload: 'acm', vid_roster: 'ac', vid_log: 'ac',
